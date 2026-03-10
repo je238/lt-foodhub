@@ -1574,17 +1574,53 @@ async function placeOrder() {
   // Save to Supabase
   try {
     if (sb) {
-      await sb.from('orders').insert([{...order, items: undefined}]);
-      const orderItems = S.cart.map(i => ({order_id:orderId,item_id:i.id,item_name:i.name,item_emoji:i.emoji,quantity:i.qty,unit_price:i.price,total_price:i.price*i.qty}));
-      await sb.from('order_items').insert(orderItems);
-      const newBal = S.user.wallet_balance - youPay;
-      if (sb) await sb.from('employees').update({wallet_balance:newBal}).eq('id',S.user.id);
-      if (sb && youPay > 0) await sb.from('wallet_transactions').insert([{employee_id:S.user.id,type:'debit',amount:youPay,description:'Order #'+token+' — '+order.canteen_name,order_id:orderId}]);
-      // Save custom notes on order items if present
-      const orderItemsWithNotes = S.cart.map(i => ({order_id:orderId,item_id:i.id,item_name:i.name,item_emoji:i.emoji,quantity:i.qty,unit_price:i.price,total_price:i.price*i.qty,custom_note:i.customNote||null}));
-      if (sb) { try { await sb.from('order_items').delete().eq('order_id', orderId); await sb.from('order_items').insert(orderItemsWithNotes); } catch(e2) {} }
+      // Insert order — only DB columns, no extra fields
+      const orderPayload = {
+        id: orderId,
+        token_number: token,
+        employee_id: S.user.id,
+        employee_name: S.user.name,
+        canteen_id: S.selCanteen?.id || 'c1',
+        canteen_name: S.selCanteen?.name || 'Main Canteen',
+        canteen_icon: S.selCanteen?.icon || '🍛',
+        pickup_slot: S.selSlot,
+        status: 'new',
+        item_total: iTotal,
+        subsidy_applied: subTotal,
+        amount_paid: youPay,
+        payment_method: S.selPay || 'wallet',
+      };
+      const { error: orderErr } = await sb.from('orders').insert([orderPayload]);
+      if (orderErr) {
+        console.error('[FoodHub] Order insert error:', orderErr);
+        toast('Order save failed: ' + orderErr.message, 'error', '❌');
+      } else {
+        // Insert order items (single insert, with custom_note)
+        const orderItems = S.cart.map(i => ({
+          order_id: orderId,
+          item_id: i.id,
+          item_name: i.name,
+          item_emoji: i.emoji || '',
+          quantity: i.qty,
+          unit_price: i.price,
+          total_price: i.price * i.qty,
+          custom_note: i.customNote || null,
+        }));
+        const { error: itemErr } = await sb.from('order_items').insert(orderItems);
+        if (itemErr) console.warn('[FoodHub] Order items error:', itemErr);
+        // Deduct wallet
+        await sb.from('employees').update({wallet_balance: S.user.wallet_balance - youPay}).eq('id', S.user.id);
+        // Log debit
+        if (youPay > 0) {
+          await sb.from('wallet_transactions').insert([{
+            employee_id: S.user.id, type: 'debit', amount: youPay,
+            description: 'Order #' + token + ' — ' + (S.selCanteen?.name || 'Canteen'),
+            order_id: orderId,
+          }]);
+        }
+      }
     }
-  } catch(e) { console.warn('Supabase save failed:', e); }
+  } catch(e) { console.warn('[FoodHub] Supabase save failed:', e.message || e); }
   // Update local state
   if (S.selPay === 'wallet') S.user.wallet_balance -= youPay;
   // Update inventory
