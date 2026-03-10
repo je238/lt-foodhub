@@ -697,7 +697,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="section-title" id="menu-sec-title">Menu</div>
       <div class="chip-row" id="cat-row" style="margin-bottom:0;flex:0 0 auto"></div>
     </div>
-    <div class="chip-row" id="cat-row-mobile" style="margin-bottom:14px"></div>
+
     <div id="menu-list"><div class="loader"></div></div>
   </div>
 
@@ -1050,11 +1050,12 @@ async function loadData() {
     if (!sb) throw new Error('No Supabase');
     const [canRes, menuRes, settingsRes] = await Promise.all([
       sb.from('canteens').select('*').order('id'),
-      sb.from('menu_items').select('*').order('id'),
+      sb.from('menu_items').select('*').order('id').limit(500),
       sb.from('app_settings').select('*').catch(() => ({ data: [] }))
     ]);
     S.canteens = canRes.data?.length ? canRes.data : FALLBACK_CANTEENS;
     S.menu = menuRes.data?.length ? menuRes.data : FALLBACK_MENU;
+    console.log('[FoodHub] Loaded', S.menu.length, 'menu items from', S.canteens.length, 'canteens');
     // Load app settings (subsidy, monthly limit, etc.)
     if (settingsRes.data?.length) {
       settingsRes.data.forEach(s => {
@@ -1333,7 +1334,6 @@ function renderCats() {
   const cats = ['All', ...new Set(items.map(m => m.category).filter(Boolean))];
   const html = cats.map(c => `<div class="chip${c===S.selCat?' active':''}" onclick="selCat('${c}')">${c}</div>`).join('');
   setElInner('cat-row', html);
-  setElInner('cat-row-mobile', html);
 }
 
 function selCat(cat) {
