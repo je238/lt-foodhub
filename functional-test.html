@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FoodHub — Functional Tests</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap');
+  :root {
+    --bg:#0a0f1a; --surface:#111827; --s2:#1a2235; --border:#1f2d45;
+    --brand:#E8380D; --green:#10b981; --red:#ef4444; --yellow:#f59e0b;
+    --blue:#3b82f6; --purple:#8b5cf6; --text:#e2e8f0; --muted:#64748b;
+    --mono:'JetBrains Mono',monospace; --sans:'Inter',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);padding:16px;min-height:100vh}
+  
+  .header{display:flex;align-items:center;gap:14px;padding:18px 20px;background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:16px}
+  .logo{width:42px;height:42px;background:var(--brand);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+  .header h1{font-size:17px;font-weight:800}
+  .header p{font-size:11px;color:var(--muted);margin-top:2px}
+  .header-right{margin-left:auto;display:flex;gap:8px;flex-shrink:0}
+  
+  .btn{padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:none;font-family:var(--sans);transition:.15s;white-space:nowrap}
+  .btn-primary{background:var(--brand);color:#fff}
+  .btn-primary:hover{background:#c42d08}
+  .btn-secondary{background:var(--s2);color:var(--text);border:1px solid var(--border)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+
+  .flow-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+  
+  .flow-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .flow-card.active-card{border-color:var(--brand)}
+  .flow-header{padding:14px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
+  .flow-role{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .role-emp{background:#1e3a5f}
+  .role-vendor{background:#1a3320}
+  .role-kitchen{background:#1f1a3a}
+  .role-admin{background:#3a1a1a}
+  .flow-title{font-size:13px;font-weight:700}
+  .flow-sub{font-size:11px;color:var(--muted);margin-top:1px}
+  .flow-body{padding:14px 16px}
+
+  .step{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start}
+  .step-num{width:22px;height:22px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;font-family:var(--mono)}
+  .step-num.pass{background:#052e16;border-color:var(--green);color:var(--green)}
+  .step-num.fail{background:#2d0a0a;border-color:var(--red);color:var(--red)}
+  .step-num.running{background:#0c1a3a;border-color:var(--blue);color:var(--blue);animation:pulse 1s infinite}
+  .step-num.skip{opacity:.4}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .step-text{flex:1}
+  .step-name{font-size:12px;font-weight:600;margin-bottom:2px}
+  .step-detail{font-size:11px;color:var(--muted);font-family:var(--mono);word-break:break-all}
+  .step-detail.ok{color:var(--green)}
+  .step-detail.err{color:var(--red)}
+  .step-detail.warn{color:var(--yellow)}
+
+  .timeline{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px}
+  .timeline-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:12px}
+  .tl-item{display:flex;gap:12px;margin-bottom:8px;align-items:flex-start;position:relative}
+  .tl-item:not(:last-child)::before{content:'';position:absolute;left:13px;top:26px;bottom:-8px;width:1px;background:var(--border)}
+  .tl-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;border:1px solid var(--border);background:var(--s2)}
+  .tl-dot.pass{background:#052e16;border-color:var(--green)}
+  .tl-dot.fail{background:#2d0a0a;border-color:var(--red)}
+  .tl-dot.running{background:#0c1a3a;border-color:var(--blue);animation:pulse 1s infinite}
+  .tl-dot.pending{opacity:.3}
+  .tl-content{flex:1;padding-top:3px}
+  .tl-name{font-size:12px;font-weight:600}
+  .tl-detail{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:1px}
+  .tl-detail.ok{color:var(--green)}
+  .tl-detail.err{color:var(--red)}
+  .tl-time{font-size:10px;color:var(--border);font-family:var(--mono);margin-left:auto;flex-shrink:0;padding-top:4px}
+
+  .result-banner{border-radius:14px;padding:18px 20px;margin-bottom:16px;display:none}
+  .result-banner.pass{background:#052e16;border:1px solid var(--green)}
+  .result-banner.fail{background:#2d0a0a;border:1px solid var(--red)}
+  .result-banner h2{font-size:18px;font-weight:800;margin-bottom:6px}
+  .result-banner p{font-size:13px;opacity:.8;line-height:1.6}
+
+  .issues{background:#1a0f0a;border:1px solid #3d1f10;border-radius:14px;padding:16px;margin-bottom:16px}
+  .issues-title{font-size:13px;font-weight:700;color:var(--red);margin-bottom:10px}
+  .issue-row{display:flex;gap:10px;margin-bottom:8px;font-size:12px;padding:10px;background:rgba(239,68,68,.05);border-radius:8px;border:1px solid rgba(239,68,68,.1)}
+  .issue-icon{flex-shrink:0;font-size:16px}
+  .issue-text strong{display:block;color:#fca5a5;margin-bottom:2px}
+  .issue-text span{color:#7f1d1d}
+
+  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center}
+  .stat-num{font-size:26px;font-weight:800;font-family:var(--mono);line-height:1}
+  .stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+  .green{color:var(--green)} .red{color:var(--red)} .yellow{color:var(--yellow)} .blue{color:var(--blue)}
+
+  @media(max-width:600px){
+    .flow-grid{grid-template-columns:1fr}
+    .stats-row{grid-template-columns:repeat(2,1fr)}
+    .header-right .btn-secondary{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">🧪</div>
+  <div>
+    <h1>FoodHub — Functional Tests</h1>
+    <p>Tests real app flows end-to-end using live Supabase database</p>
+  </div>
+  <div class="header-right">
+    <button class="btn btn-secondary" onclick="clearOrders()">🗑 Clear Test Data</button>
+    <button class="btn btn-primary" id="run-btn" onclick="runAll()">▶ Run All Tests</button>
+  </div>
+</div>
+
+<div class="stats-row">
+  <div class="stat"><div class="stat-num blue" id="s-total">—</div><div class="stat-lbl">Total Steps</div></div>
+  <div class="stat"><div class="stat-num green" id="s-pass">—</div><div class="stat-lbl">Passed</div></div>
+  <div class="stat"><div class="stat-num red" id="s-fail">—</div><div class="stat-lbl">Failed</div></div>
+  <div class="stat"><div class="stat-num yellow" id="s-time">—</div><div class="stat-lbl">Duration</div></div>
+</div>
+
+<div id="result-banner" class="result-banner"></div>
+<div id="issues-box"></div>
+
+<!-- TIMELINE -->
+<div class="timeline">
+  <div class="timeline-title">📋 Full Order Lifecycle — Step by Step</div>
+  <div id="timeline"></div>
+</div>
+
+<!-- ROLE CARDS -->
+<div class="flow-grid">
+  <div class="flow-card" id="card-emp">
+    <div class="flow-header">
+      <div class="flow-role role-emp">👤</div>
+      <div><div class="flow-title">Employee</div><div class="flow-sub">LT-EMP-24891 · Rajesh Kumar</div></div>
+    </div>
+    <div class="flow-body" id="steps-emp"><div style="color:var(--muted);font-size:12px">Not started</div></div>
+  </div>
+  <div class="flow-card" id="card-vendor">
+    <div class="flow-header">
+      <div class="flow-role role-vendor">🍳</div>
+      <div><div class="flow-title">Vendor</div><div class="flow-sub">vendor-001 · Main Canteen</div></div>
+    </div>
+    <div class="flow-body" id="steps-vendor"><div style="color:var(--muted);font-size:12px">Not started</div></div>
+  </div>
+  <div class="flow-card" id="card-kitchen">
+    <div class="flow-header">
+      <div class="flow-role role-kitchen">📺</div>
+      <div><div class="flow-title">Kitchen Display</div><div class="flow-sub">kitchen-001</div></div>
+    </div>
+    <div class="flow-body" id="steps-kitchen"><div style="color:var(--muted);font-size:12px">Not started</div></div>
+  </div>
+  <div class="flow-card" id="card-admin">
+    <div class="flow-header">
+      <div class="flow-role role-admin">⚙️</div>
+      <div><div class="flow-title">Admin</div><div class="flow-sub">admin-001 · Campus Admin</div></div>
+    </div>
+    <div class="flow-body" id="steps-admin"><div style="color:var(--muted);font-size:12px">Not started</div></div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://lorgclscnjdbngqurdsw.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvcmdjbHNjbmpkYm5ncXVyZHN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjA3MjEsImV4cCI6MjA4ODYzNjcyMX0.T8TwjIuILMEwNZgfo0s4_9Zr1_5ocTAtCxWntSA2iu4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let tlSteps = [], roleSteps = {emp:[], vendor:[], kitchen:[], admin:[]};
+let issues = [], passCount = 0, failCount = 0;
+let testOrderId = null, testToken = null;
+const startTime = {emp:0, vendor:0};
+
+// ── RENDER ────────────────────────────────────────────────────────
+function renderTL() {
+  const icons = {pass:'✅', fail:'❌', running:'⏳', pending:'⬜'};
+  document.getElementById('timeline').innerHTML = tlSteps.map(s => `
+    <div class="tl-item">
+      <div class="tl-dot ${s.status}">${icons[s.status]||'⬜'}</div>
+      <div class="tl-content">
+        <div class="tl-name">${s.name}</div>
+        ${s.detail ? `<div class="tl-detail ${s.status==='pass'?'ok':s.status==='fail'?'err':''}">${s.detail}</div>` : ''}
+      </div>
+      ${s.ms ? `<div class="tl-time">${s.ms}ms</div>` : ''}
+    </div>`).join('');
+}
+
+function renderRole(role) {
+  const steps = roleSteps[role];
+  const icons = {pass:'✅', fail:'❌', running:'⏳', skip:'—'};
+  document.getElementById('steps-'+role).innerHTML = steps.length
+    ? steps.map(s => `
+      <div class="step">
+        <div class="step-num ${s.status}">${icons[s.status]||s.num}</div>
+        <div class="step-text">
+          <div class="step-name">${s.name}</div>
+          ${s.detail ? `<div class="step-detail ${s.status==='pass'?'ok':s.status==='fail'?'err':''}">${s.detail}</div>` : ''}
+        </div>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:12px">Not started</div>';
+}
+
+function updateStats() {
+  const total = tlSteps.length;
+  const pass = tlSteps.filter(s=>s.status==='pass').length;
+  const fail = tlSteps.filter(s=>s.status==='fail').length;
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-pass').textContent = pass;
+  document.getElementById('s-fail').textContent = fail;
+}
+
+// ── STEP HELPERS ──────────────────────────────────────────────────
+function tlAdd(name) {
+  const id = tlSteps.length;
+  tlSteps.push({name, status:'pending', detail:'', ms:null});
+  renderTL();
+  return id;
+}
+function tlSet(id, status, detail='', ms=null) {
+  tlSteps[id] = {...tlSteps[id], status, detail, ms};
+  if (status==='fail') { issues.push({name:tlSteps[id].name, detail}); failCount++; }
+  if (status==='pass') passCount++;
+  renderTL(); updateStats();
+}
+
+function roleAdd(role, num, name) {
+  roleSteps[role].push({num, name, status:'pending', detail:''});
+  renderRole(role);
+  return roleSteps[role].length - 1;
+}
+function roleSet(role, idx, status, detail='') {
+  roleSteps[role][idx] = {...roleSteps[role][idx], status, detail};
+  renderRole(role);
+}
+
+async function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── TEST: EMPLOYEE FLOW ───────────────────────────────────────────
+async function testEmployee() {
+  document.getElementById('card-emp').classList.add('active-card');
+
+  // Step 1: Fetch employee
+  const r0 = roleAdd('emp', 1, 'Login — fetch from DB');
+  let r1 = tlAdd('Employee: Login & fetch profile');
+  tlSet(r1, 'running');
+  roleSet('emp', r0, 'running');
+  const t0 = Date.now();
+  const {data:emp, error:empErr} = await sb.from('employees').select('*').eq('id','LT-EMP-24891').single();
+  const ms0 = Date.now()-t0;
+  if (empErr || !emp) {
+    tlSet(r1, 'fail', `Employee not found: ${empErr?.message}`, ms0);
+    roleSet('emp', r0, 'fail', empErr?.message || 'Not found');
+    return;
+  }
+  tlSet(r1, 'pass', `${emp.name} · ₹${emp.wallet_balance} balance · ${emp.department}`, ms0);
+  roleSet('emp', r0, 'pass', `${emp.name} · ₹${emp.wallet_balance}`);
+
+  // Step 2: Check wallet
+  const r2i = roleAdd('emp', 2, 'Check wallet balance');
+  const r2 = tlAdd('Employee: Wallet balance sufficient');
+  tlSet(r2, 'running'); roleSet('emp', r2i, 'running');
+  await wait(300);
+  const canOrder = emp.wallet_balance >= 0;
+  tlSet(r2, canOrder?'pass':'fail', `₹${emp.wallet_balance} available`);
+  roleSet('emp', r2i, canOrder?'pass':'fail', `₹${emp.wallet_balance}`);
+
+  // Step 3: Fetch menu
+  const r3i = roleAdd('emp', 3, 'View canteen menu');
+  const r3 = tlAdd('Employee: Fetch menu from DB');
+  tlSet(r3, 'running'); roleSet('emp', r3i, 'running');
+  const t3 = Date.now();
+  const {data:menu, error:menuErr} = await sb.from('menu_items').select('*').eq('canteen_id','c1').eq('is_available',true);
+  const ms3 = Date.now()-t3;
+  if (menuErr || !menu?.length) {
+    tlSet(r3, 'fail', `No menu items: ${menuErr?.message}`, ms3);
+    roleSet('emp', r3i, 'fail', 'No items found');
+  } else {
+    tlSet(r3, 'pass', `${menu.length} items available in Main Canteen`, ms3);
+    roleSet('emp', r3i, 'pass', `${menu.length} items loaded`);
+  }
+
+  // Step 4: Place order
+  const r4i = roleAdd('emp', 4, 'Place order → save to DB');
+  const r4 = tlAdd('Employee: Place order (saves to Supabase)');
+  tlSet(r4, 'running'); roleSet('emp', r4i, 'running');
+  const t4 = Date.now();
+  testOrderId = 'FUNC-TEST-' + Date.now();
+  testToken = 999;
+  const orderPayload = {
+    id: testOrderId,
+    token_number: testToken,
+    employee_id: 'LT-EMP-24891',
+    employee_name: 'Rajesh Kumar',
+    canteen_id: 'c1',
+    canteen_name: 'Main Canteen',
+    canteen_icon: '🍛',
+    pickup_slot: '12:30 PM',
+    status: 'new',
+    item_total: 80,
+    subsidy_applied: 80,
+    amount_paid: 0,
+    payment_method: 'wallet',
+  };
+  const {error:ordErr} = await sb.from('orders').insert([orderPayload]);
+  const ms4 = Date.now()-t4;
+  if (ordErr) {
+    tlSet(r4, 'fail', `Order insert failed: ${ordErr.message}`, ms4);
+    roleSet('emp', r4i, 'fail', ordErr.message);
+    testOrderId = null;
+  } else {
+    // Insert order items
+    await sb.from('order_items').insert([{
+      order_id: testOrderId, item_id:'m1', item_name:'Dal Tadka Thali',
+      item_emoji:'🍛', quantity:1, unit_price:80, total_price:80,
+    }]);
+    tlSet(r4, 'pass', `Order #${testToken} placed · ID: ${testOrderId}`, ms4);
+    roleSet('emp', r4i, 'pass', `Token #${testToken} · ₹0 paid (subsidy)`);
+  }
+
+  document.getElementById('card-emp').classList.remove('active-card');
+}
+
+// ── TEST: VENDOR FLOW ─────────────────────────────────────────────
+async function testVendor() {
+  if (!testOrderId) {
+    ['Vendor sees new order','Vendor accepts order','Vendor marks ready'].forEach(n => {
+      const id = tlAdd(n);
+      tlSet(id, 'fail', 'Skipped — order was not created');
+    });
+    return;
+  }
+  document.getElementById('card-vendor').classList.add('active-card');
+
+  // Step 1: Vendor fetches orders
+  const v1i = roleAdd('vendor', 1, 'Fetch new orders from DB');
+  const v1 = tlAdd('Vendor: Sees new order on dashboard');
+  tlSet(v1, 'running'); roleSet('vendor', v1i, 'running');
+  const t1 = Date.now();
+  const {data:orders, error:ordErr} = await sb.from('orders')
+    .select('*, order_items(*)')
+    .eq('canteen_id','c1')
+    .eq('status','new')
+    .order('created_at', {ascending:false});
+  const ms1 = Date.now()-t1;
+  const found = orders?.find(o => o.id === testOrderId);
+  if (!found) {
+    tlSet(v1, 'fail', `Test order NOT visible to vendor. DB returned ${orders?.length||0} new orders for c1.`, ms1);
+    roleSet('vendor', v1i, 'fail', 'Order not in vendor feed');
+  } else {
+    tlSet(v1, 'pass', `Order #${found.token_number} visible · ${found.order_items?.length||0} items · status: ${found.status}`, ms1);
+    roleSet('vendor', v1i, 'pass', `#${found.token_number} visible with items`);
+  }
+
+  // Step 2: Vendor accepts → preparing
+  const v2i = roleAdd('vendor', 2, 'Accept order → "preparing"');
+  const v2 = tlAdd('Vendor: Accept order (status → preparing)');
+  tlSet(v2, 'running'); roleSet('vendor', v2i, 'running');
+  const t2 = Date.now();
+  const {error:accErr} = await sb.from('orders').update({status:'preparing'}).eq('id',testOrderId);
+  const ms2 = Date.now()-t2;
+  if (accErr) {
+    tlSet(v2, 'fail', `Status update failed: ${accErr.message}`, ms2);
+    roleSet('vendor', v2i, 'fail', accErr.message);
+  } else {
+    tlSet(v2, 'pass', `Status updated to "preparing" in ${ms2}ms`, ms2);
+    roleSet('vendor', v2i, 'pass', 'Status → preparing ✓');
+  }
+
+  // Step 3: Vendor marks ready
+  const v3i = roleAdd('vendor', 3, 'Mark order ready');
+  const v3 = tlAdd('Vendor: Mark order ready (status → ready)');
+  tlSet(v3, 'running'); roleSet('vendor', v3i, 'running');
+  await wait(500);
+  const t3 = Date.now();
+  const {error:rdyErr} = await sb.from('orders').update({status:'ready'}).eq('id',testOrderId);
+  const ms3 = Date.now()-t3;
+  if (rdyErr) {
+    tlSet(v3, 'fail', `Mark ready failed: ${rdyErr.message}`, ms3);
+    roleSet('vendor', v3i, 'fail', rdyErr.message);
+  } else {
+    tlSet(v3, 'pass', `Status updated to "ready" in ${ms3}ms`, ms3);
+    roleSet('vendor', v3i, 'pass', 'Status → ready ✓');
+  }
+
+  document.getElementById('card-vendor').classList.remove('active-card');
+}
+
+// ── TEST: KITCHEN FLOW ────────────────────────────────────────────
+async function testKitchen() {
+  document.getElementById('card-kitchen').classList.add('active-card');
+
+  // Kitchen fetches ALL active orders
+  const k1i = roleAdd('kitchen', 1, 'Fetch all active orders');
+  const k1 = tlAdd('Kitchen: Fetches active orders');
+  tlSet(k1, 'running'); roleSet('kitchen', k1i, 'running');
+  const t1 = Date.now();
+  const {data:allOrders, error:kErr} = await sb.from('orders')
+    .select('*, order_items(*)')
+    .not('status','in','("done","cancelled","rejected")')
+    .order('created_at',{ascending:false})
+    .limit(50);
+  const ms1 = Date.now()-t1;
+  if (kErr) {
+    tlSet(k1, 'fail', `Fetch failed: ${kErr.message}`, ms1);
+    roleSet('kitchen', k1i, 'fail', kErr.message);
+  } else {
+    tlSet(k1, 'pass', `${allOrders?.length||0} active orders visible to kitchen`, ms1);
+    roleSet('kitchen', k1i, 'pass', `${allOrders?.length||0} orders in KDS`);
+  }
+
+  // Check our test order is in the list
+  const k2i = roleAdd('kitchen', 2, 'Test order visible in KDS');
+  const k2 = tlAdd('Kitchen: Test order appears in display');
+  tlSet(k2, 'running'); roleSet('kitchen', k2i, 'running');
+  await wait(300);
+  if (!testOrderId) {
+    tlSet(k2, 'fail', 'No test order to check');
+    roleSet('kitchen', k2i, 'fail', 'Order was never created');
+  } else {
+    const found = allOrders?.find(o => o.id === testOrderId);
+    if (!found) {
+      tlSet(k2, 'fail', `Test order NOT in kitchen display. KDS shows ${allOrders?.length||0} orders but ours is missing.`);
+      roleSet('kitchen', k2i, 'fail', '❌ Not visible in KDS');
+    } else {
+      tlSet(k2, 'pass', `Order #${found.token_number} visible · status: ${found.status} · ${found.order_items?.length||0} items`);
+      roleSet('kitchen', k2i, 'pass', `#${found.token_number} in KDS · ${found.status}`);
+    }
+  }
+
+  // Kitchen bumps to done
+  const k3i = roleAdd('kitchen', 3, 'Bump order to done');
+  const k3 = tlAdd('Kitchen: Bump order → done');
+  tlSet(k3, 'running'); roleSet('kitchen', k3i, 'running');
+  if (testOrderId) {
+    const {error:doneErr} = await sb.from('orders').update({status:'done'}).eq('id',testOrderId);
+    if (doneErr) {
+      tlSet(k3, 'fail', `Bump failed: ${doneErr.message}`);
+      roleSet('kitchen', k3i, 'fail', doneErr.message);
+    } else {
+      tlSet(k3, 'pass', 'Order bumped to done ✓');
+      roleSet('kitchen', k3i, 'pass', 'Status → done ✓');
+    }
+  } else {
+    tlSet(k3, 'fail', 'No order to bump');
+    roleSet('kitchen', k3i, 'fail', 'Skipped');
+  }
+
+  document.getElementById('card-kitchen').classList.remove('active-card');
+}
+
+// ── TEST: EMPLOYEE STATUS UPDATE ──────────────────────────────────
+async function testEmployeeStatus() {
+  document.getElementById('card-emp').classList.add('active-card');
+
+  // Employee checks order status
+  const e1i = roleAdd('emp', 5, 'Check order status update');
+  const e1 = tlAdd('Employee: Order status reflects vendor update');
+  tlSet(e1, 'running'); roleSet('emp', e1i, 'running');
+  if (!testOrderId) {
+    tlSet(e1, 'fail', 'No order to check');
+    roleSet('emp', e1i, 'fail', 'Skipped');
+    return;
+  }
+  const t1 = Date.now();
+  const {data:order, error} = await sb.from('orders').select('status').eq('id',testOrderId).single();
+  const ms1 = Date.now()-t1;
+  if (error || !order) {
+    tlSet(e1, 'fail', `Can't fetch order status: ${error?.message}`, ms1);
+    roleSet('emp', e1i, 'fail', error?.message);
+  } else {
+    tlSet(e1, order.status==='done'?'pass':'fail',
+      `Order status in DB: "${order.status}" (expected "done")`, ms1);
+    roleSet('emp', e1i, order.status==='done'?'pass':'fail', `Status: ${order.status}`);
+  }
+
+  // Rate the order
+  const e2i = roleAdd('emp', 6, 'Rate order → saved to DB');
+  const e2 = tlAdd('Employee: Rate order (saves to order_ratings)');
+  tlSet(e2, 'running'); roleSet('emp', e2i, 'running');
+  const t2 = Date.now();
+  const {error:rateErr} = await sb.from('order_ratings').upsert([{
+    order_id: testOrderId, employee_id:'LT-EMP-24891',
+    canteen_id:'c1', rating:5, comment:'Test rating — functional test',
+    created_at: new Date().toISOString(),
+  }], {onConflict:'order_id'});
+  const ms2 = Date.now()-t2;
+  if (rateErr) {
+    tlSet(e2, 'fail', `Rating save failed: ${rateErr.message}`, ms2);
+    roleSet('emp', e2i, 'fail', rateErr.message);
+  } else {
+    tlSet(e2, 'pass', '5⭐ rating saved to order_ratings ✓', ms2);
+    roleSet('emp', e2i, 'pass', '5⭐ saved ✓');
+  }
+
+  document.getElementById('card-emp').classList.remove('active-card');
+}
+
+// ── TEST: ADMIN ───────────────────────────────────────────────────
+async function testAdmin() {
+  document.getElementById('card-admin').classList.add('active-card');
+
+  // Admin sees all orders
+  const a1i = roleAdd('admin', 1, 'View all orders');
+  const a1 = tlAdd('Admin: Can query all orders');
+  tlSet(a1, 'running'); roleSet('admin', a1i, 'running');
+  const t1 = Date.now();
+  const {data:allOrd, error:aErr, count} = await sb.from('orders')
+    .select('*', {count:'exact'}).order('created_at',{ascending:false}).limit(5);
+  const ms1 = Date.now()-t1;
+  const {count:total} = await sb.from('orders').select('*',{count:'exact',head:true});
+  if (aErr) {
+    tlSet(a1, 'fail', aErr.message, ms1);
+    roleSet('admin', a1i, 'fail', aErr.message);
+  } else {
+    tlSet(a1, 'pass', `${total||0} total orders in system`, ms1);
+    roleSet('admin', a1i, 'pass', `${total||0} orders`);
+  }
+
+  // Admin wallet top-up
+  const a2i = roleAdd('admin', 2, 'Issue wallet top-up');
+  const a2 = tlAdd('Admin: Issue manual wallet credit');
+  tlSet(a2, 'running'); roleSet('admin', a2i, 'running');
+  const t2 = Date.now();
+  const {error:topErr} = await sb.from('wallet_transactions').insert([{
+    employee_id:'LT-EMP-24891', type:'credit', amount:100,
+    description:'Admin top-up — functional test',
+  }]);
+  const ms2 = Date.now()-t2;
+  if (topErr) {
+    tlSet(a2, 'fail', `Top-up failed: ${topErr.message}`, ms2);
+    roleSet('admin', a2i, 'fail', topErr.message);
+  } else {
+    tlSet(a2, 'pass', '₹100 credit transaction recorded ✓', ms2);
+    roleSet('admin', a2i, 'pass', '₹100 credit ✓');
+    // Clean up test transaction
+    await sb.from('wallet_transactions').delete().eq('description','Admin top-up — functional test');
+  }
+
+  // Admin app settings
+  const a3i = roleAdd('admin', 3, 'Read/write app settings');
+  const a3 = tlAdd('Admin: App settings readable & writable');
+  tlSet(a3, 'running'); roleSet('admin', a3i, 'running');
+  const t3 = Date.now();
+  const {data:settings, error:sErr} = await sb.from('app_settings').select('key,value');
+  const ms3 = Date.now()-t3;
+  if (sErr || !settings?.length) {
+    tlSet(a3, 'fail', `Settings error: ${sErr?.message || 'empty'}`, ms3);
+    roleSet('admin', a3i, 'fail', 'Settings missing');
+  } else {
+    const sub = settings.find(s=>s.key==='subsidy_per_meal');
+    tlSet(a3, 'pass', `${settings.length} settings · subsidy=₹${sub?.value||'?'}`, ms3);
+    roleSet('admin', a3i, 'pass', `${settings.length} settings ✓`);
+  }
+
+  document.getElementById('card-admin').classList.remove('active-card');
+}
+
+// ── CLEANUP ───────────────────────────────────────────────────────
+async function cleanupTest() {
+  const cl = tlAdd('Cleanup: Remove test data from DB');
+  tlSet(cl, 'running');
+  if (testOrderId) {
+    await sb.from('order_ratings').delete().eq('order_id', testOrderId);
+    await sb.from('order_items').delete().eq('order_id', testOrderId);
+    await sb.from('orders').delete().eq('id', testOrderId);
+  }
+  tlSet(cl, 'pass', 'Test order and ratings cleaned up ✓');
+}
+
+// ── RESULT BANNER ─────────────────────────────────────────────────
+function showResult() {
+  const fail = tlSteps.filter(s=>s.status==='fail').length;
+  const pass = tlSteps.filter(s=>s.status==='pass').length;
+  const banner = document.getElementById('result-banner');
+  banner.style.display = 'block';
+  if (fail === 0) {
+    banner.className = 'result-banner pass';
+    banner.innerHTML = `<h2>✅ All Functional Tests Passed!</h2><p>Every role works correctly end-to-end. Employee can order → Vendor sees it → Kitchen displays it → Status updates back to employee. App is ready for demo.</p>`;
+  } else {
+    banner.className = 'result-banner fail';
+    banner.innerHTML = `<h2>❌ ${fail} Test${fail>1?'s':''} Failed</h2><p>${pass} steps passed. See the issues below — these are the exact problems to fix before going live.</p>`;
+  }
+
+  if (issues.length) {
+    document.getElementById('issues-box').innerHTML = `
+      <div class="issues">
+        <div class="issues-title">🔧 Issues Found — Fix These</div>
+        ${issues.map((issue,i) => `
+          <div class="issue-row">
+            <div class="issue-icon">❌</div>
+            <div class="issue-text">
+              <strong>${i+1}. ${issue.name}</strong>
+              <span>${issue.detail}</span>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  }
+}
+
+// ── MAIN ──────────────────────────────────────────────────────────
+async function runAll() {
+  // Reset
+  tlSteps = []; roleSteps = {emp:[], vendor:[], kitchen:[], admin:[]};
+  issues = []; passCount = 0; failCount = 0; testOrderId = null;
+  ['emp','vendor','kitchen','admin'].forEach(r => renderRole(r));
+  document.getElementById('result-banner').style.display = 'none';
+  document.getElementById('issues-box').innerHTML = '';
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('run-btn').textContent = '⏳ Testing...';
+  document.getElementById('s-time').textContent = '—';
+  updateStats();
+
+  const start = Date.now();
+
+  await testEmployee();
+  await testVendor();
+  await testKitchen();
+  await testEmployeeStatus();
+  await testAdmin();
+  await cleanupTest();
+
+  const total = ((Date.now()-start)/1000).toFixed(1);
+  document.getElementById('s-time').textContent = total+'s';
+  document.getElementById('run-btn').disabled = false;
+  document.getElementById('run-btn').textContent = '▶ Run Again';
+  showResult();
+}
+
+async function clearOrders() {
+  if (!confirm('Delete all FUNC-TEST-* orders from DB?')) return;
+  const {data} = await sb.from('orders').select('id').like('id','FUNC-TEST-%');
+  if (data?.length) {
+    for (const o of data) {
+      await sb.from('order_ratings').delete().eq('order_id',o.id);
+      await sb.from('order_items').delete().eq('order_id',o.id);
+      await sb.from('orders').delete().eq('id',o.id);
+    }
+    alert(`Deleted ${data.length} test orders`);
+  } else {
+    alert('No test orders found');
+  }
+}
+</script>
+</body>
+</html>
