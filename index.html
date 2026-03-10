@@ -1301,7 +1301,7 @@ function renderCanteens() {
   const el = document.getElementById('canteen-row');
   if (!el) return;
   el.innerHTML = S.canteens.map(c => `
-    <div class="canteen-card${!c.is_open?' closed':''}${S.selCanteen?.id===c.id?' active':''}" onclick="${c.is_open?`selCanteen('${c.id}')`:'void(0)'}">
+    <div class="canteen-card${!c.is_open?' closed':''}${S.selCanteen?.id===c.id?' active':''}" onclick="selCanteen('${c.id}')">
       <div class="canteen-icon">${c.icon}</div>
       <div class="canteen-name">${c.name}</div>
       <div class="canteen-loc">${c.location||''}</div>
@@ -3445,14 +3445,8 @@ async function saveOperatingHours(cid){
   checkAutoOpenClose();
 }
 function checkAutoOpenClose(){
-  const now = new Date();
-  const hhmm = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
-  S.canteens.forEach(c=>{
-    const h = getCanteenHours(c.id);
-    if(!h.open||!h.close) return;
-    const shouldBeOpen = hhmm>=h.open && hhmm<=h.close && !(h.breakStart&&h.breakEnd&&hhmm>=h.breakStart&&hhmm<=h.breakEnd);
-    if(c.is_open !== shouldBeOpen){ c.is_open = shouldBeOpen; }
-  });
+  // Auto open/close disabled — kitchen uses manual OPEN/CLOSED toggle
+  // is_open status comes from Supabase (set by kitchen toggle button)
 }
 
 // ══════════════════════════════════════════════════════
