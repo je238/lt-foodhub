@@ -7,6 +7,25 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+
+/* ===== MOBILE SCROLL NUCLEAR FIX ===== */
+html, body {
+  overflow-y: scroll !important;
+  height: auto !important;
+  min-height: 100% !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+.screen.active {
+  display: block !important;
+  min-height: 100vh !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+.page, .page-wide {
+  height: auto !important;
+  overflow: visible !important;
+}
+/* ===== END SCROLL FIX ===== */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
   --brand:#E8380D;--brand2:#C42D08;--brand-l:#FEF0ED;--brand-m:#FDDDD7;
