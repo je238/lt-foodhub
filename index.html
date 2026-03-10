@@ -1236,6 +1236,22 @@ async function doLogin() {
           if (data?.length) S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
         }
       } catch(e) { console.warn('Order fetch failed:', e.message); }
+      // DEBUG: show what we fetched
+      console.log('[Kitchen] allOrders after fetch:', S.allOrders.length, S.allOrders);
+      if (S.allOrders.length === 0) {
+        // Try direct fetch and show result as alert
+        try {
+          if (sb) {
+            const {data, error} = await sb.from('orders').select('*').limit(10);
+            const msg = error ? 'DB Error: ' + error.message : 
+              data?.length ? 'Found ' + data.length + ' orders in DB. Status values: ' + [...new Set(data.map(o=>o.status))].join(', ') :
+              'DB connected but 0 orders found in orders table';
+            toast(msg, data?.length ? 'success' : 'warn', '🔍');
+          } else {
+            toast('Supabase not connected! Using offline mode.', 'error', '❌');
+          }
+        } catch(e) { toast('DB fetch error: ' + e.message, 'error', '❌'); }
+      }
       goScreen('s-kitchen');
       toast('Kitchen Display System active', 'success', '📺');
     } else {
