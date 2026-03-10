@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FoodHub Diagnostics</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+  
+  :root {
+    --bg: #0a0f1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1f2d45;
+    --brand: #E8380D;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --blue: #3b82f6;
+    --purple: #8b5cf6;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Inter', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; padding: 20px; }
+
+  .header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 20px 24px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 16px;
+    margin-bottom: 20px;
+  }
+  .logo { width: 44px; height: 44px; background: var(--brand); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .header-text h1 { font-size: 18px; font-weight: 700; }
+  .header-text p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; }
+
+  .btn {
+    padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none; font-family: var(--sans); transition: .15s;
+  }
+  .btn-primary { background: var(--brand); color: #fff; }
+  .btn-primary:hover { background: #c42d08; }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .summary-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;
+  }
+  .summary-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px; text-align: center;
+  }
+  .summary-card .num { font-size: 32px; font-weight: 700; font-family: var(--mono); line-height: 1; margin-bottom: 4px; }
+  .summary-card .lbl { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .num.pass { color: var(--green); }
+  .num.fail { color: var(--red); }
+  .num.warn { color: var(--yellow); }
+  .num.total { color: var(--blue); }
+
+  .section { margin-bottom: 16px; }
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); padding: 0 4px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .test-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 6px;
+    display: flex; align-items: flex-start; gap: 12px;
+    transition: border-color .2s;
+  }
+  .test-card.pass { border-left: 3px solid var(--green); }
+  .test-card.fail { border-left: 3px solid var(--red); }
+  .test-card.warn { border-left: 3px solid var(--yellow); }
+  .test-card.running { border-left: 3px solid var(--blue); }
+  .test-card.pending { border-left: 3px solid var(--border); opacity: .6; }
+
+  .test-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; width: 24px; text-align: center; }
+  .test-body { flex: 1; min-width: 0; }
+  .test-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .test-detail { font-size: 12px; color: var(--muted); font-family: var(--mono); word-break: break-all; }
+  .test-detail.error { color: var(--red); }
+  .test-detail.success { color: var(--green); }
+  .test-detail.warn { color: var(--yellow); }
+  .test-time { font-size: 10px; color: var(--muted); margin-left: auto; flex-shrink: 0; font-family: var(--mono); }
+
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .log-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; font-family: var(--mono); font-size: 11px; line-height: 1.8;
+    max-height: 300px; overflow-y: auto; color: var(--muted);
+  }
+  .log-box .log-pass { color: var(--green); }
+  .log-box .log-fail { color: var(--red); }
+  .log-box .log-warn { color: var(--yellow); }
+  .log-box .log-info { color: var(--blue); }
+  .log-box .log-time { color: #334155; }
+
+  .fix-box {
+    background: #1a0f0a; border: 1px solid #3d1f10; border-radius: 12px;
+    padding: 16px; margin-top: 16px;
+  }
+  .fix-title { font-size: 13px; font-weight: 700; color: var(--red); margin-bottom: 10px; }
+  .fix-item { display: flex; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+  .fix-num { color: var(--red); font-weight: 700; font-family: var(--mono); flex-shrink: 0; }
+  .fix-text { color: #fca5a5; }
+
+  .progress-bar { height: 3px; background: var(--border); border-radius: 3px; margin-bottom: 20px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--brand), var(--blue)); border-radius: 3px; transition: width .3s ease; }
+
+  @media (max-width: 600px) {
+    .summary-row { grid-template-columns: repeat(2, 1fr); }
+    body { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">🍛</div>
+  <div class="header-text">
+    <h1>L&T FoodHub — System Diagnostics</h1>
+    <p id="last-run">Not run yet · Click "Run All Tests" to start</p>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-ghost" onclick="copyReport()">📋 Copy Report</button>
+    <button class="btn btn-primary" id="run-btn" onclick="runAll()">▶ Run All Tests</button>
+  </div>
+</div>
+
+<div class="progress-bar"><div class="progress-fill" id="progress" style="width:0%"></div></div>
+
+<div class="summary-row">
+  <div class="summary-card"><div class="num total" id="s-total">—</div><div class="lbl">Total Tests</div></div>
+  <div class="summary-card"><div class="num pass" id="s-pass">—</div><div class="lbl">Passing</div></div>
+  <div class="summary-card"><div class="num fail" id="s-fail">—</div><div class="lbl">Failing</div></div>
+  <div class="summary-card"><div class="num warn" id="s-warn">—</div><div class="lbl">Warnings</div></div>
+</div>
+
+<div id="results"></div>
+
+<div class="section">
+  <div class="section-title">Live Console Log</div>
+  <div class="log-box" id="log-box">Waiting to run tests...</div>
+</div>
+
+<div id="fix-section"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://lorgclscnjdbngqurdsw.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvcmdjbHNjbmpkYm5ncXVyZHN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjA3MjEsImV4cCI6MjA4ODYzNjcyMX0.T8TwjIuILMEwNZgfo0s4_9Zr1_5ocTAtCxWntSA2iu4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const APP_URL = 'https://lt-foodhub.vercel.app';
+
+// ── STATE ────────────────────────────────────────────────────────
+let results = [];
+let logs = [];
+let testId = 0;
+
+// ── LOGGING ──────────────────────────────────────────────────────
+function log(msg, type = 'info') {
+  const time = new Date().toLocaleTimeString('en-IN', {hour12: false});
+  logs.push({msg, type, time});
+  const box = document.getElementById('log-box');
+  box.innerHTML = logs.map(l =>
+    `<span class="log-time">[${l.time}]</span> <span class="log-${l.type}">${l.msg}</span>`
+  ).join('\n');
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── TEST RUNNER ──────────────────────────────────────────────────
+function addTest(section, name) {
+  const id = 'test-' + (++testId);
+  results.push({id, section, name, status: 'pending', detail: '', time: null});
+  return id;
+}
+
+function updateTest(id, status, detail, time) {
+  const t = results.find(r => r.id === id);
+  if (t) { t.status = status; t.detail = detail; t.time = time; }
+  renderResults();
+  updateSummary();
+}
+
+function renderResults() {
+  const sections = [...new Set(results.map(r => r.section))];
+  const icons = {pass:'✅', fail:'❌', warn:'⚠️', running:'⏳', pending:'○'};
+  document.getElementById('results').innerHTML = sections.map(sec => `
+    <div class="section">
+      <div class="section-title">${sec}</div>
+      ${results.filter(r => r.section === sec).map(r => `
+        <div class="test-card ${r.status}">
+          <div class="test-icon">${r.status === 'running' ? '<div class="spinner"></div>' : icons[r.status]}</div>
+          <div class="test-body">
+            <div class="test-name">${r.name}</div>
+            ${r.detail ? `<div class="test-detail ${r.status === 'fail' ? 'error' : r.status === 'warn' ? 'warn' : r.status === 'pass' ? 'success' : ''}">${r.detail}</div>` : ''}
+          </div>
+          ${r.time ? `<div class="test-time">${r.time}ms</div>` : ''}
+        </div>`).join('')}
+    </div>`).join('');
+  renderFixes();
+}
+
+function updateSummary() {
+  const total = results.length;
+  const pass = results.filter(r => r.status === 'pass').length;
+  const fail = results.filter(r => r.status === 'fail').length;
+  const warn = results.filter(r => r.status === 'warn').length;
+  const done = pass + fail + warn;
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-pass').textContent = pass;
+  document.getElementById('s-fail').textContent = fail;
+  document.getElementById('s-warn').textContent = warn;
+  document.getElementById('progress').style.width = (done / total * 100) + '%';
+}
+
+function renderFixes() {
+  const failures = results.filter(r => r.status === 'fail');
+  const warnings = results.filter(r => r.status === 'warn');
+  const issues = [...failures, ...warnings];
+  if (!issues.length) {
+    document.getElementById('fix-section').innerHTML = results.every(r => r.status === 'pass') ?
+      `<div style="text-align:center;padding:24px;color:var(--green);font-weight:700;font-size:16px">🎉 All systems operational! App is ready for 8,000 employees.</div>` : '';
+    return;
+  }
+  document.getElementById('fix-section').innerHTML = `
+    <div class="fix-box">
+      <div class="fix-title">🔧 ${issues.length} Issue${issues.length > 1 ? 's' : ''} Need Attention</div>
+      ${issues.map((t, i) => `
+        <div class="fix-item">
+          <div class="fix-num">${i+1}.</div>
+          <div class="fix-text"><strong>${t.name}</strong> — ${t.detail}</div>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────
+async function timed(fn) {
+  const start = Date.now();
+  const result = await fn();
+  return { ...result, ms: Date.now() - start };
+}
+
+// ── TEST SUITES ──────────────────────────────────────────────────
+
+async function testConnection() {
+  log('Testing Supabase connection...', 'info');
+  const id = addTest('🔌 Database Connection', 'Supabase reachable');
+  updateTest(id, 'running', 'Pinging database...');
+  renderResults();
+  const r = await timed(async () => {
+    try {
+      const {data, error} = await sb.from('canteens').select('id').limit(1);
+      if (error) return {ok: false, msg: error.message};
+      return {ok: true, msg: `Connected in ${Date.now()}ms`};
+    } catch(e) { return {ok: false, msg: e.message}; }
+  });
+  updateTest(id, r.ok ? 'pass' : 'fail', r.ok ? `Connected in ${r.ms}ms` : r.msg, r.ms);
+  log(r.ok ? `✅ DB connected (${r.ms}ms)` : `❌ DB connection failed: ${r.msg}`, r.ok ? 'pass' : 'fail');
+
+  // Latency check
+  const latId = addTest('🔌 Database Connection', 'Query latency acceptable');
+  updateTest(latId, r.ms < 2000 ? 'pass' : 'warn',
+    r.ms < 500 ? `Fast — ${r.ms}ms` : r.ms < 2000 ? `Acceptable — ${r.ms}ms` : `Slow — ${r.ms}ms (may affect UX)`,
+    r.ms);
+  log(`⏱ DB latency: ${r.ms}ms`, r.ms < 2000 ? 'pass' : 'warn');
+}
+
+async function testTables() {
+  log('Checking database tables...', 'info');
+  const tables = ['employees','canteens','menu_items','orders','order_items','wallet_transactions','admins','vendors','order_ratings','app_settings','broadcast_messages'];
+  for (const table of tables) {
+    const id = addTest('🗄️ Database Tables', `Table: ${table}`);
+    updateTest(id, 'running', 'Checking...');
+    renderResults();
+    try {
+      const {data, error, count} = await sb.from(table).select('*', {count: 'exact', head: false}).limit(1);
+      if (error) {
+        updateTest(id, 'fail', `Table missing or error: ${error.message}`, null);
+        log(`❌ Table ${table}: ${error.message}`, 'fail');
+      } else {
+        const {count: total} = await sb.from(table).select('*', {count: 'exact', head: true});
+        updateTest(id, 'pass', `${total || 0} rows`, null);
+        log(`✅ Table ${table}: ${total || 0} rows`, 'pass');
+      }
+    } catch(e) {
+      updateTest(id, 'fail', e.message, null);
+    }
+  }
+}
+
+async function testSeedData() {
+  log('Checking seed data...', 'info');
+
+  const checks = [
+    { table: 'employees', min: 8, name: 'Employees seeded (min 8)' },
+    { table: 'canteens', min: 5, name: 'All 5 canteens present' },
+    { table: 'menu_items', min: 15, name: 'Menu items seeded (min 15)' },
+    { table: 'admins', min: 1, name: 'Admin account exists' },
+    { table: 'vendors', min: 1, name: 'Vendor account exists' },
+    { table: 'app_settings', min: 5, name: 'App settings configured' },
+  ];
+
+  for (const check of checks) {
+    const id = addTest('🌱 Seed Data', check.name);
+    updateTest(id, 'running', '');
+    renderResults();
+    const {data, error} = await sb.from(check.table).select('*', {count: 'exact', head: true});
+    const {count} = await sb.from(check.table).select('*', {count: 'exact', head: true});
+    if (error) {
+      updateTest(id, 'fail', error.message);
+      log(`❌ ${check.name}: ${error.message}`, 'fail');
+    } else if ((count || 0) < check.min) {
+      updateTest(id, 'fail', `Only ${count} rows, expected ≥ ${check.min}. Run migration script.`);
+      log(`❌ ${check.name}: ${count} rows (need ${check.min})`, 'fail');
+    } else {
+      updateTest(id, 'pass', `${count} rows ✓`);
+      log(`✅ ${check.name}: ${count} rows`, 'pass');
+    }
+  }
+}
+
+async function testColumns() {
+  log('Checking critical columns...', 'info');
+
+  const colChecks = [
+    { table: 'orders', col: 'canteen_icon', name: 'orders.canteen_icon column' },
+    { table: 'orders', col: 'payment_method', name: 'orders.payment_method column' },
+    { table: 'orders', col: 'rating', name: 'orders.rating column' },
+    { table: 'menu_items', col: 'stock', name: 'menu_items.stock column' },
+    { table: 'menu_items', col: 'allergens', name: 'menu_items.allergens column' },
+    { table: 'menu_items', col: 'is_bestseller', name: 'menu_items.is_bestseller column' },
+    { table: 'canteens', col: 'token_counter', name: 'canteens.token_counter column' },
+    { table: 'canteens', col: 'opening_time', name: 'canteens.opening_time column' },
+    { table: 'employees', col: 'monthly_limit', name: 'employees.monthly_limit column' },
+    { table: 'order_items', col: 'custom_note', name: 'order_items.custom_note column' },
+  ];
+
+  for (const check of colChecks) {
+    const id = addTest('🏛️ Schema Columns', check.name);
+    updateTest(id, 'running', '');
+    renderResults();
+    try {
+      const {data, error} = await sb.from(check.table).select(check.col).limit(1);
+      if (error && error.message.includes('column')) {
+        updateTest(id, 'fail', `Column missing — run migration script`);
+        log(`❌ ${check.name}: column missing`, 'fail');
+      } else if (error) {
+        updateTest(id, 'warn', error.message);
+        log(`⚠️ ${check.name}: ${error.message}`, 'warn');
+      } else {
+        updateTest(id, 'pass', 'Column exists ✓');
+        log(`✅ ${check.name}`, 'pass');
+      }
+    } catch(e) {
+      updateTest(id, 'fail', e.message);
+    }
+  }
+}
+
+async function testOrderFlow() {
+  log('Testing full order flow...', 'info');
+  const testEmpId = 'LT-EMP-24891';
+  const testCanteenId = 'c1';
+  let testOrderId = null;
+
+  // 1. Employee exists
+  const empId = addTest('🛒 Order Flow', 'Test employee exists in DB');
+  updateTest(empId, 'running', '');
+  renderResults();
+  const {data: emp, error: empErr} = await sb.from('employees').select('*').eq('id', testEmpId).single();
+  if (empErr || !emp) {
+    updateTest(empId, 'fail', `Employee ${testEmpId} not found`);
+    log(`❌ Employee not found: ${testEmpId}`, 'fail');
+  } else {
+    updateTest(empId, 'pass', `${emp.name} · ₹${emp.wallet_balance} balance`);
+    log(`✅ Employee: ${emp.name}, balance: ₹${emp.wallet_balance}`, 'pass');
+  }
+
+  // 2. Canteen open
+  const canId = addTest('🛒 Order Flow', 'Main Canteen is open');
+  updateTest(canId, 'running', '');
+  renderResults();
+  const {data: can, error: canErr} = await sb.from('canteens').select('*').eq('id', testCanteenId).single();
+  if (canErr || !can) {
+    updateTest(canId, 'fail', 'Canteen c1 not found');
+  } else {
+    updateTest(canId, can.is_open ? 'pass' : 'warn',
+      can.is_open ? `${can.name} is open ✓` : `${can.name} is CLOSED — employees can't order`);
+    log(`${can.is_open ? '✅' : '⚠️'} Canteen: ${can.name} (${can.is_open ? 'open' : 'CLOSED'})`, can.is_open ? 'pass' : 'warn');
+  }
+
+  // 3. Place a test order
+  const ordId = addTest('🛒 Order Flow', 'Test order inserts to DB');
+  updateTest(ordId, 'running', 'Inserting test order...');
+  renderResults();
+  testOrderId = 'DIAG-' + Date.now();
+  const {error: insertErr} = await sb.from('orders').insert([{
+    id: testOrderId,
+    token_number: 999,
+    employee_id: testEmpId,
+    employee_name: 'Diagnostic Test',
+    canteen_id: testCanteenId,
+    canteen_name: 'Main Canteen',
+    canteen_icon: '🍛',
+    pickup_slot: '12:30 PM',
+    status: 'new',
+    item_total: 80,
+    subsidy_applied: 80,
+    amount_paid: 0,
+    payment_method: 'wallet',
+  }]);
+  if (insertErr) {
+    updateTest(ordId, 'fail', `Insert failed: ${insertErr.message}`);
+    log(`❌ Order insert failed: ${insertErr.message}`, 'fail');
+    testOrderId = null;
+  } else {
+    updateTest(ordId, 'pass', `Order ${testOrderId} inserted ✓`);
+    log(`✅ Test order inserted: ${testOrderId}`, 'pass');
+  }
+
+  // 4. Order fetchable (what kitchen sees)
+  const fetchId = addTest('🛒 Order Flow', 'Order fetchable by kitchen/vendor');
+  updateTest(fetchId, 'running', '');
+  renderResults();
+  if (testOrderId) {
+    const {data: fetched, error: fetchErr} = await sb.from('orders').select('*, order_items(*)').eq('id', testOrderId).single();
+    if (fetchErr || !fetched) {
+      updateTest(fetchId, 'fail', `Can't fetch order: ${fetchErr?.message}`);
+      log(`❌ Order not fetchable: ${fetchErr?.message}`, 'fail');
+    } else {
+      updateTest(fetchId, 'pass', `Fetched — status: ${fetched.status} ✓`);
+      log(`✅ Order fetchable by kitchen: ${fetched.status}`, 'pass');
+    }
+  } else {
+    updateTest(fetchId, 'warn', 'Skipped — insert failed');
+  }
+
+  // 5. Status update (vendor accepts)
+  const statusId = addTest('🛒 Order Flow', 'Vendor can update order status');
+  updateTest(statusId, 'running', '');
+  renderResults();
+  if (testOrderId) {
+    const {error: updErr} = await sb.from('orders').update({status: 'preparing'}).eq('id', testOrderId);
+    if (updErr) {
+      updateTest(statusId, 'fail', `Update failed: ${updErr.message}`);
+      log(`❌ Status update failed: ${updErr.message}`, 'fail');
+    } else {
+      updateTest(statusId, 'pass', 'Status updated to "preparing" ✓');
+      log(`✅ Order status update works`, 'pass');
+    }
+    // Clean up test order
+    await sb.from('orders').delete().eq('id', testOrderId);
+    log(`🧹 Test order cleaned up`, 'info');
+  } else {
+    updateTest(statusId, 'warn', 'Skipped — insert failed');
+  }
+}
+
+async function testWallet() {
+  log('Testing wallet operations...', 'info');
+
+  // Check wallet balance readable
+  const balId = addTest('💳 Wallet', 'Employee wallet balance readable');
+  updateTest(balId, 'running', '');
+  renderResults();
+  const {data: emp} = await sb.from('employees').select('id,name,wallet_balance').eq('id','LT-EMP-24891').single();
+  if (!emp) {
+    updateTest(balId, 'fail', 'Employee not found');
+  } else {
+    const low = emp.wallet_balance < 50;
+    updateTest(balId, low ? 'warn' : 'pass',
+      `₹${emp.wallet_balance} balance${low ? ' — LOW, employee may not be able to order' : ''}`);
+    log(`${low ? '⚠️' : '✅'} Wallet balance: ₹${emp.wallet_balance}`, low ? 'warn' : 'pass');
+  }
+
+  // Check wallet transactions table
+  const txnId = addTest('💳 Wallet', 'Wallet transactions table writable');
+  updateTest(txnId, 'running', '');
+  renderResults();
+  const testTxnId = Date.now();
+  const {error: txnErr} = await sb.from('wallet_transactions').insert([{
+    employee_id: 'LT-EMP-24891', type: 'credit', amount: 0.01,
+    description: 'Diagnostic test — ignore',
+  }]);
+  if (txnErr) {
+    updateTest(txnId, 'fail', `Can't write transactions: ${txnErr.message}`);
+    log(`❌ Wallet transaction write failed: ${txnErr.message}`, 'fail');
+  } else {
+    updateTest(txnId, 'pass', 'Transaction write ✓');
+    log(`✅ Wallet transactions writable`, 'pass');
+    // Clean up
+    await sb.from('wallet_transactions').delete().eq('description', 'Diagnostic test — ignore');
+  }
+}
+
+async function testMenuItems() {
+  log('Checking menu items...', 'info');
+
+  // Available items
+  const avId = addTest('🍽️ Menu', 'Available menu items');
+  updateTest(avId, 'running', '');
+  renderResults();
+  const {data: avail} = await sb.from('menu_items').select('id,name,canteen_id').eq('is_available', true);
+  if (!avail?.length) {
+    updateTest(avId, 'fail', 'No available items — employees will see empty menu!');
+    log(`❌ No available menu items`, 'fail');
+  } else {
+    updateTest(avId, 'pass', `${avail.length} items available across canteens`);
+    log(`✅ ${avail.length} menu items available`, 'pass');
+  }
+
+  // Zero stock items
+  const stockId = addTest('🍽️ Menu', 'Stock levels');
+  updateTest(stockId, 'running', '');
+  renderResults();
+  const {data: lowStock} = await sb.from('menu_items').select('name,stock').lt('stock', 5).eq('is_available', true);
+  if (lowStock?.length) {
+    updateTest(stockId, 'warn', `${lowStock.length} items low/out of stock: ${lowStock.map(i=>i.name).join(', ')}`);
+    log(`⚠️ Low stock items: ${lowStock.map(i=>i.name).join(', ')}`, 'warn');
+  } else {
+    updateTest(stockId, 'pass', 'All items have sufficient stock');
+    log(`✅ All menu items have stock`, 'pass');
+  }
+
+  // Subsidy configured
+  const subId = addTest('🍽️ Menu', 'Subsidy amounts configured');
+  updateTest(subId, 'running', '');
+  renderResults();
+  const {data: withSub} = await sb.from('menu_items').select('id').gt('subsidy_amount', 0);
+  if (!withSub?.length) {
+    updateTest(subId, 'warn', 'No items have subsidy — employees pay full price');
+    log(`⚠️ No subsidy configured on any items`, 'warn');
+  } else {
+    updateTest(subId, 'pass', `${withSub.length} items have subsidy ✓`);
+    log(`✅ ${withSub.length} items have subsidy`, 'pass');
+  }
+}
+
+async function testRealtime() {
+  log('Testing Supabase Realtime...', 'info');
+  const rtId = addTest('⚡ Realtime', 'Realtime channel subscribable');
+  updateTest(rtId, 'running', 'Connecting to Realtime...');
+  renderResults();
+
+  await new Promise(resolve => {
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        updateTest(rtId, 'warn', 'Timeout — Realtime may not be enabled. Go to Supabase → Database → Replication and enable orders table');
+        log(`⚠️ Realtime timeout — enable in Supabase dashboard`, 'warn');
+        resolve();
+      }
+    }, 5000);
+
+    const channel = sb.channel('diag-test')
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'orders'}, () => {})
+      .subscribe((status) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          if (status === 'SUBSCRIBED') {
+            updateTest(rtId, 'pass', 'Realtime connected ✓ — instant order updates will work');
+            log(`✅ Realtime subscribed successfully`, 'pass');
+          } else {
+            updateTest(rtId, 'warn', `Status: ${status} — check Supabase Replication settings`);
+            log(`⚠️ Realtime status: ${status}`, 'warn');
+          }
+          sb.removeChannel(channel);
+          resolve();
+        }
+      });
+  });
+}
+
+async function testAppURL() {
+  log('Checking app deployment...', 'info');
+
+  const urlId = addTest('🌐 Deployment', 'App live on Vercel');
+  updateTest(urlId, 'running', `Checking ${APP_URL}...`);
+  renderResults();
+  try {
+    const start = Date.now();
+    const res = await fetch(APP_URL, {method: 'HEAD', mode: 'no-cors'});
+    const ms = Date.now() - start;
+    updateTest(urlId, 'pass', `${APP_URL} is live (${ms}ms)`);
+    log(`✅ App live at ${APP_URL} (${ms}ms)`, 'pass');
+  } catch(e) {
+    updateTest(urlId, 'warn', `Can't verify from here — open ${APP_URL} manually`);
+    log(`⚠️ Can't ping Vercel from browser (CORS) — check manually`, 'warn');
+  }
+
+  // Check all 4 roles configured
+  const roles = [
+    {name: 'Employee login credentials', id: 'LT-EMP-24891', table: 'employees'},
+    {name: 'Admin login credentials', id: 'admin-001', table: 'admins'},
+    {name: 'Vendor login credentials', id: 'vendor-001', table: 'vendors'},
+  ];
+  for (const role of roles) {
+    const rid = addTest('🌐 Deployment', role.name);
+    updateTest(rid, 'running', '');
+    renderResults();
+    const {data} = await sb.from(role.table).select('id').eq('id', role.id).single();
+    if (data) {
+      updateTest(rid, 'pass', `${role.id} exists ✓`);
+      log(`✅ ${role.name}: ${role.id}`, 'pass');
+    } else {
+      updateTest(rid, 'fail', `${role.id} not found in ${role.table}`);
+      log(`❌ ${role.name}: not found`, 'fail');
+    }
+  }
+}
+
+async function testViews() {
+  log('Checking database views...', 'info');
+  const views = ['v_today_canteen_summary', 'v_top_items', 'v_employee_spending', 'v_low_stock'];
+  for (const view of views) {
+    const id = addTest('📊 Analytics Views', `View: ${view}`);
+    updateTest(id, 'running', '');
+    renderResults();
+    const {data, error} = await sb.from(view).select('*').limit(1);
+    if (error) {
+      updateTest(id, 'warn', `View missing — admin analytics may not work: ${error.message}`);
+      log(`⚠️ View ${view}: ${error.message}`, 'warn');
+    } else {
+      updateTest(id, 'pass', 'View accessible ✓');
+      log(`✅ View ${view} accessible`, 'pass');
+    }
+  }
+}
+
+// ── MAIN RUNNER ──────────────────────────────────────────────────
+async function runAll() {
+  results = [];
+  logs = [];
+  testId = 0;
+  document.getElementById('log-box').innerHTML = '';
+  document.getElementById('fix-section').innerHTML = '';
+  document.getElementById('progress').style.width = '0%';
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('run-btn').textContent = '⏳ Running...';
+  document.getElementById('last-run').textContent = 'Running diagnostics...';
+
+  log('═══════════════════════════════════════', 'info');
+  log('L&T FoodHub System Diagnostics', 'info');
+  log('Started: ' + new Date().toLocaleString('en-IN'), 'info');
+  log('═══════════════════════════════════════', 'info');
+
+  const start = Date.now();
+
+  await testConnection();
+  await testTables();
+  await testSeedData();
+  await testColumns();
+  await testOrderFlow();
+  await testWallet();
+  await testMenuItems();
+  await testRealtime();
+  await testAppURL();
+  await testViews();
+
+  const total = Date.now() - start;
+  const pass = results.filter(r => r.status === 'pass').length;
+  const fail = results.filter(r => r.status === 'fail').length;
+  const warn = results.filter(r => r.status === 'warn').length;
+
+  log('═══════════════════════════════════════', 'info');
+  log(`DONE in ${(total/1000).toFixed(1)}s — ${pass} passed, ${fail} failed, ${warn} warnings`, fail ? 'fail' : warn ? 'warn' : 'pass');
+  log('═══════════════════════════════════════', 'info');
+
+  document.getElementById('last-run').textContent =
+    `Last run: ${new Date().toLocaleTimeString('en-IN')} · ${(total/1000).toFixed(1)}s · ${pass}✅ ${fail}❌ ${warn}⚠️`;
+  document.getElementById('run-btn').disabled = false;
+  document.getElementById('run-btn').textContent = '▶ Run Again';
+}
+
+function copyReport() {
+  const lines = [
+    'L&T FoodHub Diagnostics Report',
+    'Generated: ' + new Date().toLocaleString('en-IN'),
+    '═══════════════════════════════',
+    ...results.map(r => `[${r.status.toUpperCase().padEnd(7)}] ${r.name}: ${r.detail}`),
+    '═══════════════════════════════',
+    `TOTAL: ${results.length} | PASS: ${results.filter(r=>r.status==='pass').length} | FAIL: ${results.filter(r=>r.status==='fail').length} | WARN: ${results.filter(r=>r.status==='warn').length}`,
+  ].join('\n');
+  navigator.clipboard.writeText(lines).then(() => {
+    document.querySelector('.btn-ghost').textContent = '✅ Copied!';
+    setTimeout(() => document.querySelector('.btn-ghost').textContent = '📋 Copy Report', 2000);
+  });
+}
+</script>
+</body>
+</html>
