@@ -675,8 +675,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="hero-greet" id="h-greet">Good afternoon,</div>
       <div class="hero-name" id="h-name">Rajesh Kumar 👋</div>
       <div class="hero-chips">
-        <span class="hero-chip" id="h-subsidy">🎯 Subsidy ₹80/meal</span>
-        <span class="hero-chip" id="h-pass">🎫 Meal Pass Active</span>
+
         <span class="hero-chip" id="h-orders-count">📋 0 orders today</span>
       </div>
     </div>
@@ -719,20 +718,6 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="wallet-hero-label">Available Balance</div>
       <div class="wallet-hero-amount" id="w-bal">₹580</div>
       <div class="wallet-hero-id" id="w-id">LT-EMP-24891</div>
-      <div class="wallet-chips">
-        <span class="wallet-chip2">🎯 Subsidy ₹80/meal</span>
-        <span class="wallet-chip2" id="w-pass">📅 Meal Pass Active</span>
-        <span class="wallet-chip2" id="w-spend">This month: ₹0</span>
-      </div>
-    </div>
-    <div class="section-header">
-      <div class="section-title">Top Up Wallet</div>
-    </div>
-    <div class="topup-grid">
-      <button class="topup-btn" onclick="topUp(100)">+₹100</button>
-      <button class="topup-btn" onclick="topUp(200)">+₹200</button>
-      <button class="topup-btn" onclick="topUp(500)">+₹500</button>
-      <button class="topup-btn" onclick="topUp(1000)">+₹1000</button>
     </div>
     <div class="section-header">
       <div class="section-title">Transactions</div>
@@ -750,18 +735,9 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
         <div class="profile-dept" id="p-dept">Engineering — Powai Campus</div>
       </div>
     </div>
-    <div class="meal-pass-card">
-      <div class="meal-pass-icon">🎫</div>
-      <div class="meal-pass-info">
-        <div class="meal-pass-title">Monthly Meal Pass</div>
-        <div class="meal-pass-month" id="mp-month">March 2026</div>
-        <div class="progress"><div class="progress-fill green" id="mp-bar" style="width:70%"></div></div>
-        <div class="meal-pass-remaining" id="mp-remaining">21 / 30 meals remaining</div>
-      </div>
-    </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-val" id="st-orders">0</div><div class="stat-sub stat-up">This month</div></div>
-      <div class="stat-card"><div class="stat-label">Money Saved</div><div class="stat-val" id="st-saved" style="font-size:18px">₹0</div><div class="stat-sub stat-up">Via subsidy</div></div>
+      <div class="stat-card"><div class="stat-label">Total Spent</div><div class="stat-val" id="st-saved" style="font-size:18px">₹0</div><div class="stat-sub">This month</div></div>
     </div>
     <div class="card">
       <div class="card-title">⚙️ Preferences</div>
@@ -898,8 +874,9 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
         <div class="vendor-title">📺 Kitchen Display</div>
         <div class="vendor-sub" id="kds-sub">Active Orders — Auto-refreshes every 15s</div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
         <div class="live-dot">LIVE</div>
+        <button id="kds-toggle-btn" onclick="toggleKitchenOpen()" style="padding:6px 14px;border-radius:20px;border:none;font-weight:700;font-size:12px;cursor:pointer;background:#22c55e;color:#fff">🟢 OPEN</button>
         <div style="cursor:pointer;font-size:18px" onclick="logout()">🚪</div>
       </div>
     </div>
@@ -1400,7 +1377,6 @@ function renderMenu(searchQuery) {
         <div class="menu-footer">
           <div>
             <div class="menu-price">₹${m.price}</div>
-            <div class="menu-subsidy">${sub>0?`You pay ₹${youPay}${youPay===0?' (free!)':' after subsidy'}`:'No subsidy'}</div>
             ${m.rating ? `<div class="menu-rating">⭐ ${m.rating} (${m.orders_count||0})</div>` : ''}
           </div>
           <div id="mc-${m.id}">
@@ -1473,7 +1449,7 @@ function clearCart() {
 
 function updateCartFloat() {
   const tot = S.cart.reduce((s,i) => s+i.qty, 0);
-  const price = S.cart.reduce((s,i) => s + Math.max(0,(i.price-(i.subsidy_amount||0)))*i.qty, 0);
+  const price = S.cart.reduce((s,i) => s + i.price*i.qty, 0);
   const cf = document.getElementById('cart-float');
   if (!cf) return;
   if (tot === 0) { cf.classList.add('gone'); return; }
@@ -1486,8 +1462,7 @@ function updateCartFloat() {
 function renderCart() {
   if (!S.user) return;
   const iTotal = S.cart.reduce((s,i) => s+i.price*i.qty, 0);
-  const subTotal = S.cart.reduce((s,i) => s+Math.min(i.subsidy_amount||0,i.price)*i.qty, 0);
-  const youPay = Math.max(0, iTotal - subTotal);
+  const youPay = iTotal;
   setEl('pay-bal-lbl', 'Balance: ₹' + Math.round(S.user.wallet_balance));
   const cartList = document.getElementById('cart-list');
   if (S.cart.length === 0) {
@@ -1498,22 +1473,20 @@ function renderCart() {
         <div class="cart-emoji">${i.emoji||'🍽️'}</div>
         <div class="cart-item-body">
           <div class="cart-item-name">${i.name}</div>
-          <div class="cart-item-price">₹${Math.max(0,(i.price-(i.subsidy_amount||0)))} × ${i.qty}</div>
+          <div class="cart-item-price">₹${i.price} × ${i.qty}</div>
         </div>
         <div class="qty-ctrl">
           <button class="qty-btn" onclick="chgQty('${i.id}',-1)">−</button>
           <span class="qty-num">${i.qty}</span>
           <button class="qty-btn" onclick="chgQty('${i.id}',1)">+</button>
         </div>
-        <div class="cart-item-total">₹${Math.max(0,(i.price-(i.subsidy_amount||0)))*i.qty}</div>
+        <div class="cart-item-total">₹${i.price*i.qty}</div>
       </div>`).join('');
   }
   const sumEl = document.getElementById('cart-summary');
   if(sumEl) sumEl.innerHTML = `
-    <div class="summary-row"><span>Item Total (${S.cart.reduce((s,i)=>s+i.qty,0)} items)</span><span>₹${iTotal}</span></div>
-    <div class="summary-row green"><span>🎯 L&T Subsidy Applied</span><span>−₹${subTotal}</span></div>
-    <div class="summary-row"><span>Platform Fee</span><span style="color:var(--green2);font-weight:700">FREE</span></div>
-    <div class="summary-row total"><span>You Pay</span><span>₹${youPay}</span></div>`;
+    <div class="summary-row"><span>Items (${S.cart.reduce((s,i)=>s+i.qty,0)})</span><span>₹${iTotal}</span></div>
+    <div class="summary-row total"><span>Total Payable</span><span>₹${youPay}</span></div>`;
 }
 
 function generateSlots() {
@@ -1561,10 +1534,9 @@ async function placeOrder() {
   if (S.cart.length === 0) { toast('Your cart is empty!', 'error', '🛒'); return; }
   if (S.selCanteen && !S.selCanteen.is_open) { toast('This canteen is currently closed!', 'error', '🚫'); return; }
   const iTotal = S.cart.reduce((s,i) => s+i.price*i.qty, 0);
-  const subTotal = S.cart.reduce((s,i) => s+Math.min(i.subsidy_amount||0,i.price)*i.qty, 0);
-  const youPay = Math.max(0, iTotal - subTotal);
+  const youPay = iTotal;
   if (S.selPay === 'wallet' && S.user.wallet_balance < youPay) {
-    toast('Insufficient wallet balance! Please top up.', 'error', '💸');
+    toast('Insufficient wallet balance!', 'error', '💸');
     return;
   }
   const btn = document.getElementById('pay-btn');
@@ -1606,7 +1578,7 @@ async function placeOrder() {
         pickup_slot: S.selSlot,
         status: 'new',
         item_total: iTotal,
-        subsidy_applied: subTotal,
+        subsidy_applied: 0,
         amount_paid: youPay,
         payment_method: S.selPay || 'wallet',
       };
@@ -2618,6 +2590,26 @@ function renderAdminCanteens(el) {
         </div>
       </div>`;
     }).join('')}`;
+}
+
+// Kitchen open/close toggle
+let _kitchenOpen = true;
+function toggleKitchenOpen() {
+  _kitchenOpen = !_kitchenOpen;
+  const btn = document.getElementById('kds-toggle-btn');
+  if (_kitchenOpen) {
+    btn.style.background = '#22c55e'; btn.textContent = '🟢 OPEN';
+    toast('Kitchen is now OPEN — orders accepted', 'success', '🟢');
+  } else {
+    btn.style.background = '#ef4444'; btn.textContent = '🔴 CLOSED';
+    toast('Kitchen is now CLOSED — no new orders', 'warn', '🔴');
+  }
+  if (sb) {
+    S.canteens.forEach(c => {
+      sb.from('canteens').update({ is_open: _kitchenOpen }).eq('id', c.id);
+      c.is_open = _kitchenOpen;
+    });
+  }
 }
 
 async function toggleCanteen(id, el) {
