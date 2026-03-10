@@ -1217,16 +1217,37 @@ async function doLogin() {
     } else if (loginRole === 'vendor') {
       S.role = 'vendor';
       S.user = {id:'vendor-001',name:'Main Canteen Vendor',initials:'VC',canteen_id:'c1'};
+      // Fetch all orders from Supabase BEFORE rendering
+      try {
+        if (sb) {
+          const {data} = await sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+          if (data?.length) S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
+        }
+      } catch(e) { console.warn('Order fetch failed:', e.message); }
       goScreen('s-vendor');
       toast('Vendor dashboard loaded', 'success', '🍳');
     } else if (loginRole === 'kitchen') {
       S.role = 'kitchen';
       S.user = {id:'kitchen-001',name:'Kitchen Display',initials:'KD',canteen_id:'c1'};
+      // Fetch all orders from Supabase BEFORE rendering
+      try {
+        if (sb) {
+          const {data} = await sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+          if (data?.length) S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
+        }
+      } catch(e) { console.warn('Order fetch failed:', e.message); }
       goScreen('s-kitchen');
       toast('Kitchen Display System active', 'success', '📺');
     } else {
       S.role = 'admin';
       S.user = {id:'admin-001',name:'Campus Admin',initials:'CA'};
+      // Fetch all orders from Supabase BEFORE rendering
+      try {
+        if (sb) {
+          const {data} = await sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+          if (data?.length) S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
+        }
+      } catch(e) { console.warn('Order fetch failed:', e.message); }
       goScreen('s-admin');
       toast('Admin dashboard loaded', 'success', '⚙️');
     }
