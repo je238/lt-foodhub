@@ -1056,6 +1056,11 @@ async function loadData() {
     S.canteens = canRes.data?.length ? canRes.data : FALLBACK_CANTEENS;
     S.menu = menuRes.data?.length ? menuRes.data : FALLBACK_MENU;
     console.log('[FoodHub] Loaded', S.menu.length, 'menu items from', S.canteens.length, 'canteens');
+    // DEBUG: show count per canteen
+    const counts = {};
+    S.menu.forEach(m => { counts[m.canteen_id] = (counts[m.canteen_id]||0)+1; });
+    console.log('[FoodHub] Items per canteen:', JSON.stringify(counts));
+    window._menuDebug = {total: S.menu.length, perCanteen: counts};
     // Load app settings (subsidy, monthly limit, etc.)
     if (settingsRes.data?.length) {
       settingsRes.data.forEach(s => {
@@ -1214,6 +1219,17 @@ async function doLogin() {
       } catch(e) {}
       if (!emp) emp = FALLBACK_EMPLOYEES[id] || {id,name:'Employee '+id,department:'L&T',campus:'Powai Campus',wallet_balance:500,subsidy_per_meal:80,initials:id.slice(-2).toUpperCase(),meal_pass_active:true,meal_pass_used:0,meal_pass_limit:30};
       S.user = emp; S.role = 'employee';
+      // Reload menu fresh from DB at login time
+      if (sb) {
+        const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available', true).limit(500);
+        if (freshMenu?.length) {
+          S.menu = freshMenu;
+          S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; });
+          console.log('[Login] Fresh menu loaded:', freshMenu.length, 'items');
+        }
+        const {data: freshCans} = await sb.from('canteens').select('*').order('id');
+        if (freshCans?.length) S.canteens = freshCans;
+      }
       renderHome();
       goScreen('s-home');
       toast(`Welcome back, ${emp.name.split(' ')[0]}! 👋`, 'success', '✅');
@@ -1343,7 +1359,9 @@ function selCat(cat) {
 }
 
 function renderMenu(searchQuery) {
+  console.log('[renderMenu] S.menu total:', S.menu.length, '| selCanteen:', S.selCanteen?.id);
   let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
+  console.log('[renderMenu] filtered items for', S.selCanteen?.id, ':', items.length);
   if (S.selCat !== 'All') items = items.filter(m => m.category === S.selCat);
   if (S.vegOnly) items = items.filter(m => m.is_veg);
   if (searchQuery) {
