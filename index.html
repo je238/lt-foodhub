@@ -1091,9 +1091,9 @@ function goScreen(id) {
   // Close notif panel
   document.getElementById('notif-panel')?.classList.add('hidden');
   if (id === 's-cart') renderCart();
-  if (id === 's-vendor') { renderVendor(); startPoll(); startRealtime(); }
-  if (id === 's-kitchen') { renderKDS(); startPoll(); startRealtime(); }
-  if (id === 's-admin') renderAdmin('overview');
+  if (id === 's-vendor') { fetchAllOrders().then(() => renderVendor()); startPoll(); startRealtime(); }
+  if (id === 's-kitchen') { fetchAllOrders().then(() => renderKDS()); startPoll(); startRealtime(); }
+  if (id === 's-admin') { fetchAllOrders().then(() => renderAdmin('overview')); }
 }
 
 function goTab(tab, btn) {
@@ -1565,6 +1565,8 @@ async function placeOrder() {
   } catch(e) { console.warn('Inventory/token sync failed:', e); }
   S.orders.unshift(order);
   S.allOrders.unshift({...order});
+  // Also persist immediately to Supabase so vendor/kitchen can see it
+  // (the full async save happens below, this ensures local state is ready)
   if (youPay > 0) S.txns.unshift({type:'debit',icon:S.cart[0].emoji||'🍽️',name:'Order #'+token+' — '+order.canteen_name,date:'Just now',amount:youPay});
   // Update UI elements
   setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
@@ -2036,6 +2038,23 @@ function updateOrderStatus(id, status) {
 // ═════════════════════════════════════
 // AUTO-POLL
 // ═════════════════════════════════════
+async function fetchAllOrders() {
+  try {
+    if (!sb) return;
+    const {data} = await sb.from('orders')
+      .select('*, order_items(*)')
+      .order('created_at', {ascending: false})
+      .limit(100);
+    if (data?.length) {
+      data.forEach(o => {
+        const ex = S.allOrders.find(e => e.id === o.id);
+        if (!ex) S.allOrders.unshift({...o, items: o.order_items||[]});
+        else { ex.status = o.status; ex.items = o.order_items||ex.items; }
+      });
+    }
+  } catch(e) { console.warn('[FoodHub] fetchAllOrders failed:', e.message); }
+}
+
 function startPoll() {
   clearInterval(S.pollInterval);
   S.pollInterval = setInterval(async () => {
