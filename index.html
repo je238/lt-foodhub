@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <title>L&T FoodHub</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -36,7 +36,11 @@ img{display:block}
 
 /* SCREENS */
 .screen{display:none;min-height:100svh;flex-direction:column;background:var(--light)}
-.screen.active{display:flex}
+.screen.active{display:flex;flex-direction:column}
+/* Mobile scroll fix */
+html,body{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
+/* Ensure flex screens fill properly on mobile */
+.screen.active{min-height:100svh;min-height:-webkit-fill-available}
 .screen-slide{animation:slideUp .28s cubic-bezier(.34,1.2,.64,1)}
 @keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -134,6 +138,8 @@ img{display:block}
 
 /* ─── BOTTOM NAV ─── */
 .bnav{background:var(--white);border-top:1px solid var(--border);display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100;padding:6px 0 max(6px,env(safe-area-inset-bottom))}
+/* Push content above fixed bottom nav */
+.tab-scroll-area{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding-bottom:80px}
 .bni{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 2px;border:none;background:none;position:relative;transition:.2s}
 .bni-icon{font-size:20px;transition:transform .2s}
 .bni-label{font-size:10px;color:var(--muted);font-weight:500;transition:.2s}
@@ -142,8 +148,11 @@ img{display:block}
 .bni-badge{position:absolute;top:2px;right:calc(50% - 16px);background:var(--brand);color:#fff;font-size:9px;font-weight:800;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;line-height:14px;border:1.5px solid #fff}
 
 /* ─── PAGE ─── */
-.page{flex:1;padding:14px 14px 90px;max-width:520px;width:100%;margin:0 auto}
-.page-wide{flex:1;padding:0 0 20px}
+.page{flex:1;padding:14px 14px 90px;max-width:520px;width:100%;margin:0 auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.page-wide{flex:1;padding:0 0 90px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+/* Vendor / Kitchen / Admin scroll areas */
+#vendor-body,#kds-body,#admin-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:30px}
+#s-vendor,#s-kitchen,#s-admin{overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* ─── SECTIONS ─── */
 .sec-title{font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:12px;color:var(--dark);display:flex;align-items:center;justify-content:space-between}
