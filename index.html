@@ -871,7 +871,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
   <div class="vendor-header" style="background:linear-gradient(135deg,#064e3b 0%,#065f46 100%)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div>
-        <div class="vendor-title">📺 Kitchen Display</div>
+        <div class="vendor-title" id="kds-title">📺 Kitchen Display</div>
         <div class="vendor-sub" id="kds-sub">Active Orders — Auto-refreshes every 15s</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
@@ -1175,14 +1175,26 @@ function selRole(role, el) {
   el.classList.add('active');
   const placeholders = {
     employee: 'Employee ID (e.g. LT-EMP-24891)',
-    vendor: 'Vendor ID (e.g. vendor-001)',
-    kitchen: 'Kitchen ID (e.g. kitchen-001)',
+    vendor: 'Counter ID (e.g. counter-c1)',
+    kitchen: 'Counter ID (e.g. counter-c1)',
     admin: 'Admin ID (e.g. admin-001)'
   };
   document.getElementById('l-id').placeholder = placeholders[role] || 'ID';
-  const vals = {employee:'LT-EMP-24891',vendor:'vendor-001',kitchen:'kitchen-001',admin:'admin-001'};
+  const vals = {employee:'LT-EMP-24891',vendor:'counter-c1',kitchen:'counter-c1',admin:'admin-001'};
   document.getElementById('l-id').value = vals[role] || '';
 }
+
+
+// Counter ID → canteen mapping
+const COUNTER_MAP = {
+  'counter-c1': {id:'c1', name:'North Indian Counter',  icon:'🍛'},
+  'counter-c2': {id:'c2', name:'South Indian Counter',  icon:'🥣'},
+  'counter-c3': {id:'c3', name:'Chinese Counter',       icon:'🍜'},
+  'counter-c4': {id:'c4', name:'Italian Counter',       icon:'🍕'},
+  'counter-c5': {id:'c5', name:'Non-Veg Counter',       icon:'🍗'},
+  'counter-c6': {id:'c6', name:'Chaat Counter',         icon:'🥟'},
+  'counter-c7': {id:'c7', name:'Hot & Cold Beverages',  icon:'☕'},
+};
 
 async function doLogin() {
   const id = document.getElementById('l-id').value.trim();
@@ -1216,24 +1228,35 @@ async function doLogin() {
       goScreen('s-home');
       toast(`Welcome back, ${emp.name.split(' ')[0]}! 👋`, 'success', '✅');
     } else if (loginRole === 'vendor') {
+      const counter = COUNTER_MAP[id];
+      if (!counter) {
+        err.textContent = 'Invalid Counter ID. Use counter-c1 to counter-c7';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
       S.role = 'vendor';
-      S.user = {id:'vendor-001',name:'Main Canteen Vendor',initials:'VC',canteen_id:'c1'};
-      // Fetch all orders from Supabase BEFORE rendering
+      S.user = {id, name: counter.name + ' Vendor', initials: counter.icon, canteen_id: counter.id};
       try {
         if (sb) {
-          const {data} = await sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+          const {data} = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200);
           if (data?.length) S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
         }
       } catch(e) { console.warn('Order fetch failed:', e.message); }
       goScreen('s-vendor');
-      toast('Vendor dashboard loaded', 'success', '🍳');
+      setEl('vendor-title', counter.icon + ' ' + counter.name);
+      toast(counter.icon + ' ' + counter.name + ' loaded', 'success', '✅');
     } else if (loginRole === 'kitchen') {
+      const counter = COUNTER_MAP[id];
+      if (!counter) {
+        err.textContent = 'Invalid Counter ID. Use counter-c1 to counter-c7';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
       S.role = 'kitchen';
-      S.user = {id:'kitchen-001',name:'Kitchen Display',initials:'KD',canteen_id:'c1'};
-      // Fetch all orders from Supabase BEFORE rendering
+      S.user = {id, name: counter.name + ' Kitchen', initials: counter.icon, canteen_id: counter.id};
       try {
         if (sb) {
-          const {data} = await sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+          const {data} = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200);
           if (data?.length) S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
         }
       } catch(e) { console.warn('Order fetch failed:', e.message); }
@@ -1254,7 +1277,8 @@ async function doLogin() {
         } catch(e) { toast('DB fetch error: ' + e.message, 'error', '❌'); }
       }
       goScreen('s-kitchen');
-      toast('Kitchen Display System active', 'success', '📺');
+      setEl('kds-title', '📺 ' + counter.name + ' Kitchen');
+      toast(counter.icon + ' ' + counter.name + ' Kitchen active', 'success', '📺');
     } else {
       S.role = 'admin';
       S.user = {id:'admin-001',name:'Campus Admin',initials:'CA'};
@@ -1553,108 +1577,87 @@ async function placeOrder() {
   btn.classList.add('btn-loading'); btn.disabled = true;
   try {
   await new Promise(r => setTimeout(r, 800));
-  const canteenId = S.selCanteen?.id || 'c1';
-  if (!S.tokenCounters[canteenId]) S.tokenCounters[canteenId] = 1;
-  const token = S.tokenCounters[canteenId]++;
-  const orderId = 'ord-' + Date.now();
-  const order = {
-    id: orderId,
-    token_number: token,
-    employee_id: S.user.id,
-    employee_name: S.user.name,
-    canteen_id: S.selCanteen?.id || 'c1',
-    canteen_name: S.selCanteen?.name || 'Main Canteen',
-    canteen_icon: S.selCanteen?.icon || '🍛',
-    pickup_slot: S.selSlot,
-    status: 'new',
-    item_total: iTotal,
-    subsidy_applied: 0,
-    amount_paid: youPay,
-    items: S.cart.map(i => ({...i})),
-    created_at: new Date(),
-  };
-  // Save to Supabase
-  try {
-    if (sb) {
-      // Insert order — only DB columns, no extra fields
-      const orderPayload = {
-        id: orderId,
-        token_number: token,
-        employee_id: S.user.id,
-        employee_name: S.user.name,
-        canteen_id: S.selCanteen?.id || 'c1',
-        canteen_name: S.selCanteen?.name || 'Main Canteen',
-        canteen_icon: S.selCanteen?.icon || '🍛',
-        pickup_slot: S.selSlot,
-        status: 'new',
-        item_total: iTotal,
-        subsidy_applied: 0,
-        amount_paid: youPay,
-        payment_method: S.selPay || 'wallet',
-      };
-      const { error: orderErr } = await sb.from('orders').insert([orderPayload]);
-      if (orderErr) {
-        console.error('[FoodHub] Order insert error:', orderErr);
-        toast('Order save failed: ' + orderErr.message, 'error', '❌');
-      } else {
-        // Insert order items (single insert, with custom_note)
-        const orderItems = S.cart.map(i => ({
-          order_id: orderId,
-          item_id: i.id,
-          item_name: i.name,
-          item_emoji: i.emoji || '',
-          quantity: i.qty,
-          unit_price: i.price,
-          total_price: i.price * i.qty,
-          custom_note: i.customNote || null,
-        }));
-        const { error: itemErr } = await sb.from('order_items').insert(orderItems);
-        if (itemErr) console.warn('[FoodHub] Order items error:', itemErr);
-        // Deduct wallet
-        await sb.from('employees').update({wallet_balance: S.user.wallet_balance - youPay}).eq('id', S.user.id);
-        // Log debit
-        if (youPay > 0) {
-          await sb.from('wallet_transactions').insert([{
-            employee_id: S.user.id, type: 'debit', amount: youPay,
-            description: 'Order #' + token + ' — ' + (S.selCanteen?.name || 'Canteen'),
-            order_id: orderId,
-          }]);
-        }
+  // ── Group cart items by canteen ──────────────────────────────────────
+  const byCanteen = {};
+  S.cart.forEach(i => {
+    const menuItem = S.menu.find(m => m.id === i.id);
+    const cid = menuItem?.canteen_id || S.selCanteen?.id || 'c1';
+    if (!byCanteen[cid]) byCanteen[cid] = [];
+    byCanteen[cid].push(i);
+  });
+  const splitOrders = [];
+  // ── Create one order per counter ─────────────────────────────────────
+  for (const cid of Object.keys(byCanteen)) {
+    const canteen = S.canteens.find(c => c.id === cid) || {id:cid, name:'Counter', icon:'🍽️'};
+    const items = byCanteen[cid];
+    const cTotal = items.reduce((s,i) => s+i.price*i.qty, 0);
+    if (!S.tokenCounters[cid]) S.tokenCounters[cid] = 1;
+    const token = S.tokenCounters[cid]++;
+    const orderId = 'ord-' + Date.now() + '-' + cid;
+    const order = {
+      id: orderId, token_number: token,
+      employee_id: S.user.id, employee_name: S.user.name,
+      canteen_id: cid, canteen_name: canteen.name, canteen_icon: canteen.icon,
+      pickup_slot: S.selSlot, status: 'new',
+      item_total: cTotal, subsidy_applied: 0, amount_paid: cTotal,
+      items: items.map(i => ({...i})), created_at: new Date(),
+    };
+    splitOrders.push(order);
+    S.orders.unshift(order);
+    S.allOrders.unshift({...order});
+    try {
+      if (sb) {
+        const { error: oErr } = await sb.from('orders').insert([{
+          id: orderId, token_number: token,
+          employee_id: S.user.id, employee_name: S.user.name,
+          canteen_id: cid, canteen_name: canteen.name, canteen_icon: canteen.icon,
+          pickup_slot: S.selSlot, status: 'new',
+          item_total: cTotal, subsidy_applied: 0, amount_paid: cTotal,
+          payment_method: 'wallet',
+        }]);
+        if (!oErr) {
+          await sb.from('order_items').insert(items.map(i => ({
+            order_id: orderId, item_id: i.id, item_name: i.name,
+            item_emoji: i.emoji||'', quantity: i.qty,
+            unit_price: i.price, total_price: i.price*i.qty,
+          })));
+          await sb.from('canteens').update({token_counter: S.tokenCounters[cid]}).eq('id', cid);
+        } else { console.error('[Order]', cid, oErr.message); }
       }
-    }
-  } catch(e) {
-    console.warn('[FoodHub] Supabase save failed:', e.message || e);
-    // Even if DB fails, continue with local order so demo works
+    } catch(e) { console.warn('[Order] error:', e.message); }
   }
-  // Update local state
-  if (S.selPay === 'wallet') S.user.wallet_balance -= youPay;
-  // Update inventory
-  S.cart.forEach(i => { if (S.inventory[i.id] !== undefined) S.inventory[i.id] = Math.max(0, S.inventory[i.id] - i.qty); });
-  // Persist inventory (stock) to DB
+  // ── Deduct wallet (full total once) ──────────────────────────────────
+  S.user.wallet_balance -= youPay;
   try {
     if (sb) {
-      for (const i of S.cart) {
-        const newStock = S.inventory[i.id] ?? 0;
-        await sb.from('menu_items').update({ stock: newStock, orders_count: (S.menu.find(m=>m.id===i.id)?.orders_count||0)+i.qty }).eq('id', i.id);
-      }
-      // Persist token counter to canteens table
-      await sb.from('canteens').update({ token_counter: S.tokenCounters[canteenId] }).eq('id', canteenId);
+      await sb.from('employees').update({wallet_balance: S.user.wallet_balance}).eq('id', S.user.id);
+      await sb.from('wallet_transactions').insert([{
+        employee_id: S.user.id, type:'debit', amount: youPay,
+        description: `${splitOrders.length} counter order — ₹${youPay}`,
+      }]);
     }
-  } catch(e) { console.warn('Inventory/token sync failed:', e); }
-  S.orders.unshift(order);
-  S.allOrders.unshift({...order});
-  // Also persist immediately to Supabase so vendor/kitchen can see it
-  // (the full async save happens below, this ensures local state is ready)
-  if (youPay > 0) S.txns.unshift({type:'debit',icon:S.cart[0].emoji||'🍽️',name:'Order #'+token+' — '+order.canteen_name,date:'Just now',amount:youPay});
-  // Update UI elements
+  } catch(e) {}
+  // ── Update inventory ──────────────────────────────────────────────────
+  S.cart.forEach(i => { if (S.inventory[i.id] !== undefined) S.inventory[i.id] = Math.max(0, S.inventory[i.id] - i.qty); });
+  if (youPay > 0) S.txns.unshift({type:'debit',icon:'🍽️',name:`${splitOrders.length} counter order`,date:'Just now',amount:youPay});
+  // ── Update success screen ─────────────────────────────────────────────
   setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
-  // Update success screen
-  setEl('suc-tok', token);
-  setEl('suc-can', order.canteen_icon + ' ' + order.canteen_name);
+  const firstOrder = splitOrders[0];
+  const numCounters = splitOrders.length;
+  setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & '));
+  setEl('suc-can', numCounters > 1 ? `${numCounters} Counters` : firstOrder.canteen_icon+' '+firstOrder.canteen_name);
   setEl('suc-time', '⏰ Ready by ' + S.selSlot);
-  setEl('suc-sub', 'Pickup by ' + S.selSlot + ' · Token #' + token);
-  setEl('suc-canteen-token-label', order.canteen_name + ' · Today\'s Token');
+  setEl('suc-sub', 'Pickup by ' + S.selSlot);
+  setEl('suc-canteen-token-label', numCounters > 1 ? 'Your Tokens by Counter' : firstOrder.canteen_name + ' · Token');
+  // Show per-counter token breakdown
+  if (numCounters > 1) {
+    const breakdown = splitOrders.map(o => `${o.canteen_icon} ${o.canteen_name} → Token #${o.token_number}`).join('<br>');
+    const label = document.getElementById('suc-canteen-token-label');
+    if (label) label.insertAdjacentHTML('afterend', `<div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:2;text-align:center">${breakdown}</div>`);
+  }
   setEl('h-orders-count', `📋 ${S.orders.length} orders today`);
+  const orderId = firstOrder.id;
+  const token = firstOrder.token_number;
   // Update badge
   const badgeEl = document.getElementById('ord-badge');
   if (badgeEl) { badgeEl.textContent = S.orders.filter(o=>o.status!=='done').length; badgeEl.classList.remove('hidden'); }
@@ -1984,13 +1987,15 @@ function renderProfile() {
 // VENDOR DASHBOARD
 // ═════════════════════════════════════
 function renderVendor() {
-  const orders = S.allOrders.filter(o => {
+  const myCid = S.user?.canteen_id;
+  const myOrders = S.allOrders.filter(o => !myCid || o.canteen_id === myCid);
+  const orders = myOrders.filter(o => {
     if (S.vendorFilter === 'all') return o.status !== 'done';
     return o.status === S.vendorFilter;
   });
-  const newCnt = S.allOrders.filter(o => o.status==='new').length;
-  const prepCnt = S.allOrders.filter(o => o.status==='preparing').length;
-  const todayRev = S.allOrders.reduce((s,o) => s+(o.item_total||0), 0) + 4280;
+  const newCnt = myOrders.filter(o => o.status==='new').length;
+  const prepCnt = myOrders.filter(o => o.status==='preparing').length;
+  const todayRev = myOrders.reduce((s,o) => s+(o.item_total||0), 0);
   setEl('v-new', newCnt);
   setEl('v-prep', prepCnt);
   setEl('v-sales', '₹'+todayRev.toLocaleString('en-IN'));
@@ -2033,14 +2038,16 @@ function vendorFilter(f, el) {
 // KITCHEN DISPLAY SYSTEM
 // ═════════════════════════════════════
 function renderKDS() {
-  const orders = S.allOrders.filter(o => {
+  const myCid = S.user?.canteen_id;
+  const myOrders = S.allOrders.filter(o => !myCid || o.canteen_id === myCid);
+  const orders = myOrders.filter(o => {
     if (S.kdsFilter === 'all') return ['new','preparing','ready'].includes(o.status);
     if (['new','preparing','ready'].includes(S.kdsFilter)) return o.status === S.kdsFilter;
     return o.pickup_slot === S.kdsFilter && o.status !== 'done';
   });
-  const newCnt = S.allOrders.filter(o => o.status==='new').length;
-  const prepCnt = S.allOrders.filter(o => o.status==='preparing').length;
-  const readyCnt = S.allOrders.filter(o => o.status==='ready').length;
+  const newCnt = myOrders.filter(o => o.status==='new').length;
+  const prepCnt = myOrders.filter(o => o.status==='preparing').length;
+  const readyCnt = myOrders.filter(o => o.status==='ready').length;
   setEl('kds-new', newCnt);
   setEl('kds-prep', prepCnt);
   setEl('kds-ready', readyCnt);
