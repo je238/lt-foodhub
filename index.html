@@ -1551,6 +1551,7 @@ async function placeOrder() {
   }
   const btn = document.getElementById('pay-btn');
   btn.classList.add('btn-loading'); btn.disabled = true;
+  try {
   await new Promise(r => setTimeout(r, 800));
   const canteenId = S.selCanteen?.id || 'c1';
   if (!S.tokenCounters[canteenId]) S.tokenCounters[canteenId] = 1;
@@ -1567,11 +1568,10 @@ async function placeOrder() {
     pickup_slot: S.selSlot,
     status: 'new',
     item_total: iTotal,
-    subsidy_applied: subTotal,
+    subsidy_applied: 0,
     amount_paid: youPay,
     items: S.cart.map(i => ({...i})),
     created_at: new Date(),
-    rating: null,
   };
   // Save to Supabase
   try {
@@ -1690,6 +1690,11 @@ async function placeOrder() {
   updateCartFloat();
   btn.classList.remove('btn-loading'); btn.disabled = false;
   goScreen('s-success');
+  } catch(err) {
+    console.error('[placeOrder] Fatal error:', err);
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+    toast('Something went wrong. Please try again.', 'error', '❌');
+  }
 }
 
 function afterSuccess() {
