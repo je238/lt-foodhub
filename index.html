@@ -793,14 +793,14 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div class="summary-box" id="cart-summary"></div>
     <div class="card">
       <div class="card-title">💳 Payment Method</div>
-      <div class="pay-option active" onclick="selPay(this,'wallet')">
+      <div class="pay-option active" onclick="selPay(this,'wallet')" id="pay-opt-wallet">
         <span class="pay-icon">💚</span>
         <div class="pay-body"><div class="pay-name">FoodHub Wallet</div><div class="pay-sub" id="pay-bal-lbl">Balance: ₹580</div></div>
         <div class="pay-radio"></div>
       </div>
-      <div class="pay-option" onclick="selPay(this,'upi')">
+      <div class="pay-option" onclick="selPay(this,'upi')" style="opacity:0.6">
         <span class="pay-icon">📱</span>
-        <div class="pay-body"><div class="pay-name">UPI</div><div class="pay-sub">Google Pay, PhonePe, Paytm</div></div>
+        <div class="pay-body"><div class="pay-name">UPI <span style="font-size:10px;background:#f59e0b;color:#fff;padding:1px 6px;border-radius:8px;font-weight:700">COMING SOON</span></div><div class="pay-sub">Google Pay, PhonePe, Paytm</div></div>
         <div class="pay-radio"></div>
       </div>
     </div>
@@ -1075,7 +1075,12 @@ function goScreen(id) {
   else if(cf) cf.classList.add('gone');
   // Close notif panel
   document.getElementById('notif-panel')?.classList.add('hidden');
-  if (id === 's-cart') renderCart();
+  if (id === 's-cart') {
+    S.selPay = 'wallet';
+    document.querySelectorAll('.pay-option').forEach(p => p.classList.remove('active'));
+    document.getElementById('pay-opt-wallet')?.classList.add('active');
+    renderCart();
+  }
   if (id === 's-vendor') { fetchAllOrders().then(() => renderVendor()); startPoll(); startRealtime(); }
   if (id === 's-kitchen') { fetchAllOrders().then(() => renderKDS()); startPoll(); startRealtime(); }
   if (id === 's-admin') { fetchAllOrders().then(() => renderAdmin('overview')); }
@@ -1522,6 +1527,10 @@ function selSlot(el, slot) {
 }
 
 function selPay(el, method) {
+  if (method === 'upi') {
+    toast('UPI coming soon! Please use FoodHub Wallet.', 'warn', '📱');
+    return;
+  }
   document.querySelectorAll('.pay-option').forEach(p => p.classList.remove('active'));
   el.classList.add('active');
   S.selPay = method;
@@ -1533,10 +1542,11 @@ function selPay(el, method) {
 async function placeOrder() {
   if (S.cart.length === 0) { toast('Your cart is empty!', 'error', '🛒'); return; }
   if (S.selCanteen && !S.selCanteen.is_open) { toast('This canteen is currently closed!', 'error', '🚫'); return; }
+  if (S.selPay === 'upi') { toast('UPI coming soon! Please use FoodHub Wallet.', 'warn', '📱'); return; }
   const iTotal = S.cart.reduce((s,i) => s+i.price*i.qty, 0);
   const youPay = iTotal;
-  if (S.selPay === 'wallet' && S.user.wallet_balance < youPay) {
-    toast('Insufficient wallet balance!', 'error', '💸');
+  if (S.user.wallet_balance < youPay) {
+    toast(`Insufficient balance! You have ₹${Math.round(S.user.wallet_balance)}, need ₹${youPay}`, 'error', '💸');
     return;
   }
   const btn = document.getElementById('pay-btn');
@@ -1612,7 +1622,10 @@ async function placeOrder() {
         }
       }
     }
-  } catch(e) { console.warn('[FoodHub] Supabase save failed:', e.message || e); }
+  } catch(e) {
+    console.warn('[FoodHub] Supabase save failed:', e.message || e);
+    // Even if DB fails, continue with local order so demo works
+  }
   // Update local state
   if (S.selPay === 'wallet') S.user.wallet_balance -= youPay;
   // Update inventory
