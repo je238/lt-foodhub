@@ -642,7 +642,6 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="login-icon">L&T</div>
       <div class="login-brand"><h2>FoodHub</h2><p>Larsen &amp; Toubro — Campus Canteen</p></div>
     </div>
-    <!-- Role tabs -->
     <div style="font-size:11px;color:rgba(255,255,255,.4);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Select Role</div>
     <div class="role-tabs" id="role-tabs">
       <div class="role-tab active" onclick="selRole('employee',this)">👤 Employee</div>
@@ -651,62 +650,67 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="role-tab" onclick="selRole('admin',this)">⚙️ Admin</div>
     </div>
 
-    <!-- EMPLOYEE LOGIN — Phone + OTP -->
+    <!-- EMPLOYEE LOGIN -->
     <div id="emp-login-area">
-      <!-- Step 1: Phone number -->
+
+      <!-- STEP 1: Phone -->
       <div id="emp-step1">
         <h2 class="login-title" style="margin-top:0">Welcome 👋</h2>
-        <p class="login-sub">Enter your registered mobile number</p>
-        <div style="display:flex;gap:8px;align-items:center">
-          <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:13px 12px;font-size:14px;color:#fff;white-space:nowrap">🇮🇳 +91</div>
-          <input class="linp" type="tel" id="emp-phone" placeholder="10-digit mobile number" maxlength="10" style="margin-bottom:0;flex:1" oninput="this.value=this.value.replace(/\D/g,'')">
+        <p class="login-sub">Enter your mobile number</p>
+        <div style="display:flex;gap:8px">
+          <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:14px 12px;font-size:13px;color:#fff;white-space:nowrap;height:fit-content">🇮🇳 +91</div>
+          <input class="linp" type="tel" id="emp-phone" placeholder="10-digit number" maxlength="10" style="flex:1;margin:0" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
         </div>
-        <div style="font-size:11px;color:rgba(255,255,255,.35);margin:8px 0 12px">Use number registered with L&T HR</div>
-        <button class="login-btn" onclick="sendOTP()" id="send-otp-btn"><span>Send OTP →</span></button>
-        <div class="login-err" id="login-err"></div>
-        <div style="text-align:center;margin-top:12px">
-          <span style="font-size:12px;color:rgba(255,255,255,.4)">New employee? </span>
-          <span style="font-size:12px;color:var(--brand);cursor:pointer;font-weight:600" onclick="showRegister()">Register here</span>
+        <div style="height:10px"></div>
+        <button class="login-btn" id="send-otp-btn" onclick="sendOTP()"><span>Get OTP →</span></button>
+        <div class="login-err" id="login-err" style="margin-top:8px"></div>
+        <div style="text-align:center;margin-top:14px">
+          <span style="font-size:12px;color:rgba(255,255,255,.4)">New here? </span>
+          <span style="font-size:12px;color:var(--brand);cursor:pointer;font-weight:600" onclick="showRegister()">Register</span>
         </div>
       </div>
 
-      <!-- Step 2: OTP verify -->
+      <!-- STEP 2: OTP -->
       <div id="emp-step2" style="display:none">
         <h2 class="login-title" style="margin-top:0">Enter OTP</h2>
-        <p class="login-sub" id="otp-sent-msg">OTP sent to your number</p>
-        <div style="display:flex;gap:10px;justify-content:center;margin:16px 0">
-          <input class="linp" type="tel" id="otp-1" maxlength="1" style="width:48px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-2')">
-          <input class="linp" type="tel" id="otp-2" maxlength="1" style="width:48px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-3')">
-          <input class="linp" type="tel" id="otp-3" maxlength="1" style="width:48px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-4')">
-          <input class="linp" type="tel" id="otp-4" maxlength="1" style="width:48px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,null)">
+        <div id="otp-display" style="background:rgba(255,255,255,.08);border-radius:12px;padding:14px;text-align:center;margin-bottom:16px">
+          <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px">Your OTP is</div>
+          <div id="otp-big" style="font-size:36px;font-weight:800;color:#fff;letter-spacing:8px">----</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.35);margin-top:4px">Tap the boxes and enter this code</div>
         </div>
-        <button class="login-btn" onclick="verifyOTP()" id="verify-otp-btn"><span>Verify & Login →</span></button>
-        <div class="login-err" id="otp-err"></div>
-        <div style="text-align:center;margin-top:10px;display:flex;justify-content:space-between">
-          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToPhone()">← Change number</span>
-          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" id="resend-btn" onclick="resendOTP()">Resend OTP</span>
+        <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px">
+          <input class="linp" type="tel" id="otp-1" maxlength="1" style="width:52px;text-align:center;font-size:24px;font-weight:700;padding:12px 0;margin:0" oninput="otpNext(this,'otp-2')">
+          <input class="linp" type="tel" id="otp-2" maxlength="1" style="width:52px;text-align:center;font-size:24px;font-weight:700;padding:12px 0;margin:0" oninput="otpNext(this,'otp-3')">
+          <input class="linp" type="tel" id="otp-3" maxlength="1" style="width:52px;text-align:center;font-size:24px;font-weight:700;padding:12px 0;margin:0" oninput="otpNext(this,'otp-4')">
+          <input class="linp" type="tel" id="otp-4" maxlength="1" style="width:52px;text-align:center;font-size:24px;font-weight:700;padding:12px 0;margin:0" oninput="otpNext(this,null)">
+        </div>
+        <button class="login-btn" id="verify-otp-btn" onclick="verifyOTP()"><span>Login →</span></button>
+        <div class="login-err" id="otp-err" style="margin-top:8px"></div>
+        <div style="text-align:center;margin-top:12px">
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToPhone()">← Back</span>
         </div>
       </div>
 
-      <!-- Register new employee -->
+      <!-- REGISTER -->
       <div id="emp-register" style="display:none">
         <h2 class="login-title" style="margin-top:0">Register</h2>
         <p class="login-sub">Create your FoodHub account</p>
-        <input class="linp" type="text" id="reg-name" placeholder="Full Name">
-        <div style="display:flex;gap:8px;align-items:center">
-          <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:13px 12px;font-size:14px;color:#fff;white-space:nowrap">🇮🇳 +91</div>
-          <input class="linp" type="tel" id="reg-phone" placeholder="Mobile number" maxlength="10" style="margin-bottom:0;flex:1" oninput="this.value=this.value.replace(/\D/g,'')">
+        <input class="linp" type="text" id="reg-name" placeholder="Your Full Name">
+        <div style="display:flex;gap:8px">
+          <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:14px 12px;font-size:13px;color:#fff;white-space:nowrap;height:fit-content">🇮🇳 +91</div>
+          <input class="linp" type="tel" id="reg-phone" placeholder="Mobile number" maxlength="10" style="flex:1;margin:0" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
         </div>
-        <div style="font-size:11px;color:rgba(255,255,255,.35);margin:8px 0 16px">OTP will be sent to verify your number</div>
-        <button class="login-btn" onclick="registerEmployee()" id="reg-btn" style="margin-top:4px"><span>Register &amp; Get OTP →</span></button>
-        <div class="login-err" id="reg-err"></div>
-        <div style="text-align:center;margin-top:10px">
+        <div style="height:10px"></div>
+        <button class="login-btn" id="reg-btn" onclick="registerEmployee()"><span>Register →</span></button>
+        <div class="login-err" id="reg-err" style="margin-top:8px"></div>
+        <div style="text-align:center;margin-top:12px">
           <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToPhone()">← Back to Login</span>
         </div>
       </div>
+
     </div>
 
-    <!-- VENDOR / KITCHEN / ADMIN LOGIN — ID based -->
+    <!-- STAFF LOGIN -->
     <div id="staff-login-area" style="display:none">
       <h2 class="login-title" style="margin-top:0">Staff Login</h2>
       <input class="linp" type="text" id="l-id" placeholder="Counter ID (e.g. counter-c1)">
@@ -714,7 +718,6 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <button class="login-btn" onclick="doLogin()" id="login-btn"><span>Sign In →</span></button>
       <div class="login-err" id="login-err"></div>
     </div>
-    <!-- Firebase invisible reCAPTCHA -->
     <div id="recaptcha-container"></div>
   </div>
 </div>
@@ -1266,159 +1269,137 @@ function selRole(role, el) {
   }
 }
 
-// ── OTP State ──────────────────────────────────────────────────
+// ══════════════════════════════════════
+// OTP LOGIN — Simple & Reliable
+// ══════════════════════════════════════
 let _otpPhone = '';
 let _otpCode = '';
 let _otpEmpData = null;
-let _fbConfirmResult = null; // Firebase confirmation result
+let _fbConfirmResult = null;
 
 function showRegister() {
   document.getElementById('emp-step1').style.display = 'none';
-  document.getElementById('emp-step2').style.display = 'none';
   document.getElementById('emp-register').style.display = '';
+  document.getElementById('login-err').textContent = '';
 }
 function backToPhone() {
   document.getElementById('emp-step1').style.display = '';
   document.getElementById('emp-step2').style.display = 'none';
   document.getElementById('emp-register').style.display = 'none';
-  _fbConfirmResult = null;
+  document.getElementById('login-err').textContent = '';
 }
 function otpNext(el, nextId) {
-  el.value = el.value.replace(/\D/g,'');
+  el.value = el.value.replace(/\D/g,'').slice(0,1);
   if (el.value && nextId) document.getElementById(nextId)?.focus();
-  const code = ['otp-1','otp-2','otp-3','otp-4'].map(id => document.getElementById(id)?.value||'').join('');
+  const code = ['otp-1','otp-2','otp-3','otp-4'].map(id=>document.getElementById(id)?.value||'').join('');
   if (code.length === 4) verifyOTP();
 }
 
 async function sendOTP() {
-  const phone = document.getElementById('emp-phone').value.trim();
+  const phone = document.getElementById('emp-phone')?.value?.trim() || '';
   const err = document.getElementById('login-err');
-  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit mobile number'; return; }
   const btn = document.getElementById('send-otp-btn');
-  btn.classList.add('btn-loading'); btn.disabled = true;
   err.textContent = '';
+  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit number'; return; }
+  btn.classList.add('btn-loading'); btn.disabled = true;
   try {
-    // Check employee exists in Supabase with this phone
+    // Check employee in DB
     let emp = null;
     if (sb) {
-      const {data} = await sb.from('employees').select('*').eq('phone', phone).single();
-      emp = data;
+      const res = await sb.from('employees').select('*').eq('phone', phone).single();
+      emp = res.data;
     }
     if (!emp) {
-      err.textContent = 'Phone not registered. Please register first.';
+      err.textContent = 'Number not registered. Please register first.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
-    _otpEmpData = emp;
-    _otpPhone = phone;
-    // Generate 4-digit OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    // Generate OTP
+    const otp = String(Math.floor(1000 + Math.random() * 9000));
     _otpCode = otp;
-    _fbConfirmResult = null;
-    // Save OTP to Supabase
-    if (sb) {
-      const {error: otpErr} = await sb.from('employees')
-        .update({ temp_otp: otp, otp_created_at: new Date().toISOString() })
-        .eq('phone', phone);
-      if (otpErr) console.warn('[OTP save error]', otpErr);
-    }
-    // Show OTP screen
+    _otpPhone = phone;
+    _otpEmpData = emp;
+    // Save to DB
+    if (sb) await sb.from('employees').update({temp_otp: otp, otp_created_at: new Date().toISOString()}).eq('phone', phone);
+    // Show OTP on screen
     document.getElementById('emp-step1').style.display = 'none';
     document.getElementById('emp-step2').style.display = '';
-    document.getElementById('otp-sent-msg').innerHTML =
-      `Your OTP is: <strong style="color:#fff;font-size:22px;letter-spacing:4px">${otp}</strong><br>
-       <span style="font-size:11px;opacity:.6">(SMS integration coming soon)</span>`;
-    document.getElementById('otp-1').focus();
-    // Auto-fill OTP boxes
-    otp.split('').forEach((d, i) => {
-      const el = document.getElementById('otp-' + (i+1));
-      if (el) el.value = d;
+    document.getElementById('otp-big').textContent = otp;
+    // Auto fill boxes
+    otp.split('').forEach((d,i) => {
+      const box = document.getElementById('otp-' + (i+1));
+      if (box) box.value = d;
     });
-    toast('OTP ready — check the screen! 🔐', 'success', '✅');
+    document.getElementById('otp-err').textContent = '';
+    toast('OTP generated! 🔐', 'success', '✅');
   } catch(e) {
-    console.error('[sendOTP error]', e);
+    console.error('[sendOTP]', e);
     err.textContent = 'Error: ' + (e.message || 'Try again');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
 async function verifyOTP() {
-  const code = ['otp-1','otp-2','otp-3','otp-4'].map(id => document.getElementById(id)?.value||'').join('');
+  const code = ['otp-1','otp-2','otp-3','otp-4'].map(id=>document.getElementById(id)?.value||'').join('');
   const err = document.getElementById('otp-err');
-  if (code.length !== 4) { err.textContent = 'Enter 4-digit OTP'; return; }
   const btn = document.getElementById('verify-otp-btn');
-  btn.classList.add('btn-loading'); btn.disabled = true;
   err.textContent = '';
+  if (code.length !== 4) { err.textContent = 'Enter 4-digit OTP'; return; }
+  btn.classList.add('btn-loading'); btn.disabled = true;
   try {
-    // Verify OTP against stored code
+    // Verify code
     if (code !== _otpCode) {
-      // Double check against Supabase
-      let valid = false;
-      if (sb && _otpPhone) {
-        const {data} = await sb.from('employees').select('temp_otp').eq('phone', _otpPhone).single();
-        if (data?.temp_otp === code) valid = true;
-      }
-      if (!valid) {
-        err.textContent = 'Wrong OTP. Try again.';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
+      err.textContent = 'Wrong OTP. Check the number shown above.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
     }
-    // OTP correct — clear it and login
-    if (sb && _otpPhone) {
-      await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone);
+    if (!_otpEmpData) {
+      err.textContent = 'Session expired. Go back and try again.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
     }
-    // Load fresh data
-    const emp = _otpEmpData;
-    if (!emp) { err.textContent = 'Session expired. Go back and try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-    S.user = emp; S.role = 'employee';
+    // Clear OTP from DB
+    if (sb) await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone).catch(()=>{});
+    // Login
+    S.user = _otpEmpData;
+    S.role = 'employee';
     if (sb) {
-      const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available', true).limit(500);
+      const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available',true).limit(500);
       if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
       const {data: freshCans} = await sb.from('canteens').select('*').order('id');
       if (freshCans?.length) S.canteens = freshCans;
     }
     renderHome();
     goScreen('s-home');
-    toast(`Welcome, ${emp.name.split(' ')[0]}! 👋`, 'success', '✅');
+    toast(`Welcome, ${_otpEmpData.name.split(' ')[0]}! 👋`, 'success', '✅');
   } catch(e) {
-    console.error('[OTP Verify]', e);
-    err.textContent = 'Verification failed: ' + (e.message || 'Try again');
+    console.error('[verifyOTP]', e);
+    err.textContent = 'Error: ' + (e.message || 'Try again');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
-async function resendOTP() {
-  ['otp-1','otp-2','otp-3','otp-4'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
-  _fbConfirmResult = null;
-  if (recaptchaVerifier) { try { recaptchaVerifier.clear(); } catch(_){} recaptchaVerifier = null; }
-  document.getElementById('emp-step2').style.display = 'none';
-  document.getElementById('emp-step1').style.display = '';
-  document.getElementById('login-err').textContent = '';
-  toast('Enter your number again to resend OTP', 'warn', '📱');
-}
-
 async function registerEmployee() {
-  const name = document.getElementById('reg-name').value.trim();
-  const phone = document.getElementById('reg-phone').value.trim();
+  const name = document.getElementById('reg-name')?.value?.trim() || '';
+  const phone = document.getElementById('reg-phone')?.value?.trim() || '';
   const err = document.getElementById('reg-err');
-  if (!name || phone.length !== 10) { err.textContent = 'Please enter your name and mobile number'; return; }
   const btn = document.getElementById('reg-btn');
-  btn.classList.add('btn-loading'); btn.disabled = true;
   err.textContent = '';
+  if (!name) { err.textContent = 'Enter your full name'; return; }
+  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit number'; return; }
+  btn.classList.add('btn-loading'); btn.disabled = true;
   try {
-    // Generate employee ID automatically
-    const empId = 'LT-EMP-' + Date.now().toString().slice(-5);
     if (sb) {
-      // Check if phone already registered
-      const {data: existing} = await sb.from('employees').select('id').eq('phone', phone);
-      if (existing?.length) {
-        err.textContent = 'This phone number is already registered. Please login.';
+      // Check already registered
+      const {data: ex} = await sb.from('employees').select('id').eq('phone', phone);
+      if (ex?.length) {
+        err.textContent = 'Number already registered. Please login.';
         btn.classList.remove('btn-loading'); btn.disabled = false;
         return;
       }
+      const empId = 'LT-EMP-' + Date.now().toString().slice(-5);
       const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-      const {error} = await sb.from('employees').insert([{
+      const {error: insErr} = await sb.from('employees').insert([{
         id: empId, name, phone,
         email: phone + '@lt-foodhub.app',
         department: 'L&T', campus: 'Powai Campus',
@@ -1426,27 +1407,21 @@ async function registerEmployee() {
         initials, meal_pass_active: true,
         meal_pass_used: 0, meal_pass_limit: 30,
       }]);
-      if (error) { err.textContent = 'Registration failed: ' + error.message; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+      if (insErr) { err.textContent = 'Failed: ' + insErr.message; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+      toast('Registered! ✅', 'success', '✅');
+      // Set phone in login box and go to login
+      document.getElementById('emp-phone').value = phone;
+      document.getElementById('emp-register').style.display = 'none';
+      document.getElementById('emp-step1').style.display = '';
+      // Auto send OTP
+      setTimeout(() => sendOTP(), 400);
     }
-    toast('Registered! Sending OTP now...', 'success', '✅');
-    // Auto-proceed to OTP — store emp data and send OTP directly
-    if (sb) {
-      const {data} = await sb.from('employees').select('*').eq('phone', phone).single();
-      _otpEmpData = data;
-    }
-    _otpPhone = phone;
-    document.getElementById('emp-register').style.display = 'none';
-    document.getElementById('emp-step1').style.display = '';
-    document.getElementById('emp-phone').value = phone;
-    // Auto-send OTP
-    setTimeout(() => sendOTP(), 300);
   } catch(e) {
-    console.error('[Register]', e);
-    err.textContent = 'Registration error. Try again.';
+    console.error('[register]', e);
+    err.textContent = 'Error: ' + (e.message || 'Try again');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
-
 
 // Counter ID → canteen mapping
 const COUNTER_MAP = {
