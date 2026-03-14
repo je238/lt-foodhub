@@ -965,6 +965,10 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
         <div style="font-size:13px;color:var(--mid)">Subtotal</div>
         <div style="font-size:13px;font-weight:600" id="inv-subtotal">₹0</div>
       </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:13px;color:var(--mid)">GST (5%)</div>
+        <div style="font-size:13px;font-weight:600" id="inv-gst">₹0</div>
+      </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:13px;color:var(--mid)">Payment</div>
         <div style="font-size:13px;font-weight:600;color:var(--green2)">✅ FoodHub Points</div>
@@ -1857,7 +1861,8 @@ function updateCartFloat() {
 function renderCart() {
   if (!S.user) return;
   const iTotal = S.cart.reduce((s,i) => s+i.price*i.qty, 0);
-  const youPay = iTotal;
+  const gst = Math.round(iTotal * 0.05);
+  const youPay = iTotal + gst;
   setEl('pay-bal-lbl', 'Balance: ₹' + Math.round(S.user.wallet_balance));
   const cartList = document.getElementById('cart-list');
   if (S.cart.length === 0) {
@@ -1881,6 +1886,7 @@ function renderCart() {
   const sumEl = document.getElementById('cart-summary');
   if(sumEl) sumEl.innerHTML = `
     <div class="summary-row"><span>Items (${S.cart.reduce((s,i)=>s+i.qty,0)})</span><span>₹${iTotal}</span></div>
+    <div class="summary-row"><span>GST (5%)</span><span>₹${gst}</span></div>
     <div class="summary-row total"><span>Total Payable</span><span>₹${youPay}</span></div>`;
 }
 
@@ -1934,9 +1940,10 @@ async function placeOrder() {
   if (S.selCanteen && !S.selCanteen.is_open) { toast('This canteen is currently closed!', 'error', '🚫'); return; }
   if (S.selPay === 'upi') { toast('UPI coming soon! Please use FoodHub Wallet.', 'warn', '📱'); return; }
   const iTotal = S.cart.reduce((s,i) => s+i.price*i.qty, 0);
-  const youPay = iTotal;
+  const gstAmount = Math.round(iTotal * 0.05);
+  const youPay = iTotal + gstAmount;
   if (S.user.wallet_balance < youPay) {
-    toast(`Insufficient balance! You have ₹${Math.round(S.user.wallet_balance)}, need ₹${youPay}`, 'error', '💸');
+    toast(`Insufficient balance! You have ₹${Math.round(S.user.wallet_balance)}, need ₹${youPay} (incl. 5% GST)`, 'error', '💸');
     return;
   }
   const btn = document.getElementById('pay-btn');
@@ -2029,7 +2036,8 @@ async function placeOrder() {
   setEl('inv-emp', S.user.name);
   setEl('inv-empid', S.user.id + ' · ' + (S.user.department||'L&T'));
   setEl('inv-slot', S.selSlot);
-  setEl('inv-subtotal', '₹' + youPay);
+  setEl('inv-subtotal', '₹' + iTotal);
+  setEl('inv-gst', '₹' + gstAmount);
   setEl('inv-total', '₹' + youPay);
   // Invoice items
   const invItemsEl = document.getElementById('inv-items');
