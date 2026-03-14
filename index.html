@@ -1184,6 +1184,7 @@ function goScreen(id) {
   }
   if (id === 's-vendor') { fetchAllOrders().then(() => renderVendor()); startPoll(); startRealtime(); }
   if (id === 's-kitchen') { fetchAllOrders().then(() => renderKDS()); startPoll(); startRealtime(); }
+  if (id === 's-home') { startPoll(); startRealtime(); }
   if (id === 's-admin') { fetchAllOrders().then(() => renderAdmin('overview')); }
 }
 
@@ -2463,6 +2464,40 @@ function startPoll() {
     } catch(e) {}
     if (S.role === 'vendor') renderVendor();
     if (S.role === 'kitchen') renderKDS();
+    // Employee — poll their own orders for status updates
+    if (S.role === 'employee' && S.user && sb) {
+      try {
+        const {data} = await sb.from('orders')
+          .select('id, status, token_number')
+          .eq('employee_id', S.user.id)
+          .in('status', ['preparing','ready','done'])
+          .order('created_at', {ascending: false})
+          .limit(10);
+        if (data?.length) {
+          data.forEach(o => {
+            const local = S.orders.find(lo => lo.id === o.id);
+            if (local && local.status !== o.status) {
+              const oldStatus = local.status;
+              local.status = o.status;
+              const ao = S.allOrders.find(lo => lo.id === o.id);
+              if (ao) ao.status = o.status;
+              // Notify employee on status change
+              if (o.status === 'preparing' && oldStatus === 'new') {
+                addNotif(`⏳ Order #${o.token_number} is being prepared!`, '⏳');
+                toast(`Order #${o.token_number} is being prepared 👨‍🍳`, 'success', '⏳');
+              }
+              if (o.status === 'ready') {
+                addNotif(`🔔 Order #${o.token_number} is READY! Go collect your food`, '🔔');
+                toast(`🔔 Order #${o.token_number} is READY for pickup!`, 'success', '🔔');
+                playNewOrderAlert();
+                const badge = document.getElementById('ord-badge');
+                if (badge) { badge.textContent = S.orders.filter(o2=>o2.status==='ready').length; badge.classList.remove('hidden'); }
+              }
+            }
+          });
+        }
+      } catch(e) {}
+    }
   }, 15000);
 }
 
