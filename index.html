@@ -2378,27 +2378,35 @@ function kdsFilter(f, el) {
 }
 
 async function vendorAction(id, status) {
-  updateOrderStatus(id, status);
+  await updateOrderStatus(id, status);
   renderVendor();
 }
 
 async function kitchenAction(id, status) {
-  updateOrderStatus(id, status);
+  await updateOrderStatus(id, status);
   renderKDS();
 }
 
-function updateOrderStatus(id, status) {
+async function updateOrderStatus(id, status) {
+  // Update local state immediately
   const o = S.orders.find(o => o.id===id);
   const ao = S.allOrders.find(o => o.id===id);
   if (o) o.status = status;
   if (ao) ao.status = status;
+  // Save to DB — await so poll doesn't overwrite
+  try {
+    if (sb) await sb.from('orders').update({status}).eq('id', id);
+  } catch(e) { console.warn('[updateOrderStatus]', e); }
+  // Notify employee if ready
   if (status === 'ready') {
-    addNotif(`Order #${(ao||o)?.token_number} is READY for pickup!`, '✅');
-    toast(`Order #${(ao||o)?.token_number} marked as ready`, 'success', '✅');
+    const order = ao || o;
+    toast(`Token #${order?.token_number} marked as ready 🔔`, 'success', '✅');
     const badge = document.getElementById('ord-badge');
     if (badge) { badge.textContent = S.orders.filter(o2=>o2.status==='ready').length; badge.classList.remove('hidden'); }
   }
-  try { if(sb) sb.from('orders').update({status}).eq('id',id); } catch(e) {}
+  if (status === 'done') {
+    toast(`Token #${(ao||o)?.token_number} picked up ✅`, 'success', '📦');
+  }
 }
 
 // ═════════════════════════════════════
@@ -3500,9 +3508,21 @@ function startRealtime() {
         if (empOrd) { empOrd.status = o.status; }
         if (S.role === 'vendor') renderVendor();
         if (S.role === 'kitchen') renderKDS();
-        if (S.role === 'employee' && o.status === 'ready') {
+        if (S.role === 'employee') {
           const myOrd = S.orders.find(e => e.id === o.id);
-          if (myOrd) { addNotif(`Order #${myOrd.token_number} is ready for pickup! 🔔`, '🔔'); toast(`Order #${myOrd.token_number} ready!`, 'success', '🔔'); playNewOrderAlert(); }
+          if (myOrd) {
+            if (o.status === 'ready') {
+              addNotif(`🔔 Order #${myOrd.token_number} is READY for pickup!`, '🔔');
+              toast(`Order #${myOrd.token_number} is READY! Go collect your food 🍽️`, 'success', '🔔');
+              playNewOrderAlert();
+              // Update badge
+              const badge = document.getElementById('ord-badge');
+              if (badge) { badge.textContent = S.orders.filter(o2=>o2.status==='ready').length; badge.classList.remove('hidden'); }
+            }
+            if (o.status === 'preparing') {
+              addNotif(`⏳ Order #${myOrd.token_number} is being prepared`, '⏳');
+            }
+          }
         }
       })
       .subscribe((status) => {
