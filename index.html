@@ -24,18 +24,17 @@ const fbAuth = firebase.auth();
 // reCAPTCHA verifier — invisible
 let recaptchaVerifier = null;
 function initRecaptcha() {
-  // Always create fresh recaptcha
+  // Firebase recaptcha — lazy init
   try {
     if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; }
   } catch(_) {}
   try {
     recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
       size: 'invisible',
-      callback: () => { console.log('[reCAPTCHA] solved'); },
+      callback: () => {},
       'expired-callback': () => { recaptchaVerifier = null; }
     });
-    recaptchaVerifier.render(); // pre-render
-  } catch(e) { console.warn('Recaptcha init failed:', e); }
+  } catch(e) { console.warn('Recaptcha init:', e); }
 }
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1312,33 +1311,44 @@ async function sendOTP() {
     }
     _otpEmpData = emp;
     _otpPhone = phone;
-    // Init recaptcha and send OTP via Firebase
-    initRecaptcha();
-    await new Promise(r => setTimeout(r, 500)); // let recaptcha render
-    const phoneNumber = '+91' + phone;
-    console.log('[OTP] Sending to', phoneNumber);
-    _fbConfirmResult = await fbAuth.signInWithPhoneNumber(phoneNumber, recaptchaVerifier);
-    console.log('[OTP] Sent successfully');
+    // Generate OTP and store in Supabase
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    _otpCode = otp;
+    if (sb) {
+      await sb.from('employees').update({
+        temp_otp: otp,
+        otp_created_at: new Date().toISOString()
+      }).eq('phone', phone);
+    }
+    // Try Firebase SMS first, fallback to showing OTP on screen
+    let smsSent = false;
+    try {
+      initRecaptcha();
+      await new Promise(r => setTimeout(r, 800));
+      const phoneNumber = '+91' + phone;
+      _fbConfirmResult = await fbAuth.signInWithPhoneNumber(phoneNumber, recaptchaVerifier);
+      smsSent = true;
+      console.log('[OTP] Firebase SMS sent');
+    } catch(fbErr) {
+      console.warn('[Firebase SMS failed, using custom OTP]', fbErr.code);
+      try { if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; } } catch(_){}
+      _fbConfirmResult = null; // will use custom OTP verify
+    }
     // Show OTP step
     document.getElementById('emp-step1').style.display = 'none';
     document.getElementById('emp-step2').style.display = '';
-    document.getElementById('otp-sent-msg').textContent = `OTP sent to +91 ${phone.slice(0,5)}XXXXX`;
+    document.getElementById('otp-sent-msg').textContent = smsSent
+      ? `OTP sent to +91 ${phone.slice(0,5)}XXXXX`
+      : `OTP: ${otp} (SMS coming soon)`;
     document.getElementById('otp-1').focus();
-    toast('OTP sent to your phone! 📱', 'success', '✅');
-  } catch(e) {
-    console.error('[Firebase OTP Error]', e.code, e.message);
-    try { if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; } } catch(_){}
-    if (e.code === 'auth/too-many-requests') {
-      err.textContent = 'Too many attempts. Wait 1 hour and try again.';
-    } else if (e.code === 'auth/invalid-phone-number') {
-      err.textContent = 'Invalid phone number. Check and try again.';
-    } else if (e.code === 'auth/captcha-check-failed') {
-      err.textContent = 'Security check failed. Refresh page and try again.';
-    } else if (e.code === 'auth/quota-exceeded') {
-      err.textContent = 'SMS limit reached. Try after some time.';
+    if (smsSent) {
+      toast('OTP sent to your phone! 📱', 'success', '✅');
     } else {
-      err.textContent = 'Failed to send OTP: ' + (e.message || 'Unknown error');
+      toast(`Your OTP is: ${otp}`, 'success', '🔐');
     }
+  } catch(e) {
+    console.error('[sendOTP error]', e);
+    err.textContent = 'Error: ' + (e.message || 'Try again');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
@@ -1352,9 +1362,23 @@ async function verifyOTP() {
   btn.classList.add('btn-loading'); btn.disabled = true;
   err.textContent = '';
   try {
-    // Verify with Firebase
-    await _fbConfirmResult.confirm(code);
-    // OTP verified by Firebase — now login employee
+    // Verify OTP — Firebase or custom fallback
+    if (_fbConfirmResult) {
+      await _fbConfirmResult.confirm(code);
+    } else {
+      // Custom OTP verify via Supabase
+      if (sb) {
+        const {data} = await sb.from('employees').select('temp_otp, otp_created_at').eq('phone', _otpPhone).single();
+        if (!data?.temp_otp) { err.textContent = 'OTP expired. Go back and try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        const expired = (new Date() - new Date(data.otp_created_at)) > 10 * 60 * 1000;
+        if (expired) { err.textContent = 'OTP expired. Go back and try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        if (data.temp_otp !== code) { err.textContent = 'Wrong OTP. Check and try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone);
+      } else if (code !== _otpCode) {
+        err.textContent = 'Wrong OTP.'; btn.classList.remove('btn-loading'); btn.disabled = false; return;
+      }
+    }
+    // OTP verified — now login employee
     const emp = _otpEmpData;
     S.user = emp; S.role = 'employee';
     if (sb) {
@@ -1412,6 +1436,7 @@ async function registerEmployee() {
       const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
       const {error} = await sb.from('employees').insert([{
         id: empId, name, phone,
+        email: phone + '@lt-foodhub.app',
         department: 'L&T', campus: 'Powai Campus',
         wallet_balance: 0, points_balance: 0,
         initials, meal_pass_active: true,
