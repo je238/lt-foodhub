@@ -692,11 +692,13 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
           <div id="otp-big" style="font-size:36px;font-weight:800;color:#fff;letter-spacing:8px">----</div>
           <div style="font-size:11px;color:rgba(255,255,255,.35);margin-top:4px">Tap the boxes and enter this code</div>
         </div>
-        <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px">
-          <input class="linp" type="tel" id="otp-1" maxlength="1" style="width:52px;text-align:center;font-size:24px;font-weight:700;padding:12px 0;margin:0" oninput="otpNext(this,'otp-2')">
-          <input class="linp" type="tel" id="otp-2" maxlength="1" style="width:52px;text-align:center;font-size:24px;font-weight:700;padding:12px 0;margin:0" oninput="otpNext(this,'otp-3')">
-          <input class="linp" type="tel" id="otp-3" maxlength="1" style="width:52px;text-align:center;font-size:24px;font-weight:700;padding:12px 0;margin:0" oninput="otpNext(this,'otp-4')">
-          <input class="linp" type="tel" id="otp-4" maxlength="1" style="width:52px;text-align:center;font-size:24px;font-weight:700;padding:12px 0;margin:0" oninput="otpNext(this,null)">
+        <div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px">
+          <input class="linp" type="tel" id="otp-1" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-2')">
+          <input class="linp" type="tel" id="otp-2" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-3')">
+          <input class="linp" type="tel" id="otp-3" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-4')">
+          <input class="linp" type="tel" id="otp-4" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-5')">
+          <input class="linp" type="tel" id="otp-5" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-6')">
+          <input class="linp" type="tel" id="otp-6" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,null)">
         </div>
         <button class="login-btn" id="verify-otp-btn" onclick="verifyOTP()"><span>Login →</span></button>
         <div class="login-err" id="otp-err" style="margin-top:8px"></div>
@@ -1306,8 +1308,8 @@ function backToPhone() {
 function otpNext(el, nextId) {
   el.value = el.value.replace(/\D/g,'').slice(0,1);
   if (el.value && nextId) document.getElementById(nextId)?.focus();
-  const code = ['otp-1','otp-2','otp-3','otp-4'].map(id=>document.getElementById(id)?.value||'').join('');
-  if (code.length === 4) verifyOTP();
+  const code = ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].map(id=>document.getElementById(id)?.value||'').join('');
+  if (code.length === 6) verifyOTP();
 }
 
 async function sendOTP() {
@@ -1361,7 +1363,7 @@ async function sendOTP() {
       } catch(e) {
         console.error('[Firebase SMS]', e);
         // Fallback to screen OTP
-        const otp = String(Math.floor(1000 + Math.random() * 9000));
+        const otp = String(Math.floor(100000 + Math.random() * 900000));
         _otpCode = otp;
         _fbConfirmResult = null;
         if(sb) { try { await sb.from('employees').update({temp_otp: otp, otp_created_at: new Date().toISOString()}).eq('phone', phone); } catch(_){} }
@@ -1372,7 +1374,7 @@ async function sendOTP() {
         document.getElementById('otp-big').textContent = otp;
         otp.split('').forEach((d,i) => { const b = document.getElementById('otp-'+(i+1)); if(b) b.value=d; });
         document.getElementById('otp-err').textContent = '';
-        toast('OTP: ' + otp + ' (SMS unavailable)', 'warn', '🔐');
+        toast('OTP: ' + otp, 'success', '🔐');
       }
       btn.classList.remove('btn-loading'); btn.disabled = false;
     });
@@ -1384,11 +1386,11 @@ async function sendOTP() {
 }
 
 async function verifyOTP() {
-  const code = ['otp-1','otp-2','otp-3','otp-4'].map(id=>document.getElementById(id)?.value||'').join('');
+  const code = ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].map(id=>document.getElementById(id)?.value||'').join('');
   const err = document.getElementById('otp-err');
   const btn = document.getElementById('verify-otp-btn');
   err.textContent = '';
-  if (code.length !== 4) { err.textContent = 'Enter 4-digit OTP'; return; }
+  if (code.length !== 6) { err.textContent = 'Enter 6-digit OTP'; return; }
   btn.classList.add('btn-loading'); btn.disabled = true;
   try {
     if (!_otpEmpData) {
