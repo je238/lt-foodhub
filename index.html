@@ -29,13 +29,21 @@ function initRecaptcha() {
     if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; }
   } catch(_) {}
   try {
+    const container = document.getElementById('recaptcha-container');
+    if (!container) { console.error('[reCAPTCHA] Container #recaptcha-container not found!'); return false; }
     recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
       size: 'invisible',
       callback: () => { console.log('[reCAPTCHA] solved'); },
-      'expired-callback': () => { recaptchaVerifier = null; }
+      'expired-callback': () => { console.warn('[reCAPTCHA] expired'); recaptchaVerifier = null; }
     });
-    recaptchaVerifier.render(); // pre-render
-  } catch(e) { console.warn('Recaptcha init failed:', e); }
+    recaptchaVerifier.render();
+    console.log('[reCAPTCHA] initialized successfully');
+    return true;
+  } catch(e) {
+    console.error('[reCAPTCHA] init FAILED:', e);
+    recaptchaVerifier = null;
+    return false;
+  }
 }
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -719,6 +727,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div id="recaptcha-container"></div>
   </div>
 </div>
+<!-- ══════════════════════════════════
+     HOME SCREEN
 ══════════════════════════════════ -->
 <div class="screen" id="s-home">
   <!-- Top Nav -->
@@ -1027,7 +1037,10 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 const SURL = 'https://lorgclscnjdbngqurdsw.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvcmdjbHNjbmpkYm5ncXVyZHN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjA3MjEsImV4cCI6MjA4ODYzNjcyMX0.T8TwjIuILMEwNZgfo0s4_9Zr1_5ocTAtCxWntSA2iu4';
 let sb;
-try { sb = supabase.createClient(SURL, SKEY); } catch(e) { sb = null; }
+window.debug_sb = null;
+try { sb = supabase.createClient(SURL, SKEY); window.debug_sb = sb; } catch(e) { sb = null; }
+
+window.debug_sendOTP = sendOTP;
 
 // ═════════════════════════════════════
 // APP STATE
@@ -1294,6 +1307,7 @@ function otpNext(el, nextId) {
 async function sendOTP() {
   const phone = document.getElementById('emp-phone').value.trim();
   const err = document.getElementById('login-err');
+  if (!err) { console.error('[sendOTP] login-err element not found!'); return; }
   if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit mobile number'; return; }
   const btn = document.getElementById('send-otp-btn');
   btn.classList.add('btn-loading'); btn.disabled = true;
@@ -1302,8 +1316,21 @@ async function sendOTP() {
     // Check employee exists in Supabase with this phone
     let emp = null;
     if (sb) {
-      const {data} = await sb.from('employees').select('*').eq('phone', phone).single();
+      console.log('[OTP] Looking up employee with phone:', phone);
+      const {data, error: sbErr} = await sb.from('employees').select('*').eq('phone', phone).maybeSingle();
+      if (sbErr) {
+        console.error('[OTP] Supabase lookup error:', sbErr);
+        err.textContent = 'Database error. Please try again.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
       emp = data;
+      console.log('[OTP] Employee lookup result:', emp ? emp.name : 'NOT FOUND');
+    } else {
+      console.warn('[OTP] Supabase client not available');
+      err.textContent = 'Service unavailable. Please refresh and try again.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
     }
     if (!emp) {
       err.textContent = 'Phone not registered. Please register first.';
@@ -1313,8 +1340,14 @@ async function sendOTP() {
     _otpEmpData = emp;
     _otpPhone = phone;
     // Init recaptcha and send OTP via Firebase
-    initRecaptcha();
-    await new Promise(r => setTimeout(r, 500)); // let recaptcha render
+    console.log('[OTP] Initializing reCAPTCHA...');
+    const recaptchaOk = initRecaptcha();
+    if (!recaptchaOk || !recaptchaVerifier) {
+      err.textContent = 'Security verification failed. Please refresh the page.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
+    await new Promise(r => setTimeout(r, 800)); // let recaptcha render
     const phoneNumber = '+91' + phone;
     console.log('[OTP] Sending to', phoneNumber);
     _fbConfirmResult = await fbAuth.signInWithPhoneNumber(phoneNumber, recaptchaVerifier);
@@ -1326,8 +1359,9 @@ async function sendOTP() {
     document.getElementById('otp-1').focus();
     toast('OTP sent to your phone! 📱', 'success', '✅');
   } catch(e) {
-    console.error('[Firebase OTP Error]', e.code, e.message);
+    console.error('[OTP Error]', e.code || '', e.message || e);
     try { if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; } } catch(_){}
+    // Handle Firebase auth errors
     if (e.code === 'auth/too-many-requests') {
       err.textContent = 'Too many attempts. Wait 1 hour and try again.';
     } else if (e.code === 'auth/invalid-phone-number') {
@@ -1336,8 +1370,14 @@ async function sendOTP() {
       err.textContent = 'Security check failed. Refresh page and try again.';
     } else if (e.code === 'auth/quota-exceeded') {
       err.textContent = 'SMS limit reached. Try after some time.';
+    } else if (e.code === 'auth/network-request-failed') {
+      err.textContent = 'Network error. Check your internet connection.';
+    } else if (e.code === 'auth/internal-error') {
+      err.textContent = 'Firebase service error. Try again later.';
+    } else if (e.message?.includes('reCAPTCHA') || e.message?.includes('recaptcha')) {
+      err.textContent = 'Security verification failed. Refresh page and try again.';
     } else {
-      err.textContent = 'Failed to send OTP: ' + (e.message || 'Unknown error');
+      err.textContent = 'Failed to send OTP: ' + (e.message || 'Unknown error. Check console.');
     }
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
