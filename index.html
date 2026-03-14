@@ -1364,7 +1364,9 @@ async function verifyOTP() {
       return;
     }
     // Clear OTP from DB
-    if (sb) await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone).catch(()=>{});
+    if (sb) {
+      try { await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone); } catch(_){}
+    }
     // Login
     S.user = _otpEmpData;
     S.role = 'employee';
