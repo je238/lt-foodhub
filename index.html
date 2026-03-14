@@ -5,6 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <title>L&T FoodHub</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script>
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyAu-7TS7nVCOq3gNS7ZTd-xHLQwcv1P6V8",
+  authDomain: "lt-foodhub.firebaseapp.com",
+  projectId: "lt-foodhub",
+  storageBucket: "lt-foodhub.firebasestorage.app",
+  messagingSenderId: "172929297774",
+  appId: "1:172929297774:web:3e7cbdc2ed98512fd1657f",
+  measurementId: "G-0YMJX00PGK"
+};
+firebase.initializeApp(firebaseConfig);
+const fbAuth = firebase.auth();
+// reCAPTCHA verifier — invisible
+let recaptchaVerifier = null;
+function initRecaptcha() {
+  if (recaptchaVerifier) return;
+  try {
+    recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+      size: 'invisible',
+      callback: () => {}
+    });
+  } catch(e) { console.warn('Recaptcha init failed:', e); }
+}
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 
@@ -684,11 +712,10 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <button class="login-btn" onclick="doLogin()" id="login-btn"><span>Sign In →</span></button>
       <div class="login-err" id="login-err"></div>
     </div>
+    <!-- Firebase invisible reCAPTCHA -->
+    <div id="recaptcha-container"></div>
   </div>
 </div>
-
-<!-- ══════════════════════════════════
-     EMPLOYEE APP
 ══════════════════════════════════ -->
 <div class="screen" id="s-home">
   <!-- Top Nav -->
@@ -1241,6 +1268,7 @@ function selRole(role, el) {
 let _otpPhone = '';
 let _otpCode = '';
 let _otpEmpData = null;
+let _fbConfirmResult = null; // Firebase confirmation result
 
 function showRegister() {
   document.getElementById('emp-step1').style.display = 'none';
@@ -1251,11 +1279,11 @@ function backToPhone() {
   document.getElementById('emp-step1').style.display = '';
   document.getElementById('emp-step2').style.display = 'none';
   document.getElementById('emp-register').style.display = 'none';
+  _fbConfirmResult = null;
 }
 function otpNext(el, nextId) {
   el.value = el.value.replace(/\D/g,'');
   if (el.value && nextId) document.getElementById(nextId)?.focus();
-  // Auto verify when all 4 filled
   const code = ['otp-1','otp-2','otp-3','otp-4'].map(id => document.getElementById(id)?.value||'').join('');
   if (code.length === 4) verifyOTP();
 }
@@ -1268,34 +1296,40 @@ async function sendOTP() {
   btn.classList.add('btn-loading'); btn.disabled = true;
   err.textContent = '';
   try {
-    // Check if employee exists with this phone
+    // Check employee exists in Supabase with this phone
     let emp = null;
     if (sb) {
       const {data} = await sb.from('employees').select('*').eq('phone', phone).single();
       emp = data;
     }
     if (!emp) {
-      err.textContent = 'Phone number not registered. Please register first.';
+      err.textContent = 'Phone not registered. Please register first.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
     _otpEmpData = emp;
     _otpPhone = phone;
-    // Generate 4-digit OTP
-    _otpCode = Math.floor(1000 + Math.random() * 9000).toString();
-    // Store OTP in Supabase (employees table temp_otp column)
-    if (sb) await sb.from('employees').update({temp_otp: _otpCode, otp_created_at: new Date().toISOString()}).eq('phone', phone);
-    // In production — send via SMS (Twilio/MSG91)
-    // For now — show OTP in toast for testing
-    toast(`OTP: ${_otpCode} (SMS in production)`, 'success', '📱');
-    console.log('[OTP]', _otpCode, 'for', phone);
+    // Init recaptcha and send OTP via Firebase
+    initRecaptcha();
+    const phoneNumber = '+91' + phone;
+    _fbConfirmResult = await fbAuth.signInWithPhoneNumber(phoneNumber, recaptchaVerifier);
     // Show OTP step
     document.getElementById('emp-step1').style.display = 'none';
     document.getElementById('emp-step2').style.display = '';
     document.getElementById('otp-sent-msg').textContent = `OTP sent to +91 ${phone.slice(0,5)}XXXXX`;
     document.getElementById('otp-1').focus();
+    toast('OTP sent! Check your SMS 📱', 'success', '✅');
   } catch(e) {
-    err.textContent = 'Error sending OTP. Try again.';
+    console.error('[Firebase OTP]', e);
+    // Reset recaptcha on error
+    if (recaptchaVerifier) { try { recaptchaVerifier.clear(); } catch(_){} recaptchaVerifier = null; }
+    if (e.code === 'auth/too-many-requests') {
+      err.textContent = 'Too many attempts. Try after 1 hour.';
+    } else if (e.code === 'auth/invalid-phone-number') {
+      err.textContent = 'Invalid phone number format.';
+    } else {
+      err.textContent = 'Failed to send OTP. Try again.';
+    }
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
@@ -1304,55 +1338,47 @@ async function verifyOTP() {
   const code = ['otp-1','otp-2','otp-3','otp-4'].map(id => document.getElementById(id)?.value||'').join('');
   const err = document.getElementById('otp-err');
   if (code.length !== 4) { err.textContent = 'Enter 4-digit OTP'; return; }
+  if (!_fbConfirmResult) { err.textContent = 'Session expired. Go back and resend OTP.'; return; }
   const btn = document.getElementById('verify-otp-btn');
   btn.classList.add('btn-loading'); btn.disabled = true;
   err.textContent = '';
   try {
-    // Verify OTP from DB
-    let valid = false;
+    // Verify with Firebase
+    await _fbConfirmResult.confirm(code);
+    // OTP verified by Firebase — now login employee
+    const emp = _otpEmpData;
+    S.user = emp; S.role = 'employee';
     if (sb) {
-      const {data} = await sb.from('employees').select('temp_otp, otp_created_at').eq('phone', _otpPhone).single();
-      if (data?.temp_otp === code) {
-        // Check OTP not expired (5 min)
-        const created = new Date(data.otp_created_at);
-        const now = new Date();
-        if ((now - created) < 5 * 60 * 1000) valid = true;
-        else err.textContent = 'OTP expired. Resend OTP.';
-      } else {
-        err.textContent = 'Invalid OTP. Try again.';
-      }
-    } else {
-      // Fallback for offline testing
-      if (code === _otpCode) valid = true;
-      else err.textContent = 'Invalid OTP.';
+      const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available', true).limit(500);
+      if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
+      const {data: freshCans} = await sb.from('canteens').select('*').order('id');
+      if (freshCans?.length) S.canteens = freshCans;
     }
-    if (valid) {
-      // Clear OTP from DB
-      if (sb) await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone);
-      // Login employee
-      const emp = _otpEmpData;
-      S.user = emp; S.role = 'employee';
-      if (sb) {
-        const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available', true).limit(500);
-        if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
-        const {data: freshCans} = await sb.from('canteens').select('*').order('id');
-        if (freshCans?.length) S.canteens = freshCans;
-      }
-      renderHome();
-      goScreen('s-home');
-      toast(`Welcome, ${emp.name.split(' ')[0]}! 👋`, 'success', '✅');
-    }
+    renderHome();
+    goScreen('s-home');
+    toast(`Welcome, ${emp.name.split(' ')[0]}! 👋`, 'success', '✅');
+    _fbConfirmResult = null;
   } catch(e) {
-    err.textContent = 'Verification failed. Try again.';
+    console.error('[OTP Verify]', e);
+    if (e.code === 'auth/invalid-verification-code') {
+      err.textContent = 'Wrong OTP. Check your SMS and try again.';
+    } else if (e.code === 'auth/code-expired') {
+      err.textContent = 'OTP expired. Go back and resend.';
+    } else {
+      err.textContent = 'Verification failed. Try again.';
+    }
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
 async function resendOTP() {
   ['otp-1','otp-2','otp-3','otp-4'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  _fbConfirmResult = null;
+  if (recaptchaVerifier) { try { recaptchaVerifier.clear(); } catch(_){} recaptchaVerifier = null; }
   document.getElementById('emp-step2').style.display = 'none';
   document.getElementById('emp-step1').style.display = '';
-  document.getElementById('login-err').textContent = 'Enter your number again to resend OTP';
+  document.getElementById('login-err').textContent = '';
+  toast('Enter your number again to resend OTP', 'warn', '📱');
 }
 
 async function registerEmployee() {
@@ -1366,11 +1392,9 @@ async function registerEmployee() {
   btn.classList.add('btn-loading'); btn.disabled = true;
   err.textContent = '';
   try {
-    // Check if empId or phone already exists
     if (sb) {
       const {data: existing} = await sb.from('employees').select('id').or(`id.eq.${empId},phone.eq.${phone}`);
       if (existing?.length) { err.textContent = 'Employee ID or phone already registered'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-      // Create new employee
       const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
       const {error} = await sb.from('employees').insert([{
         id: empId, name, phone, department: dept || 'L&T',
@@ -1380,7 +1404,7 @@ async function registerEmployee() {
       }]);
       if (error) { err.textContent = 'Registration failed: ' + error.message; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
     }
-    toast('Registered! Please login with your phone number.', 'success', '✅');
+    toast('Registered successfully! Login with your phone.', 'success', '✅');
     document.getElementById('emp-register').style.display = 'none';
     document.getElementById('emp-step1').style.display = '';
     document.getElementById('emp-phone').value = phone;
