@@ -1311,41 +1311,30 @@ async function sendOTP() {
     }
     _otpEmpData = emp;
     _otpPhone = phone;
-    // Generate OTP and store in Supabase
+    // Generate 4-digit OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     _otpCode = otp;
+    _fbConfirmResult = null;
+    // Save OTP to Supabase
     if (sb) {
-      await sb.from('employees').update({
-        temp_otp: otp,
-        otp_created_at: new Date().toISOString()
-      }).eq('phone', phone);
+      const {error: otpErr} = await sb.from('employees')
+        .update({ temp_otp: otp, otp_created_at: new Date().toISOString() })
+        .eq('phone', phone);
+      if (otpErr) console.warn('[OTP save error]', otpErr);
     }
-    // Try Firebase SMS first, fallback to showing OTP on screen
-    let smsSent = false;
-    try {
-      initRecaptcha();
-      await new Promise(r => setTimeout(r, 800));
-      const phoneNumber = '+91' + phone;
-      _fbConfirmResult = await fbAuth.signInWithPhoneNumber(phoneNumber, recaptchaVerifier);
-      smsSent = true;
-      console.log('[OTP] Firebase SMS sent');
-    } catch(fbErr) {
-      console.warn('[Firebase SMS failed, using custom OTP]', fbErr.code);
-      try { if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; } } catch(_){}
-      _fbConfirmResult = null; // will use custom OTP verify
-    }
-    // Show OTP step
+    // Show OTP screen
     document.getElementById('emp-step1').style.display = 'none';
     document.getElementById('emp-step2').style.display = '';
-    document.getElementById('otp-sent-msg').textContent = smsSent
-      ? `OTP sent to +91 ${phone.slice(0,5)}XXXXX`
-      : `OTP: ${otp} (SMS coming soon)`;
+    document.getElementById('otp-sent-msg').innerHTML =
+      `Your OTP is: <strong style="color:#fff;font-size:22px;letter-spacing:4px">${otp}</strong><br>
+       <span style="font-size:11px;opacity:.6">(SMS integration coming soon)</span>`;
     document.getElementById('otp-1').focus();
-    if (smsSent) {
-      toast('OTP sent to your phone! 📱', 'success', '✅');
-    } else {
-      toast(`Your OTP is: ${otp}`, 'success', '🔐');
-    }
+    // Auto-fill OTP boxes
+    otp.split('').forEach((d, i) => {
+      const el = document.getElementById('otp-' + (i+1));
+      if (el) el.value = d;
+    });
+    toast('OTP ready — check the screen! 🔐', 'success', '✅');
   } catch(e) {
     console.error('[sendOTP error]', e);
     err.textContent = 'Error: ' + (e.message || 'Try again');
