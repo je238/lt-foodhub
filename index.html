@@ -1070,7 +1070,7 @@ const S = {
   vendorFilter: 'all',
   kdsFilter: 'all',
   adminTab: 'overview',
-  tokenCounters: {c1:38, c2:24, c3:61, c4:17, c5:1}, // per-canteen token counters (realistic mid-day)
+  tokenCounters: {}, // per-canteen token counters — loaded from DB
   subsidy: 80,
   menuItems: [],    // admin managed
   inventory: {},
@@ -1148,7 +1148,22 @@ async function loadData() {
     }
     // Load token counters + operating hours from canteens table
     S.canteens.forEach(c => {
-      if (c.token_counter != null) S.tokenCounters[c.id] = c.token_counter;
+      if (c.token_counter != null) {
+        // Reset token daily — check if last reset was today
+        const today = new Date().toDateString();
+        const lastReset = localStorage.getItem('token_reset_' + c.id);
+        if (lastReset !== today) {
+          // New day — reset to 1
+          S.tokenCounters[c.id] = 1;
+          localStorage.setItem('token_reset_' + c.id, today);
+          // Reset in DB too
+          if (sb) sb.from('canteens').update({token_counter: 1}).eq('id', c.id).then(()=>{}).catch(()=>{});
+        } else {
+          S.tokenCounters[c.id] = c.token_counter || 1;
+        }
+      } else {
+        S.tokenCounters[c.id] = 1;
+      }
       if (c.open_time) canteenHours[c.id] = { open: c.open_time, close: c.close_time || '15:00', breakStart: c.break_start || '', breakEnd: c.break_end || '' };
     });
   } catch(e) {
