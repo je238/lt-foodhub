@@ -610,8 +610,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="login-icon">L&T</div>
       <div class="login-brand"><h2>FoodHub</h2><p>Larsen &amp; Toubro — Campus Canteen</p></div>
     </div>
-    <h2 class="login-title">Welcome Back</h2>
-    <p class="login-sub">Sign in to order your meal</p>
+    <!-- Role tabs -->
     <div style="font-size:11px;color:rgba(255,255,255,.4);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Select Role</div>
     <div class="role-tabs" id="role-tabs">
       <div class="role-tab active" onclick="selRole('employee',this)">👤 Employee</div>
@@ -619,14 +618,71 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="role-tab" onclick="selRole('kitchen',this)">📺 Kitchen</div>
       <div class="role-tab" onclick="selRole('admin',this)">⚙️ Admin</div>
     </div>
-    <input class="linp" type="text" id="l-id" placeholder="Employee ID (e.g. LT-EMP-24891)" value="LT-EMP-24891">
-    <input class="linp" type="password" id="l-pw" placeholder="Password" value="password123">
-    <button class="login-btn" onclick="doLogin()" id="login-btn"><span>Sign In →</span></button>
-    <div class="login-err" id="login-err"></div>
-    <div style="text-align:right;margin-top:4px"><span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="showForgotPassword()">Forgot password?</span></div>
-    <div class="login-hint">
-      <strong>Employee:</strong> LT-EMP-24891 · password123<br>
-      <strong>Vendor/Kitchen/Admin:</strong> Any ID · password123
+
+    <!-- EMPLOYEE LOGIN — Phone + OTP -->
+    <div id="emp-login-area">
+      <!-- Step 1: Phone number -->
+      <div id="emp-step1">
+        <h2 class="login-title" style="margin-top:0">Welcome 👋</h2>
+        <p class="login-sub">Enter your registered mobile number</p>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:13px 12px;font-size:14px;color:#fff;white-space:nowrap">🇮🇳 +91</div>
+          <input class="linp" type="tel" id="emp-phone" placeholder="10-digit mobile number" maxlength="10" style="margin-bottom:0;flex:1" oninput="this.value=this.value.replace(/\D/g,'')">
+        </div>
+        <div style="font-size:11px;color:rgba(255,255,255,.35);margin:8px 0 12px">Use number registered with L&T HR</div>
+        <button class="login-btn" onclick="sendOTP()" id="send-otp-btn"><span>Send OTP →</span></button>
+        <div class="login-err" id="login-err"></div>
+        <div style="text-align:center;margin-top:12px">
+          <span style="font-size:12px;color:rgba(255,255,255,.4)">New employee? </span>
+          <span style="font-size:12px;color:var(--brand);cursor:pointer;font-weight:600" onclick="showRegister()">Register here</span>
+        </div>
+      </div>
+
+      <!-- Step 2: OTP verify -->
+      <div id="emp-step2" style="display:none">
+        <h2 class="login-title" style="margin-top:0">Enter OTP</h2>
+        <p class="login-sub" id="otp-sent-msg">OTP sent to your number</p>
+        <div style="display:flex;gap:10px;justify-content:center;margin:16px 0">
+          <input class="linp" type="tel" id="otp-1" maxlength="1" style="width:48px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-2')">
+          <input class="linp" type="tel" id="otp-2" maxlength="1" style="width:48px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-3')">
+          <input class="linp" type="tel" id="otp-3" maxlength="1" style="width:48px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-4')">
+          <input class="linp" type="tel" id="otp-4" maxlength="1" style="width:48px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,null)">
+        </div>
+        <button class="login-btn" onclick="verifyOTP()" id="verify-otp-btn"><span>Verify & Login →</span></button>
+        <div class="login-err" id="otp-err"></div>
+        <div style="text-align:center;margin-top:10px;display:flex;justify-content:space-between">
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToPhone()">← Change number</span>
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" id="resend-btn" onclick="resendOTP()">Resend OTP</span>
+        </div>
+      </div>
+
+      <!-- Register new employee -->
+      <div id="emp-register" style="display:none">
+        <h2 class="login-title" style="margin-top:0">Register</h2>
+        <p class="login-sub">Create your FoodHub account</p>
+        <input class="linp" type="text" id="reg-name" placeholder="Full Name">
+        <input class="linp" type="text" id="reg-empid" placeholder="Employee ID (e.g. LT-EMP-12345)">
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:13px 12px;font-size:14px;color:#fff;white-space:nowrap">🇮🇳 +91</div>
+          <input class="linp" type="tel" id="reg-phone" placeholder="Mobile number" maxlength="10" style="margin-bottom:0;flex:1" oninput="this.value=this.value.replace(/\D/g,'')">
+        </div>
+        <div style="font-size:11px;color:rgba(255,255,255,.35);margin:8px 0 12px">OTP will be sent to this number for verification</div>
+        <input class="linp" type="text" id="reg-dept" placeholder="Department (e.g. Engineering)">
+        <button class="login-btn" onclick="registerEmployee()" id="reg-btn" style="margin-top:4px"><span>Register &amp; Get OTP →</span></button>
+        <div class="login-err" id="reg-err"></div>
+        <div style="text-align:center;margin-top:10px">
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToPhone()">← Back to Login</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- VENDOR / KITCHEN / ADMIN LOGIN — ID based -->
+    <div id="staff-login-area" style="display:none">
+      <h2 class="login-title" style="margin-top:0">Staff Login</h2>
+      <input class="linp" type="text" id="l-id" placeholder="Counter ID (e.g. counter-c1)">
+      <input class="linp" type="password" id="l-pw" placeholder="Password">
+      <button class="login-btn" onclick="doLogin()" id="login-btn"><span>Sign In →</span></button>
+      <div class="login-err" id="login-err"></div>
     </div>
   </div>
 </div>
@@ -1005,12 +1061,8 @@ const FALLBACK_MENU = [
   {id:'m010',name:'Cold Coffee',price:50,category:'Cold Beverages',is_veg:true,emoji:'🥤',subsidy_amount:30,canteen_id:'c7',is_available:true,stock:100},
   {id:'m015',name:'Mango Milkshake',price:80,category:'Milkshakes',is_veg:true,emoji:'🥭',subsidy_amount:48,canteen_id:'c7',is_available:true,stock:80},
 ];
-const FALLBACK_EMPLOYEES = {
-  'LT-EMP-24891':{id:'LT-EMP-24891',name:'Rajesh Kumar',department:'Engineering',campus:'Powai Campus',wallet_balance:580,subsidy_per_meal:80,initials:'RK',meal_pass_active:true,meal_pass_used:9,meal_pass_limit:30},
-  'LT-EMP-18234':{id:'LT-EMP-18234',name:'Priya Sharma',department:'Marketing',campus:'Powai Campus',wallet_balance:320,subsidy_per_meal:80,initials:'PS',meal_pass_active:true,meal_pass_used:5,meal_pass_limit:30},
-  'LT-EMP-31092':{id:'LT-EMP-31092',name:'Amit Verma',department:'Finance',campus:'Powai Campus',wallet_balance:150,subsidy_per_meal:80,initials:'AV',meal_pass_active:true,meal_pass_used:12,meal_pass_limit:30},
-  'LT-EMP-44521':{id:'LT-EMP-44521',name:'Sunita Patel',department:'HR',campus:'Powai Campus',wallet_balance:720,subsidy_per_meal:80,initials:'SP',meal_pass_active:true,meal_pass_used:7,meal_pass_limit:30},
-};
+const FALLBACK_EMPLOYEES = {};
+// No demo employees — all employees register via phone + OTP
 
 // ═════════════════════════════════════
 // INIT
@@ -1173,15 +1225,169 @@ function selRole(role, el) {
   loginRole = role;
   document.querySelectorAll('.role-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  const placeholders = {
-    employee: 'Employee ID (e.g. LT-EMP-24891)',
-    vendor: 'Counter ID (e.g. counter-c1)',
-    kitchen: 'Counter ID (e.g. counter-c1)',
-    admin: 'Admin ID (e.g. admin-001)'
-  };
-  document.getElementById('l-id').placeholder = placeholders[role] || 'ID';
-  const vals = {employee:'LT-EMP-24891',vendor:'counter-c1',kitchen:'counter-c1',admin:'admin-001'};
-  document.getElementById('l-id').value = vals[role] || '';
+  // Show correct login area
+  const isEmp = role === 'employee';
+  document.getElementById('emp-login-area').style.display = isEmp ? '' : 'none';
+  document.getElementById('staff-login-area').style.display = isEmp ? 'none' : '';
+  if (!isEmp) {
+    const placeholders = {vendor:'Counter ID (e.g. counter-c1)', kitchen:'Counter ID (e.g. counter-c1)', admin:'Admin ID (e.g. admin-001)'};
+    const vals = {vendor:'counter-c1', kitchen:'counter-c1', admin:'admin-001'};
+    document.getElementById('l-id').placeholder = placeholders[role] || 'ID';
+    document.getElementById('l-id').value = vals[role] || '';
+  }
+}
+
+// ── OTP State ──────────────────────────────────────────────────
+let _otpPhone = '';
+let _otpCode = '';
+let _otpEmpData = null;
+
+function showRegister() {
+  document.getElementById('emp-step1').style.display = 'none';
+  document.getElementById('emp-step2').style.display = 'none';
+  document.getElementById('emp-register').style.display = '';
+}
+function backToPhone() {
+  document.getElementById('emp-step1').style.display = '';
+  document.getElementById('emp-step2').style.display = 'none';
+  document.getElementById('emp-register').style.display = 'none';
+}
+function otpNext(el, nextId) {
+  el.value = el.value.replace(/\D/g,'');
+  if (el.value && nextId) document.getElementById(nextId)?.focus();
+  // Auto verify when all 4 filled
+  const code = ['otp-1','otp-2','otp-3','otp-4'].map(id => document.getElementById(id)?.value||'').join('');
+  if (code.length === 4) verifyOTP();
+}
+
+async function sendOTP() {
+  const phone = document.getElementById('emp-phone').value.trim();
+  const err = document.getElementById('login-err');
+  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit mobile number'; return; }
+  const btn = document.getElementById('send-otp-btn');
+  btn.classList.add('btn-loading'); btn.disabled = true;
+  err.textContent = '';
+  try {
+    // Check if employee exists with this phone
+    let emp = null;
+    if (sb) {
+      const {data} = await sb.from('employees').select('*').eq('phone', phone).single();
+      emp = data;
+    }
+    if (!emp) {
+      err.textContent = 'Phone number not registered. Please register first.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
+    _otpEmpData = emp;
+    _otpPhone = phone;
+    // Generate 4-digit OTP
+    _otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+    // Store OTP in Supabase (employees table temp_otp column)
+    if (sb) await sb.from('employees').update({temp_otp: _otpCode, otp_created_at: new Date().toISOString()}).eq('phone', phone);
+    // In production — send via SMS (Twilio/MSG91)
+    // For now — show OTP in toast for testing
+    toast(`OTP: ${_otpCode} (SMS in production)`, 'success', '📱');
+    console.log('[OTP]', _otpCode, 'for', phone);
+    // Show OTP step
+    document.getElementById('emp-step1').style.display = 'none';
+    document.getElementById('emp-step2').style.display = '';
+    document.getElementById('otp-sent-msg').textContent = `OTP sent to +91 ${phone.slice(0,5)}XXXXX`;
+    document.getElementById('otp-1').focus();
+  } catch(e) {
+    err.textContent = 'Error sending OTP. Try again.';
+  }
+  btn.classList.remove('btn-loading'); btn.disabled = false;
+}
+
+async function verifyOTP() {
+  const code = ['otp-1','otp-2','otp-3','otp-4'].map(id => document.getElementById(id)?.value||'').join('');
+  const err = document.getElementById('otp-err');
+  if (code.length !== 4) { err.textContent = 'Enter 4-digit OTP'; return; }
+  const btn = document.getElementById('verify-otp-btn');
+  btn.classList.add('btn-loading'); btn.disabled = true;
+  err.textContent = '';
+  try {
+    // Verify OTP from DB
+    let valid = false;
+    if (sb) {
+      const {data} = await sb.from('employees').select('temp_otp, otp_created_at').eq('phone', _otpPhone).single();
+      if (data?.temp_otp === code) {
+        // Check OTP not expired (5 min)
+        const created = new Date(data.otp_created_at);
+        const now = new Date();
+        if ((now - created) < 5 * 60 * 1000) valid = true;
+        else err.textContent = 'OTP expired. Resend OTP.';
+      } else {
+        err.textContent = 'Invalid OTP. Try again.';
+      }
+    } else {
+      // Fallback for offline testing
+      if (code === _otpCode) valid = true;
+      else err.textContent = 'Invalid OTP.';
+    }
+    if (valid) {
+      // Clear OTP from DB
+      if (sb) await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone);
+      // Login employee
+      const emp = _otpEmpData;
+      S.user = emp; S.role = 'employee';
+      if (sb) {
+        const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available', true).limit(500);
+        if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
+        const {data: freshCans} = await sb.from('canteens').select('*').order('id');
+        if (freshCans?.length) S.canteens = freshCans;
+      }
+      renderHome();
+      goScreen('s-home');
+      toast(`Welcome, ${emp.name.split(' ')[0]}! 👋`, 'success', '✅');
+    }
+  } catch(e) {
+    err.textContent = 'Verification failed. Try again.';
+  }
+  btn.classList.remove('btn-loading'); btn.disabled = false;
+}
+
+async function resendOTP() {
+  ['otp-1','otp-2','otp-3','otp-4'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('emp-step2').style.display = 'none';
+  document.getElementById('emp-step1').style.display = '';
+  document.getElementById('login-err').textContent = 'Enter your number again to resend OTP';
+}
+
+async function registerEmployee() {
+  const name = document.getElementById('reg-name').value.trim();
+  const empId = document.getElementById('reg-empid').value.trim();
+  const phone = document.getElementById('reg-phone').value.trim();
+  const dept = document.getElementById('reg-dept').value.trim();
+  const err = document.getElementById('reg-err');
+  if (!name || !empId || phone.length !== 10) { err.textContent = 'Please fill all fields correctly'; return; }
+  const btn = document.getElementById('reg-btn');
+  btn.classList.add('btn-loading'); btn.disabled = true;
+  err.textContent = '';
+  try {
+    // Check if empId or phone already exists
+    if (sb) {
+      const {data: existing} = await sb.from('employees').select('id').or(`id.eq.${empId},phone.eq.${phone}`);
+      if (existing?.length) { err.textContent = 'Employee ID or phone already registered'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+      // Create new employee
+      const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+      const {error} = await sb.from('employees').insert([{
+        id: empId, name, phone, department: dept || 'L&T',
+        campus: 'Powai Campus', wallet_balance: 0,
+        points_balance: 0, initials, meal_pass_active: true,
+        meal_pass_used: 0, meal_pass_limit: 30,
+      }]);
+      if (error) { err.textContent = 'Registration failed: ' + error.message; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+    }
+    toast('Registered! Please login with your phone number.', 'success', '✅');
+    document.getElementById('emp-register').style.display = 'none';
+    document.getElementById('emp-step1').style.display = '';
+    document.getElementById('emp-phone').value = phone;
+  } catch(e) {
+    err.textContent = 'Registration error. Try again.';
+  }
+  btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
 
@@ -2019,10 +2225,7 @@ function renderVendorChart() {
     <div class="card" style="margin-top:16px">
       <div class="card-title">📊 Today's Performance</div>
       <div class="bar-chart">
-        <div class="bar-row"><div class="bar-label">Dal Thali</div><div class="bar-track"><div class="bar-fill" style="width:88%"></div></div><div class="bar-val">34</div></div>
-        <div class="bar-row"><div class="bar-label">Biryani</div><div class="bar-track"><div class="bar-fill" style="width:62%;background:var(--amber)"></div></div><div class="bar-val">24</div></div>
-        <div class="bar-row"><div class="bar-label">Samosa</div><div class="bar-track"><div class="bar-fill" style="width:52%;background:var(--green)"></div></div><div class="bar-val">20</div></div>
-        <div class="bar-row"><div class="bar-label">Chai</div><div class="bar-track"><div class="bar-fill" style="width:96%;background:var(--purple)"></div></div><div class="bar-val">89</div></div>
+        <div class="bar-row"><div class="bar-label">Today's Orders</div><div class="bar-track"><div class="bar-fill" style="width:${Math.min(100,myOrders.length*5)}%"></div></div><div class="bar-val">${myOrders.length}</div></div>
       </div>
     </div>`;
 }
@@ -2152,6 +2355,19 @@ function startPoll() {
   S.pollInterval = setInterval(async () => {
     try {
       if (sb) {
+        // For employee — also poll canteen open/close status
+        if (S.role === 'employee') {
+          const {data: freshCans} = await sb.from('canteens').select('id,is_open,name,icon').order('id');
+          if (freshCans?.length) {
+            freshCans.forEach(fc => {
+              const c = S.canteens.find(x => x.id === fc.id);
+              if (c && c.is_open !== fc.is_open) {
+                c.is_open = fc.is_open;
+                renderHome(); // refresh canteen cards
+              }
+            });
+          }
+        }
         let q = sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
         if ((S.role==='vendor'||S.role==='kitchen') && S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
         const {data} = await q;
@@ -3231,12 +3447,15 @@ function startRealtime() {
       .channel('orders-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
         const o = payload.new;
+        // Filter by canteen for kitchen/vendor
+        if ((S.role==='vendor'||S.role==='kitchen') && S.user?.canteen_id && o.canteen_id !== S.user.canteen_id) return;
         if (!S.allOrders.find(ex => ex.id === o.id)) {
           S.allOrders.unshift({ ...o, items: [] });
-          // Fetch order items async
           if (sb) sb.from('order_items').select('*').eq('order_id', o.id).then(({ data }) => {
             const ord = S.allOrders.find(ex => ex.id === o.id);
             if (ord && data) ord.items = data;
+            if (S.role === 'vendor') renderVendor();
+            if (S.role === 'kitchen') renderKDS();
           }).catch(() => {});
           checkNewOrders();
           if (S.role === 'vendor') renderVendor();
