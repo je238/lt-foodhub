@@ -24,12 +24,17 @@ const fbAuth = firebase.auth();
 // reCAPTCHA verifier — invisible
 let recaptchaVerifier = null;
 function initRecaptcha() {
-  if (recaptchaVerifier) return;
+  // Always create fresh recaptcha
+  try {
+    if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; }
+  } catch(_) {}
   try {
     recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
       size: 'invisible',
-      callback: () => {}
+      callback: () => { console.log('[reCAPTCHA] solved'); },
+      'expired-callback': () => { recaptchaVerifier = null; }
     });
+    recaptchaVerifier.render(); // pre-render
   } catch(e) { console.warn('Recaptcha init failed:', e); }
 }
 </script>
@@ -689,13 +694,11 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
         <h2 class="login-title" style="margin-top:0">Register</h2>
         <p class="login-sub">Create your FoodHub account</p>
         <input class="linp" type="text" id="reg-name" placeholder="Full Name">
-        <input class="linp" type="text" id="reg-empid" placeholder="Employee ID (e.g. LT-EMP-12345)">
         <div style="display:flex;gap:8px;align-items:center">
           <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:13px 12px;font-size:14px;color:#fff;white-space:nowrap">🇮🇳 +91</div>
           <input class="linp" type="tel" id="reg-phone" placeholder="Mobile number" maxlength="10" style="margin-bottom:0;flex:1" oninput="this.value=this.value.replace(/\D/g,'')">
         </div>
-        <div style="font-size:11px;color:rgba(255,255,255,.35);margin:8px 0 12px">OTP will be sent to this number for verification</div>
-        <input class="linp" type="text" id="reg-dept" placeholder="Department (e.g. Engineering)">
+        <div style="font-size:11px;color:rgba(255,255,255,.35);margin:8px 0 16px">OTP will be sent to verify your number</div>
         <button class="login-btn" onclick="registerEmployee()" id="reg-btn" style="margin-top:4px"><span>Register &amp; Get OTP →</span></button>
         <div class="login-err" id="reg-err"></div>
         <div style="text-align:center;margin-top:10px">
@@ -1311,24 +1314,30 @@ async function sendOTP() {
     _otpPhone = phone;
     // Init recaptcha and send OTP via Firebase
     initRecaptcha();
+    await new Promise(r => setTimeout(r, 500)); // let recaptcha render
     const phoneNumber = '+91' + phone;
+    console.log('[OTP] Sending to', phoneNumber);
     _fbConfirmResult = await fbAuth.signInWithPhoneNumber(phoneNumber, recaptchaVerifier);
+    console.log('[OTP] Sent successfully');
     // Show OTP step
     document.getElementById('emp-step1').style.display = 'none';
     document.getElementById('emp-step2').style.display = '';
     document.getElementById('otp-sent-msg').textContent = `OTP sent to +91 ${phone.slice(0,5)}XXXXX`;
     document.getElementById('otp-1').focus();
-    toast('OTP sent! Check your SMS 📱', 'success', '✅');
+    toast('OTP sent to your phone! 📱', 'success', '✅');
   } catch(e) {
-    console.error('[Firebase OTP]', e);
-    // Reset recaptcha on error
-    if (recaptchaVerifier) { try { recaptchaVerifier.clear(); } catch(_){} recaptchaVerifier = null; }
+    console.error('[Firebase OTP Error]', e.code, e.message);
+    try { if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; } } catch(_){}
     if (e.code === 'auth/too-many-requests') {
-      err.textContent = 'Too many attempts. Try after 1 hour.';
+      err.textContent = 'Too many attempts. Wait 1 hour and try again.';
     } else if (e.code === 'auth/invalid-phone-number') {
-      err.textContent = 'Invalid phone number format.';
+      err.textContent = 'Invalid phone number. Check and try again.';
+    } else if (e.code === 'auth/captcha-check-failed') {
+      err.textContent = 'Security check failed. Refresh page and try again.';
+    } else if (e.code === 'auth/quota-exceeded') {
+      err.textContent = 'SMS limit reached. Try after some time.';
     } else {
-      err.textContent = 'Failed to send OTP. Try again.';
+      err.textContent = 'Failed to send OTP: ' + (e.message || 'Unknown error');
     }
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
@@ -1383,32 +1392,47 @@ async function resendOTP() {
 
 async function registerEmployee() {
   const name = document.getElementById('reg-name').value.trim();
-  const empId = document.getElementById('reg-empid').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();
-  const dept = document.getElementById('reg-dept').value.trim();
   const err = document.getElementById('reg-err');
-  if (!name || !empId || phone.length !== 10) { err.textContent = 'Please fill all fields correctly'; return; }
+  if (!name || phone.length !== 10) { err.textContent = 'Please enter your name and mobile number'; return; }
   const btn = document.getElementById('reg-btn');
   btn.classList.add('btn-loading'); btn.disabled = true;
   err.textContent = '';
   try {
+    // Generate employee ID automatically
+    const empId = 'LT-EMP-' + Date.now().toString().slice(-5);
     if (sb) {
-      const {data: existing} = await sb.from('employees').select('id').or(`id.eq.${empId},phone.eq.${phone}`);
-      if (existing?.length) { err.textContent = 'Employee ID or phone already registered'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+      // Check if phone already registered
+      const {data: existing} = await sb.from('employees').select('id').eq('phone', phone);
+      if (existing?.length) {
+        err.textContent = 'This phone number is already registered. Please login.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
       const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
       const {error} = await sb.from('employees').insert([{
-        id: empId, name, phone, department: dept || 'L&T',
-        campus: 'Powai Campus', wallet_balance: 0,
-        points_balance: 0, initials, meal_pass_active: true,
+        id: empId, name, phone,
+        department: 'L&T', campus: 'Powai Campus',
+        wallet_balance: 0, points_balance: 0,
+        initials, meal_pass_active: true,
         meal_pass_used: 0, meal_pass_limit: 30,
       }]);
       if (error) { err.textContent = 'Registration failed: ' + error.message; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
     }
-    toast('Registered successfully! Login with your phone.', 'success', '✅');
+    toast('Registered! Sending OTP now...', 'success', '✅');
+    // Auto-proceed to OTP — store emp data and send OTP directly
+    if (sb) {
+      const {data} = await sb.from('employees').select('*').eq('phone', phone).single();
+      _otpEmpData = data;
+    }
+    _otpPhone = phone;
     document.getElementById('emp-register').style.display = 'none';
     document.getElementById('emp-step1').style.display = '';
     document.getElementById('emp-phone').value = phone;
+    // Auto-send OTP
+    setTimeout(() => sendOTP(), 300);
   } catch(e) {
+    console.error('[Register]', e);
     err.textContent = 'Registration error. Try again.';
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
