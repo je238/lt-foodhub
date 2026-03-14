@@ -23,18 +23,31 @@ firebase.initializeApp(firebaseConfig);
 const fbAuth = firebase.auth();
 // reCAPTCHA verifier — invisible
 let recaptchaVerifier = null;
-function initRecaptcha() {
-  // Firebase recaptcha — lazy init
+let _recaptchaSolved = false;
+
+function initRecaptcha(callback) {
   try {
     if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; }
   } catch(_) {}
+  _recaptchaSolved = false;
+  const container = document.getElementById('recaptcha-container');
+  if (container) container.innerHTML = '';
   try {
     recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-      size: 'invisible',
-      callback: () => {},
-      'expired-callback': () => { recaptchaVerifier = null; }
+      size: 'normal',
+      callback: (token) => {
+        _recaptchaSolved = true;
+        console.log('[reCAPTCHA] solved');
+        if (callback) callback();
+      },
+      'expired-callback': () => {
+        _recaptchaSolved = false;
+        recaptchaVerifier = null;
+        toast('Security check expired. Please verify again.', 'warn', '⚠️');
+      }
     });
-  } catch(e) { console.warn('Recaptcha init:', e); }
+    recaptchaVerifier.render();
+  } catch(e) { console.warn('Recaptcha init failed:', e); }
 }
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -719,7 +732,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <button class="login-btn" onclick="doLogin()" id="login-btn"><span>Sign In →</span></button>
       <div class="login-err" id="login-err"></div>
     </div>
-    <div id="recaptcha-container"></div>
+    <!-- reCAPTCHA renders here when sending OTP -->
+    <div id="recaptcha-container" style="margin-top:12px;display:flex;justify-content:center"></div>
   </div>
 </div>
 ══════════════════════════════════ -->
@@ -1297,51 +1311,76 @@ function otpNext(el, nextId) {
 }
 
 async function sendOTP() {
-  const dbg = document.getElementById('debug-status');
   const phone = document.getElementById('emp-phone')?.value?.trim() || '';
   const err = document.getElementById('login-err');
   const btn = document.getElementById('send-otp-btn');
-  if(dbg) dbg.textContent = 'Step 1: Button clicked, phone=' + phone;
+  const dbg = document.getElementById('debug-status');
   err.textContent = '';
-  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit number'; if(dbg) dbg.textContent = 'Failed: phone length = ' + phone.length; return; }
+  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit number'; return; }
   btn.classList.add('btn-loading'); btn.disabled = true;
-  if(dbg) dbg.textContent = 'Step 2: Checking DB...';
+  if(dbg) dbg.textContent = 'Checking...';
   try {
+    // Check employee in DB first
     let emp = null;
     if (sb) {
-      if(dbg) dbg.textContent = 'Step 3: Querying Supabase...';
       const res = await sb.from('employees').select('*').eq('phone', phone).single();
-      if(dbg) dbg.textContent = 'Step 4: DB result = ' + (res.data ? 'found ' + res.data.name : 'not found, error=' + (res.error?.message||'none'));
       emp = res.data;
-    } else {
-      if(dbg) dbg.textContent = 'ERROR: Supabase not connected!';
     }
     if (!emp) {
       err.textContent = 'Number not registered. Please register first.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
+      if(dbg) dbg.textContent = '';
       return;
     }
-    const otp = String(Math.floor(1000 + Math.random() * 9000));
-    _otpCode = otp;
-    _otpPhone = phone;
     _otpEmpData = emp;
-    if(dbg) dbg.textContent = 'Step 5: OTP generated = ' + otp;
-    if (sb) await sb.from('employees').update({temp_otp: otp, otp_created_at: new Date().toISOString()}).eq('phone', phone);
-    document.getElementById('emp-step1').style.display = 'none';
-    document.getElementById('emp-step2').style.display = '';
-    document.getElementById('otp-big').textContent = otp;
-    otp.split('').forEach((d,i) => {
-      const box = document.getElementById('otp-' + (i+1));
-      if (box) box.value = d;
+    _otpPhone = phone;
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+    if(dbg) dbg.textContent = '';
+    // Show recaptcha and send Firebase OTP
+    err.textContent = '';
+    initRecaptcha(async () => {
+      // Called when recaptcha solved
+      btn.classList.add('btn-loading'); btn.disabled = true;
+      try {
+        const phoneNumber = '+91' + phone;
+        const confirmResult = await fbAuth.signInWithPhoneNumber(phoneNumber, recaptchaVerifier);
+        _fbConfirmResult = confirmResult;
+        // Hide recaptcha
+        const rc = document.getElementById('recaptcha-container');
+        if(rc) rc.innerHTML = '';
+        // Show OTP step
+        document.getElementById('emp-step1').style.display = 'none';
+        document.getElementById('emp-step2').style.display = '';
+        document.getElementById('otp-big').textContent = '----';
+        document.getElementById('otp-big').style.fontSize = '24px';
+        document.getElementById('otp-big').textContent = 'Check your SMS';
+        ['otp-1','otp-2','otp-3','otp-4'].forEach(id => { const b = document.getElementById(id); if(b) b.value=''; });
+        document.getElementById('otp-1')?.focus();
+        document.getElementById('otp-err').textContent = '';
+        toast('OTP sent to +91' + phone + ' 📱', 'success', '✅');
+      } catch(e) {
+        console.error('[Firebase SMS]', e);
+        // Fallback to screen OTP
+        const otp = String(Math.floor(1000 + Math.random() * 9000));
+        _otpCode = otp;
+        _fbConfirmResult = null;
+        if(sb) { try { await sb.from('employees').update({temp_otp: otp, otp_created_at: new Date().toISOString()}).eq('phone', phone); } catch(_){} }
+        const rc = document.getElementById('recaptcha-container');
+        if(rc) rc.innerHTML = '';
+        document.getElementById('emp-step1').style.display = 'none';
+        document.getElementById('emp-step2').style.display = '';
+        document.getElementById('otp-big').textContent = otp;
+        otp.split('').forEach((d,i) => { const b = document.getElementById('otp-'+(i+1)); if(b) b.value=d; });
+        document.getElementById('otp-err').textContent = '';
+        toast('OTP: ' + otp + ' (SMS unavailable)', 'warn', '🔐');
+      }
+      btn.classList.remove('btn-loading'); btn.disabled = false;
     });
-    document.getElementById('otp-err').textContent = '';
-    toast('OTP: ' + otp, 'success', '🔐');
   } catch(e) {
     console.error('[sendOTP]', e);
-    if(dbg) dbg.textContent = 'CRASH: ' + e.message;
     err.textContent = 'Error: ' + (e.message || 'Try again');
+    btn.classList.remove('btn-loading'); btn.disabled = false;
   }
-  btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
 async function verifyOTP() {
@@ -1352,20 +1391,28 @@ async function verifyOTP() {
   if (code.length !== 4) { err.textContent = 'Enter 4-digit OTP'; return; }
   btn.classList.add('btn-loading'); btn.disabled = true;
   try {
-    // Verify code
-    if (code !== _otpCode) {
-      err.textContent = 'Wrong OTP. Check the number shown above.';
-      btn.classList.remove('btn-loading'); btn.disabled = false;
-      return;
-    }
     if (!_otpEmpData) {
       err.textContent = 'Session expired. Go back and try again.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
-    // Clear OTP from DB
-    if (sb) {
-      try { await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone); } catch(_){}
+    // Verify — Firebase SMS or fallback screen OTP
+    if (_fbConfirmResult) {
+      try {
+        await _fbConfirmResult.confirm(code);
+      } catch(fbErr) {
+        err.textContent = fbErr.code === 'auth/invalid-verification-code' ? 'Wrong OTP. Check your SMS.' : 'OTP expired. Go back and try again.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
+    } else {
+      // Screen OTP fallback
+      if (code !== _otpCode) {
+        err.textContent = 'Wrong OTP. Check the number shown on screen.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
+      if (sb) { try { await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone); } catch(_){} }
     }
     // Login
     S.user = _otpEmpData;
