@@ -1346,29 +1346,31 @@ async function verifyOTP() {
   const code = ['otp-1','otp-2','otp-3','otp-4'].map(id => document.getElementById(id)?.value||'').join('');
   const err = document.getElementById('otp-err');
   if (code.length !== 4) { err.textContent = 'Enter 4-digit OTP'; return; }
-  if (!_fbConfirmResult) { err.textContent = 'Session expired. Go back and resend OTP.'; return; }
   const btn = document.getElementById('verify-otp-btn');
   btn.classList.add('btn-loading'); btn.disabled = true;
   err.textContent = '';
   try {
-    // Verify OTP — Firebase or custom fallback
-    if (_fbConfirmResult) {
-      await _fbConfirmResult.confirm(code);
-    } else {
-      // Custom OTP verify via Supabase
-      if (sb) {
-        const {data} = await sb.from('employees').select('temp_otp, otp_created_at').eq('phone', _otpPhone).single();
-        if (!data?.temp_otp) { err.textContent = 'OTP expired. Go back and try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-        const expired = (new Date() - new Date(data.otp_created_at)) > 10 * 60 * 1000;
-        if (expired) { err.textContent = 'OTP expired. Go back and try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-        if (data.temp_otp !== code) { err.textContent = 'Wrong OTP. Check and try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-        await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone);
-      } else if (code !== _otpCode) {
-        err.textContent = 'Wrong OTP.'; btn.classList.remove('btn-loading'); btn.disabled = false; return;
+    // Verify OTP against stored code
+    if (code !== _otpCode) {
+      // Double check against Supabase
+      let valid = false;
+      if (sb && _otpPhone) {
+        const {data} = await sb.from('employees').select('temp_otp').eq('phone', _otpPhone).single();
+        if (data?.temp_otp === code) valid = true;
+      }
+      if (!valid) {
+        err.textContent = 'Wrong OTP. Try again.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
       }
     }
-    // OTP verified — now login employee
+    // OTP correct — clear it and login
+    if (sb && _otpPhone) {
+      await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone);
+    }
+    // Load fresh data
     const emp = _otpEmpData;
+    if (!emp) { err.textContent = 'Session expired. Go back and try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
     S.user = emp; S.role = 'employee';
     if (sb) {
       const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available', true).limit(500);
@@ -1379,16 +1381,9 @@ async function verifyOTP() {
     renderHome();
     goScreen('s-home');
     toast(`Welcome, ${emp.name.split(' ')[0]}! 👋`, 'success', '✅');
-    _fbConfirmResult = null;
   } catch(e) {
     console.error('[OTP Verify]', e);
-    if (e.code === 'auth/invalid-verification-code') {
-      err.textContent = 'Wrong OTP. Check your SMS and try again.';
-    } else if (e.code === 'auth/code-expired') {
-      err.textContent = 'OTP expired. Go back and resend.';
-    } else {
-      err.textContent = 'Verification failed. Try again.';
-    }
+    err.textContent = 'Verification failed: ' + (e.message || 'Try again');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
