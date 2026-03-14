@@ -663,6 +663,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
         </div>
         <div style="height:10px"></div>
         <button class="login-btn" id="send-otp-btn" onclick="sendOTP()"><span>Get OTP →</span></button>
+        <div style="font-size:11px;color:rgba(255,255,255,.3);text-align:center;margin-top:6px" id="debug-status">Ready</div>
         <div class="login-err" id="login-err" style="margin-top:8px"></div>
         <div style="text-align:center;margin-top:14px">
           <span style="font-size:12px;color:rgba(255,255,255,.4)">New here? </span>
@@ -1296,44 +1297,48 @@ function otpNext(el, nextId) {
 }
 
 async function sendOTP() {
+  const dbg = document.getElementById('debug-status');
   const phone = document.getElementById('emp-phone')?.value?.trim() || '';
   const err = document.getElementById('login-err');
   const btn = document.getElementById('send-otp-btn');
+  if(dbg) dbg.textContent = 'Step 1: Button clicked, phone=' + phone;
   err.textContent = '';
-  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit number'; return; }
+  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit number'; if(dbg) dbg.textContent = 'Failed: phone length = ' + phone.length; return; }
   btn.classList.add('btn-loading'); btn.disabled = true;
+  if(dbg) dbg.textContent = 'Step 2: Checking DB...';
   try {
-    // Check employee in DB
     let emp = null;
     if (sb) {
+      if(dbg) dbg.textContent = 'Step 3: Querying Supabase...';
       const res = await sb.from('employees').select('*').eq('phone', phone).single();
+      if(dbg) dbg.textContent = 'Step 4: DB result = ' + (res.data ? 'found ' + res.data.name : 'not found, error=' + (res.error?.message||'none'));
       emp = res.data;
+    } else {
+      if(dbg) dbg.textContent = 'ERROR: Supabase not connected!';
     }
     if (!emp) {
       err.textContent = 'Number not registered. Please register first.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
-    // Generate OTP
     const otp = String(Math.floor(1000 + Math.random() * 9000));
     _otpCode = otp;
     _otpPhone = phone;
     _otpEmpData = emp;
-    // Save to DB
+    if(dbg) dbg.textContent = 'Step 5: OTP generated = ' + otp;
     if (sb) await sb.from('employees').update({temp_otp: otp, otp_created_at: new Date().toISOString()}).eq('phone', phone);
-    // Show OTP on screen
     document.getElementById('emp-step1').style.display = 'none';
     document.getElementById('emp-step2').style.display = '';
     document.getElementById('otp-big').textContent = otp;
-    // Auto fill boxes
     otp.split('').forEach((d,i) => {
       const box = document.getElementById('otp-' + (i+1));
       if (box) box.value = d;
     });
     document.getElementById('otp-err').textContent = '';
-    toast('OTP generated! 🔐', 'success', '✅');
+    toast('OTP: ' + otp, 'success', '🔐');
   } catch(e) {
     console.error('[sendOTP]', e);
+    if(dbg) dbg.textContent = 'CRASH: ' + e.message;
     err.textContent = 'Error: ' + (e.message || 'Try again');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
@@ -3224,49 +3229,6 @@ function showForgotPassword(){
       </div>
       <button class="btn btn-primary btn-full" onclick="sendOTP()">Send OTP →</button>
       <div id="fp-err" class="login-err"></div>
-    </div>`);
-}
-function sendOTP(){
-  const id = document.getElementById('fp-id')?.value.trim();
-  const phone = document.getElementById('fp-phone')?.value.trim();
-  if(!id||!phone){ setEl('fp-err','Please fill all fields.'); return; }
-  // Simulate OTP send
-  showModal(`
-    <div class="modal-head">
-      <span class="modal-title">Enter OTP</span>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="text-align:center;padding:8px 0 20px">
-        <div style="font-size:40px;margin-bottom:10px">📱</div>
-        <p style="font-size:13px;color:var(--muted)">OTP sent to ${phone}</p>
-        <p style="font-size:11px;color:var(--muted);margin-top:4px">Valid for 5 minutes</p>
-      </div>
-      <div style="display:flex;gap:10px;justify-content:center;margin:20px 0">
-        ${[0,1,2,3,4,5].map(i=>`<input id="otp-${i}" class="form-input" type="text" maxlength="1" style="width:44px;text-align:center;font-size:20px;font-weight:800;padding:10px 6px" oninput="otpNext(${i})">`).join('')}
-      </div>
-      <button class="btn btn-primary btn-full" onclick="verifyOTP()">Verify & Reset</button>
-      <div style="text-align:center;margin-top:12px;font-size:12px;color:var(--muted)">Didn't receive? <span style="color:var(--brand);cursor:pointer;font-weight:700" onclick="toast('New OTP sent!','success','📱')">Resend OTP</span></div>
-    </div>`);
-  setTimeout(()=>document.getElementById('otp-0')?.focus(), 100);
-}
-function otpNext(i){
-  const val = document.getElementById('otp-'+i)?.value;
-  if(val && i<5) document.getElementById('otp-'+(i+1))?.focus();
-}
-function verifyOTP(){
-  const otp = [0,1,2,3,4,5].map(i=>document.getElementById('otp-'+i)?.value||'').join('');
-  if(otp.length<6){ toast('Enter 6-digit OTP','error','⚠️'); return; }
-  // Demo: any OTP works
-  showModal(`
-    <div class="modal-head">
-      <span class="modal-title">New Password</span>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group"><label class="form-label">New Password</label><input class="form-input" id="np-pw" type="password" placeholder="Min 8 characters"></div>
-      <div class="form-group"><label class="form-label">Confirm Password</label><input class="form-input" id="np-pw2" type="password" placeholder="Re-enter password"></div>
-      <button class="btn btn-primary btn-full" onclick="confirmNewPw()">Set Password</button>
     </div>`);
 }
 function confirmNewPw(){
