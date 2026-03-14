@@ -1957,32 +1957,7 @@ async function placeOrder() {
   if (badgeEl) { badgeEl.textContent = S.orders.filter(o=>o.status!=='done').length; badgeEl.classList.remove('hidden'); }
   generateQR(token, orderId);
   // Simulate kitchen update after 2s
-  setTimeout(() => {
-    const o = S.orders.find(o => o.id === orderId);
-    if (o && o.status === 'new') {
-      addNotif(`Order #${token} is being prepared 👨‍🍳`, '⏳');
-    }
-  }, 5000);
-  setTimeout(() => {
-    const o = S.orders.find(o => o.id === orderId);
-    if (o && (o.status === 'new' || o.status === 'preparing')) {
-      o.status = 'preparing';
-      const vo = S.allOrders.find(o2 => o2.id === orderId);
-      if (vo) vo.status = 'preparing';
-    }
-  }, 8000);
-  setTimeout(() => {
-    const o = S.orders.find(o => o.id === orderId);
-    if (o) {
-      o.status = 'ready';
-      const vo = S.allOrders.find(o2 => o2.id === orderId);
-      if (vo) vo.status = 'ready';
-      addNotif(`🔔 Order #${token} is READY for pickup!`, '✅');
-      toast(`Order #${token} is ready for pickup! 🎉`, 'success', '✅');
-      const badge = document.getElementById('ord-badge');
-      if (badge) { badge.textContent = S.orders.filter(o2=>o2.status==='ready').length; badge.classList.remove('hidden'); }
-    }
-  }, 30000);
+  // No auto status changes — kitchen controls status manually
   S.cart = [];
   updateCartFloat();
   btn.classList.remove('btn-loading'); btn.disabled = false;
@@ -2331,11 +2306,13 @@ function vendorFilter(f, el) {
 function renderKDS() {
   const myCid = S.user?.canteen_id;
   const myOrders = S.allOrders.filter(o => !myCid || o.canteen_id === myCid);
-  const orders = myOrders.filter(o => {
+  const activeOrders = myOrders.filter(o => {
     if (S.kdsFilter === 'all') return ['new','preparing','ready'].includes(o.status);
     if (['new','preparing','ready'].includes(S.kdsFilter)) return o.status === S.kdsFilter;
     return o.pickup_slot === S.kdsFilter && o.status !== 'done';
   });
+  // Completed orders today
+  const doneOrders = myOrders.filter(o => o.status === 'done').slice(0, 10);
   const newCnt = myOrders.filter(o => o.status==='new').length;
   const prepCnt = myOrders.filter(o => o.status==='preparing').length;
   const readyCnt = myOrders.filter(o => o.status==='ready').length;
@@ -2346,41 +2323,49 @@ function renderKDS() {
   setEl('kds-sub', `Active Orders · Refreshed ${Math.floor(elapsed/1000)}s ago`);
   const el = document.getElementById('kds-body');
   if (!el) return;
-  if (orders.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div><div class="empty-title">All caught up!</div><div class="empty-sub">No active orders for this filter</div></div>';
-    return;
+  let html = '';
+  if (activeOrders.length === 0) {
+    html += '<div class="empty"><div class="empty-icon">🎉</div><div class="empty-title">All caught up!</div><div class="empty-sub">No active orders</div></div>';
+  } else {
+    html += activeOrders.map(o => renderKitchenCard(o, 'kitchen')).join('');
   }
-  el.innerHTML = orders.map(o => renderKitchenCard(o, 'kitchen')).join('');
+  // Show completed orders section
+  if (doneOrders.length > 0) {
+    html += `<div style="margin:20px 0 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">✅ Completed Today (${doneOrders.length})</div>`;
+    html += doneOrders.map(o => renderKitchenCard(o, 'kitchen')).join('');
+  }
+  el.innerHTML = html;
 }
 
 function renderKitchenCard(o, mode) {
   const elapsed = o.created_at ? Math.floor((new Date()-new Date(o.created_at))/60000) : 0;
   const timerClass = elapsed > 15 ? 'over' : elapsed > 8 ? 'warn' : '';
-  const statusClass = o.status;
-  const tokenClass = o.status === 'new' ? 'new-order' : o.status;
   const items = (o.items || o.order_items || []);
   const canteen = S.canteens.find(c => c.id === (o.canteen_id)) || {};
+  const isDone = o.status === 'done';
   return `
-    <div class="kitchen-card ${statusClass}">
+    <div class="kitchen-card ${o.status}" style="${isDone?'opacity:.55;':''}">
       <div class="kitchen-head">
         <div>
           <div style="display:flex;align-items:baseline;gap:8px">
-            <div class="kitchen-token ${tokenClass}">#${o.token_number||o.token}</div>
+            <div class="kitchen-token ${isDone?'done':o.status==='new'?'new-order':o.status}">#${o.token_number||o.token}</div>
             <div style="background:var(--light2);border-radius:7px;padding:3px 9px;font-size:11px;font-weight:700;color:var(--mid)">${canteen.icon||'🍛'} ${o.canteen_name||canteen.name||'Canteen'}</div>
           </div>
-          <div class="kitchen-meta">${o.employee_name||o.emp||'Employee'} · Slot: ${o.pickup_slot||'—'}</div>
+          <div class="kitchen-meta">${o.employee_name||'Employee'} · Slot: ${o.pickup_slot||'—'}</div>
         </div>
-        <span class="badge ${o.status==='new'?'badge-new':o.status==='preparing'?'badge-prep':'badge-ready'}">${o.status==='new'?'🆕 New':o.status==='preparing'?'⏳ Preparing':'✅ Ready'}</span>
+        <span class="badge ${isDone?'badge-done':o.status==='new'?'badge-new':o.status==='preparing'?'badge-prep':'badge-ready'}">
+          ${isDone?'📦 Done':o.status==='new'?'🆕 New':o.status==='preparing'?'⏳ Preparing':'✅ Ready'}
+        </span>
       </div>
       <div class="kitchen-items">
         ${items.map(i => `<div class="kitchen-item-row"><strong>${i.emoji||''} ${i.item_name||i.name}</strong><span>×${i.quantity||i.qty}</span></div>`).join('')}
       </div>
-      <div class="kitchen-actions">
-        ${o.status==='new'?`<button class="btn btn-secondary btn-sm" style="flex:1" onclick="${mode}Action('${o.id}','preparing')">✓ Accept & Start</button>`:''}
+      ${!isDone ? `<div class="kitchen-actions">
+        ${o.status==='new'?`<button class="btn btn-secondary btn-sm" style="flex:1" onclick="${mode}Action('${o.id}','preparing')">✓ Accept & Start</button><button class="btn btn-ghost btn-sm" onclick="${mode}Action('${o.id}','done')">✕ Bump</button>`:''}
         ${o.status==='preparing'?`<button class="btn btn-green btn-sm" style="flex:1" onclick="${mode}Action('${o.id}','ready')">🔔 Mark Ready</button>`:''}
-        ${o.status==='ready'?`<div style="font-size:12px;color:var(--green2);font-weight:700;padding:6px 0">✅ Waiting for employee pickup</div>`:''}
-      </div>
-      ${elapsed>0?`<div class="kitchen-timer${timerClass?' '+timerClass:''}">⏱ ${elapsed<1?'Just now':elapsed+'m ago'}</div>`:''}
+        ${o.status==='ready'?`<button class="btn btn-primary btn-sm" style="flex:1;background:var(--green2)" onclick="${mode}Action('${o.id}','done')">📦 Mark Picked Up</button>`:''}
+      </div>` : ''}
+      ${elapsed>0&&!isDone?`<div class="kitchen-timer${timerClass?' '+timerClass:''}">⏱ ${elapsed<1?'Just now':elapsed+'m ago'}</div>`:''}
     </div>`;
 }
 
