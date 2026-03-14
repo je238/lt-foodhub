@@ -2550,17 +2550,21 @@ function startPoll() {
   S.pollInterval = setInterval(async () => {
     try {
       if (sb) {
-        // For employee — also poll canteen open/close status
+        // For employee — always poll canteen open/close status
         if (S.role === 'employee') {
           const {data: freshCans} = await sb.from('canteens').select('id,is_open,name,icon').order('id');
           if (freshCans?.length) {
+            let changed = false;
             freshCans.forEach(fc => {
               const c = S.canteens.find(x => x.id === fc.id);
               if (c && c.is_open !== fc.is_open) {
                 c.is_open = fc.is_open;
-                renderHome(); // refresh canteen cards
+                changed = true;
+                if (!fc.is_open) toast(`${fc.icon} ${fc.name} is now CLOSED`, 'warn', '🔴');
+                else toast(`${fc.icon} ${fc.name} is now OPEN`, 'success', '🟢');
               }
             });
+            if (changed) renderHome(); // refresh canteen cards
           }
         }
         let q = sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
@@ -2611,7 +2615,7 @@ function startPoll() {
         }
       } catch(e) {}
     }
-  }, 15000);
+  }, 5000);
 }
 
 // ═════════════════════════════════════
@@ -3630,7 +3634,20 @@ function startRealtime() {
   if (!sb || _realtimeChannel) return;
   try {
     _realtimeChannel = sb
-      .channel('orders-realtime')
+      .channel('foodhub-realtime')
+      // Canteen open/close — employee sees instantly
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'canteens' }, payload => {
+        const fc = payload.new;
+        const c = S.canteens.find(x => x.id === fc.id);
+        if (c && c.is_open !== fc.is_open) {
+          c.is_open = fc.is_open;
+          if (S.role === 'employee') {
+            renderHome();
+            if (!fc.is_open) toast(`${fc.icon||'🍽️'} ${fc.name} is now CLOSED`, 'warn', '🔴');
+            else toast(`${fc.icon||'🍽️'} ${fc.name} is now OPEN`, 'success', '🟢');
+          }
+        }
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
         const o = payload.new;
         // Filter by canteen for kitchen/vendor
