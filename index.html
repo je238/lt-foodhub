@@ -916,23 +916,79 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 <!-- ══════════════════════════════════
      SUCCESS SCREEN
 ══════════════════════════════════ -->
-<div class="screen" id="s-success">
-  <div class="success-wrap">
-    <div class="success-anim">✅</div>
-    <div class="success-title">Order Placed!</div>
-    <div class="success-sub" id="suc-sub">Food will be ready at 12:30 PM</div>
-    <div class="token-card">
-      <div class="token-label" id="suc-canteen-token-label">Main Canteen · Today's Token</div>
-      <div class="token-num" id="suc-tok">1</div>
-      <div class="token-info" id="suc-can">🍛 Main Canteen</div>
-      <div class="token-time" id="suc-time">⏰ Ready by 12:30 PM</div>
+<div class="screen" id="s-success" style="background:#f8f9fa;overflow-y:auto">
+  <div style="max-width:420px;width:100%;margin:0 auto;padding:16px 14px 30px">
+
+    <!-- Header -->
+    <div style="text-align:center;padding:20px 0 14px">
+      <div style="font-size:52px;margin-bottom:8px">✅</div>
+      <div style="font-size:22px;font-weight:800;color:var(--dark);font-family:var(--fh)">Order Confirmed!</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px" id="suc-sub">Show this to kitchen staff</div>
     </div>
-    <div class="qr-wrap">
-      <div class="qr-grid" id="qr-grid"></div>
-      <div class="qr-lbl">Show this QR at the counter for quick pickup</div>
+
+    <!-- Token Card — BIG and clear to show at counter -->
+    <div id="suc-token-area" style="background:linear-gradient(135deg,#E8380D,#c62d00);border-radius:20px;padding:20px;margin-bottom:14px;color:#fff;text-align:center">
+      <div style="font-size:12px;font-weight:700;opacity:.8;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px" id="suc-canteen-token-label">Your Token</div>
+      <div style="font-size:64px;font-weight:900;font-family:var(--fh);line-height:1;margin-bottom:6px" id="suc-tok">—</div>
+      <div style="font-size:14px;font-weight:600;opacity:.9;margin-bottom:4px" id="suc-can">Counter</div>
+      <div style="font-size:12px;opacity:.75" id="suc-time">⏰ Ready by 12:30 PM</div>
+      <!-- Multi-counter breakdown -->
+      <div id="suc-counter-breakdown" style="margin-top:10px;font-size:12px;opacity:.85;line-height:2;border-top:1px solid rgba(255,255,255,.2);padding-top:10px;display:none"></div>
     </div>
-    <button class="btn btn-primary btn-full" onclick="afterSuccess()">Back to Home</button>
-    <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="rateOrder()">⭐ Rate this order</button>
+
+    <!-- Full Invoice -->
+    <div style="background:#fff;border-radius:16px;border:1px solid var(--border);padding:18px;margin-bottom:14px">
+      <!-- Invoice Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px dashed var(--border);margin-bottom:12px">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:var(--dark);font-family:var(--fh)">L&T FoodHub</div>
+          <div style="font-size:11px;color:var(--muted)">Powai Campus Canteen</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--muted)" id="inv-date">—</div>
+          <div style="font-size:11px;color:var(--brand);font-weight:700" id="inv-orderid">—</div>
+        </div>
+      </div>
+      <!-- Employee Info -->
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px dashed var(--border)">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Employee</div>
+        <div style="font-weight:700;font-size:14px;color:var(--dark)" id="inv-emp">—</div>
+        <div style="font-size:11px;color:var(--muted)" id="inv-empid">—</div>
+      </div>
+      <!-- Items -->
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px dashed var(--border)">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Items Ordered</div>
+        <div id="inv-items"></div>
+      </div>
+      <!-- Totals -->
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:13px;color:var(--mid)">Subtotal</div>
+        <div style="font-size:13px;font-weight:600" id="inv-subtotal">₹0</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;color:var(--mid)">Payment</div>
+        <div style="font-size:13px;font-weight:600;color:var(--green2)">✅ FoodHub Points</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px;background:var(--light2);border-radius:10px">
+        <div style="font-size:15px;font-weight:800;color:var(--dark)">Total Paid</div>
+        <div style="font-size:15px;font-weight:800;color:var(--brand)" id="inv-total">₹0</div>
+      </div>
+      <!-- Slot -->
+      <div style="text-align:center;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)">
+        <div style="font-size:12px;color:var(--muted)">Pickup Slot: <strong id="inv-slot">—</strong></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Show Token Number to Kitchen Staff</div>
+      </div>
+    </div>
+
+    <!-- QR Code -->
+    <div style="background:#fff;border-radius:16px;border:1px solid var(--border);padding:16px;margin-bottom:14px;text-align:center">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Scan for quick verification</div>
+      <div id="qr-grid" style="display:flex;justify-content:center"></div>
+    </div>
+
+    <!-- Buttons -->
+    <button class="btn btn-primary btn-full" onclick="goToMyOrders()" style="margin-bottom:8px">📋 View My Orders</button>
+    <button class="btn btn-ghost btn-full" onclick="afterSuccess()">← Back to Menu</button>
   </div>
 </div>
 
@@ -1954,16 +2010,39 @@ async function placeOrder() {
   setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
   const firstOrder = splitOrders[0];
   const numCounters = splitOrders.length;
+  // Token display
   setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & '));
   setEl('suc-can', numCounters > 1 ? `${numCounters} Counters` : firstOrder.canteen_icon+' '+firstOrder.canteen_name);
   setEl('suc-time', '⏰ Ready by ' + S.selSlot);
-  setEl('suc-sub', 'Pickup by ' + S.selSlot);
-  setEl('suc-canteen-token-label', numCounters > 1 ? 'Your Tokens by Counter' : firstOrder.canteen_name + ' · Token');
-  // Show per-counter token breakdown
+  setEl('suc-sub', 'Show this screen to kitchen staff');
+  setEl('suc-canteen-token-label', numCounters > 1 ? 'Your Tokens' : firstOrder.canteen_name + ' · Token');
+  // Multi-counter breakdown
   if (numCounters > 1) {
-    const breakdown = splitOrders.map(o => `${o.canteen_icon} ${o.canteen_name} → Token #${o.token_number}`).join('<br>');
-    const label = document.getElementById('suc-canteen-token-label');
-    if (label) label.insertAdjacentHTML('afterend', `<div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:2;text-align:center">${breakdown}</div>`);
+    const breakdown = splitOrders.map(o => `${o.canteen_icon} ${o.canteen_name} → #${o.token_number}`).join('<br>');
+    const bd = document.getElementById('suc-counter-breakdown');
+    if (bd) { bd.innerHTML = breakdown; bd.style.display = ''; }
+  }
+  // Fill invoice
+  const now = new Date();
+  setEl('inv-date', now.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) + ' ' + now.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'}));
+  setEl('inv-orderid', 'Order #' + splitOrders.map(o=>o.token_number).join('/'));
+  setEl('inv-emp', S.user.name);
+  setEl('inv-empid', S.user.id + ' · ' + (S.user.department||'L&T'));
+  setEl('inv-slot', S.selSlot);
+  setEl('inv-subtotal', '₹' + youPay);
+  setEl('inv-total', '₹' + youPay);
+  // Invoice items
+  const invItemsEl = document.getElementById('inv-items');
+  if (invItemsEl) {
+    const allItems = splitOrders.flatMap(o => o.items.map(i => ({...i, counter: o.canteen_name, icon: o.canteen_icon})));
+    invItemsEl.innerHTML = allItems.map(i => `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--dark)">${i.emoji||''} ${i.item_name||i.name}</div>
+          <div style="font-size:11px;color:var(--muted)">${i.counter} × ${i.quantity||i.qty}</div>
+        </div>
+        <div style="font-size:13px;font-weight:700;color:var(--dark)">₹${(i.price||i.unit_price) * (i.quantity||i.qty)}</div>
+      </div>`).join('');
   }
   setEl('h-orders-count', `📋 ${S.orders.length} orders today`);
   const orderId = firstOrder.id;
@@ -1988,6 +2067,17 @@ async function placeOrder() {
 function afterSuccess() {
   renderHome();
   goScreen('s-home');
+}
+
+function goToMyOrders() {
+  renderHome();
+  goScreen('s-home');
+  // Switch to orders tab
+  setTimeout(() => {
+    const ordersTab = document.querySelector('.bnav-item[onclick*="orders"]');
+    if (ordersTab) ordersTab.click();
+    else goScreen('s-orders');
+  }, 100);
 }
 
 // ═════════════════════════════════════
