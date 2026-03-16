@@ -963,9 +963,17 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
         <div style="font-size:13px;color:var(--mid)">GST (5%)</div>
         <div style="font-size:13px;font-weight:600" id="inv-gst">₹0</div>
       </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:12px;color:var(--muted)">Platform fee</div>
+        <div style="font-size:12px;font-weight:600" id="inv-platform">₹0</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:11px;color:var(--muted)">GST on platform fee (18%)</div>
+        <div style="font-size:11px;font-weight:500;color:var(--muted)" id="inv-platform-gst">₹0</div>
+      </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:13px;color:var(--mid)">Payment</div>
-        <div style="font-size:13px;font-weight:600;color:var(--green2)">✅ FoodHub Points</div>
+        <div style="font-size:13px;font-weight:600;color:var(--green2)">✅ FoodHub Wallet</div>
       </div>
       <div style="display:flex;justify-content:space-between;padding:10px;background:var(--light2);border-radius:10px">
         <div style="font-size:15px;font-weight:800;color:var(--dark)">Total Paid</div>
@@ -1833,11 +1841,23 @@ function updateCartFloat() {
   setEl('cf-price', '₹'+price);
 }
 
+// Fee calculation constants
+const PLATFORM_FEE = 3;       // ₹3 flat platform fee
+const FOOD_GST_RATE = 0.05;   // 5% GST on food
+const PLATFORM_GST_RATE = 0.18; // 18% GST on platform fee
+
+function calcFees(itemTotal) {
+  const foodGst = Math.round(itemTotal * FOOD_GST_RATE * 100) / 100;
+  const platformFee = PLATFORM_FEE;
+  const platformGst = Math.round(platformFee * PLATFORM_GST_RATE * 100) / 100;
+  const grandTotal = Math.round((itemTotal + foodGst + platformFee + platformGst) * 100) / 100;
+  return { itemTotal, foodGst, platformFee, platformGst, grandTotal };
+}
+
 function renderCart() {
   if (!S.user) return;
   const iTotal = S.cart.reduce((s,i) => s+i.price*i.qty, 0);
-  const gst = Math.round(iTotal * 0.05);
-  const youPay = iTotal + gst;
+  const fees = calcFees(iTotal);
   setEl('pay-bal-lbl', 'Balance: ₹' + Math.round(S.user.wallet_balance));
   const cartList = document.getElementById('cart-list');
   if (S.cart.length === 0) {
@@ -1861,8 +1881,10 @@ function renderCart() {
   const sumEl = document.getElementById('cart-summary');
   if(sumEl) sumEl.innerHTML = `
     <div class="summary-row"><span>Items (${S.cart.reduce((s,i)=>s+i.qty,0)})</span><span>₹${iTotal}</span></div>
-    <div class="summary-row"><span>GST (5%)</span><span>₹${gst}</span></div>
-    <div class="summary-row total"><span>Total Payable</span><span>₹${youPay}</span></div>`;
+    <div class="summary-row"><span>GST (5%)</span><span>₹${fees.foodGst.toFixed(2)}</span></div>
+    <div class="summary-row" style="font-size:12px"><span>Platform fee</span><span>₹${fees.platformFee.toFixed(2)}</span></div>
+    <div class="summary-row" style="font-size:11px;color:var(--muted)"><span>GST on platform fee (18%)</span><span>₹${fees.platformGst.toFixed(2)}</span></div>
+    <div class="summary-row total"><span>To Pay</span><span>₹${fees.grandTotal.toFixed(2)}</span></div>`;
 }
 
 function generateSlots() {
@@ -2049,8 +2071,12 @@ async function placeOrder() {
     setEl('inv-emp', S.user.name);
     setEl('inv-empid', S.user.id + ' · ' + (S.user.department || 'L&T'));
     setEl('inv-slot', S.selSlot);
+    // Fee breakdown
+    const invFees = calcFees(iTotal);
     setEl('inv-subtotal', '₹' + iTotal);
-    setEl('inv-gst', '₹' + gstAmount);
+    setEl('inv-gst', '₹' + invFees.foodGst.toFixed(2));
+    setEl('inv-platform', '₹' + invFees.platformFee.toFixed(2));
+    setEl('inv-platform-gst', '₹' + invFees.platformGst.toFixed(2));
     setEl('inv-total', '₹' + totalPaid);
 
     const invItemsEl = document.getElementById('inv-items');
@@ -4921,6 +4947,12 @@ function showPOS() {
         <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px">
           <span>GST (5%)</span><span id="pos-gst">₹0</span>
         </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">
+          <span>Platform fee</span><span id="pos-pfee">₹0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">
+          <span>GST on platform (18%)</span><span id="pos-pgst">₹0</span>
+        </div>
         <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;color:var(--brand);margin-bottom:12px">
           <span>Total</span><span id="pos-total">₹0</span>
         </div>
@@ -4961,12 +4993,13 @@ function posAddItem(id) {
 
 function renderPOSCart() {
   const subtotal = posCart.reduce((s, i) => s + i.price * i.qty, 0);
-  const gst = Math.round(subtotal * 0.05);
-  const total = subtotal + gst;
+  const fees = calcFees(subtotal);
   setEl('pos-cart-count', `(${posCart.reduce((s,i)=>s+i.qty,0)} items)`);
   setEl('pos-subtotal', '₹' + subtotal);
-  setEl('pos-gst', '₹' + gst);
-  setEl('pos-total', '₹' + total);
+  setEl('pos-gst', '₹' + fees.foodGst.toFixed(2));
+  setEl('pos-pfee', '₹' + fees.platformFee.toFixed(2));
+  setEl('pos-pgst', '₹' + fees.platformGst.toFixed(2));
+  setEl('pos-total', '₹' + fees.grandTotal.toFixed(2));
   const el = document.getElementById('pos-cart-list');
   if (!el) return;
   if (posCart.length === 0) { el.innerHTML = '<div style="color:var(--muted)">No items added</div>'; return; }
@@ -4996,8 +5029,8 @@ async function posBill() {
   const cid = S.user?.canteen_id || 'c1';
   const canteen = S.canteens.find(c => c.id === cid) || { name: 'Counter', icon: '🍽️' };
   const subtotal = posCart.reduce((s, i) => s + i.price * i.qty, 0);
-  const gst = Math.round(subtotal * 0.05);
-  const total = subtotal + gst;
+  const fees = calcFees(subtotal);
+  const total = Math.round(fees.grandTotal);
 
   // If employee ID provided, use wallet via server-side function
   if (empId && sb) {
@@ -5049,11 +5082,13 @@ async function posBill() {
 function printPOSReceipt(token, customer, method, subtotal, gst, total) {
   const canteen = S.canteens.find(c => c.id === S.user?.canteen_id) || { name: 'Counter', icon: '🍽️' };
   const now = new Date();
+  const fees = calcFees(subtotal);
   const receiptHtml = `<html><head><style>
     body{font-family:monospace;font-size:13px;max-width:300px;margin:0 auto;padding:16px}
     .center{text-align:center} .divider{border-top:1px dashed #000;margin:8px 0}
     .row{display:flex;justify-content:space-between;margin:4px 0}
     .big{font-size:36px;font-weight:bold;text-align:center;margin:8px 0}
+    .sm{font-size:11px;color:#888}
     @media print{button{display:none}}
   </style></head><body>
     <h2 style="text-align:center;font-size:16px;margin-bottom:4px">L&T FoodHub</h2>
@@ -5065,8 +5100,11 @@ function printPOSReceipt(token, customer, method, subtotal, gst, total) {
     ${posCart.map(i=>`<div class="row"><span>${i.emoji||''} ${i.name}</span><span>×${i.qty} ₹${i.price*i.qty}</span></div>`).join('')}
     <div class="divider"></div>
     <div class="row"><span>Subtotal</span><span>₹${subtotal}</span></div>
-    <div class="row"><span>GST 5%</span><span>₹${gst}</span></div>
-    <div class="row"><strong>TOTAL</strong><strong>₹${total}</strong></div>
+    <div class="row"><span>GST 5%</span><span>₹${fees.foodGst.toFixed(2)}</span></div>
+    <div class="row sm"><span>Platform fee</span><span>₹${fees.platformFee.toFixed(2)}</span></div>
+    <div class="row sm"><span>GST on platform 18%</span><span>₹${fees.platformGst.toFixed(2)}</span></div>
+    <div class="divider"></div>
+    <div class="row"><strong>TOTAL</strong><strong>₹${fees.grandTotal.toFixed(2)}</strong></div>
     <div class="divider"></div>
     <div class="center" style="font-size:10px;margin-top:6px">${now.toLocaleDateString('en-IN')} · Thank you!</div>
     <br><button onclick="window.print()" style="width:100%;padding:8px;cursor:pointer">🖨️ Print</button>
