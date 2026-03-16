@@ -1193,11 +1193,11 @@ async function loadData() {
     ]);
     S.canteens = canRes.data?.length ? canRes.data : FALLBACK_CANTEENS;
     S.menu = menuRes.data?.length ? menuRes.data : FALLBACK_MENU;
-    console.log('[FoodHub] Loaded', S.menu.length, 'menu items from', S.canteens.length, 'canteens');
+    // console.log('[FoodHub] Loaded', S.menu.length, 'menu items from', S.canteens.length, 'canteens');
     // DEBUG: show count per canteen
     const counts = {};
     S.menu.forEach(m => { counts[m.canteen_id] = (counts[m.canteen_id]||0)+1; });
-    console.log('[FoodHub] Items per canteen:', JSON.stringify(counts));
+    // console.log('[FoodHub] Items per canteen:', JSON.stringify(counts));
     window._menuDebug = {total: S.menu.length, perCanteen: counts};
     // Load app settings (subsidy, monthly limit, etc.)
     if (settingsRes.data?.length) {
@@ -1438,19 +1438,25 @@ async function sendOTP() {
         toast('OTP sent to +91' + phone + ' 📱', 'success', '✅');
       } catch(e) {
         console.error('[Firebase SMS]', e);
-        // Fallback to screen OTP
-        const otp = String(Math.floor(100000 + Math.random() * 900000));
-        _otpCode = otp;
-        _fbConfirmResult = null;
-        if(sb) { try { await sb.from('employees').update({temp_otp: otp, otp_created_at: new Date().toISOString()}).eq('phone', phone); } catch(_){} }
+        // Firebase OTP failed — inform user, do NOT show code on screen
         const rc = document.getElementById('recaptcha-container');
         if(rc) rc.innerHTML = '';
+        _fbConfirmResult = null;
+        // Generate server-side OTP stored in DB (for Fast2SMS integration later)
+        const otp = String(Math.floor(100000 + Math.random() * 900000));
+        _otpCode = otp;
+        if(sb) { try { await sb.from('employees').update({temp_otp: otp, otp_created_at: new Date().toISOString()}).eq('phone', phone); } catch(_){} }
+        // Show OTP entry screen WITHOUT revealing the code
         document.getElementById('emp-step1').style.display = 'none';
         document.getElementById('emp-step2').style.display = '';
-        document.getElementById('otp-big').textContent = otp;
-        otp.split('').forEach((d,i) => { const b = document.getElementById('otp-'+(i+1)); if(b) b.value=d; });
+        document.getElementById('otp-big').textContent = 'SMS unavailable';
+        document.getElementById('otp-big').style.fontSize = '18px';
+        ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].forEach(id => { const b = document.getElementById(id); if(b) b.value=''; });
+        document.getElementById('otp-1')?.focus();
         document.getElementById('otp-err').textContent = '';
-        toast('OTP: ' + otp, 'success', '🔐');
+        // TODO: Replace with Fast2SMS API call before go-live
+        // For now, check Supabase employees table → temp_otp column for testing
+        toast('SMS service temporarily unavailable. Contact admin for OTP.', 'warn', '⚠️');
       }
       btn.classList.remove('btn-loading'); btn.disabled = false;
     });
@@ -1574,96 +1580,89 @@ async function doLogin() {
   if (!id || !pw) { err.textContent = 'Please enter ID and password.'; return; }
   err.textContent = '';
   btn.classList.add('btn-loading'); btn.disabled = true;
-  await new Promise(r => setTimeout(r, 600));
+
   try {
-    if (loginRole === 'employee') {
+    // ── Staff login: verify password server-side via RPC ──
+    if (loginRole !== 'employee') {
+      if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+
+      const { data: authResult, error: authErr } = await sb.rpc('verify_staff_login', {
+        p_id: id,
+        p_password: pw,
+        p_role: loginRole
+      });
+
+      if (authErr || !authResult?.success) {
+        err.textContent = authResult?.error || authErr?.message || 'Invalid credentials.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
+
+      // Store verified credentials for admin functions later
+      S._staffAuth = { id: id, pw: pw };
+
+      const counter = COUNTER_MAP[id] || (authResult.canteen_id ? {
+        id: authResult.canteen_id,
+        name: authResult.name,
+        icon: S.canteens.find(c => c.id === authResult.canteen_id)?.icon || '🍽️'
+      } : null);
+
+      if (loginRole === 'vendor') {
+        if (!counter) { err.textContent = 'No canteen assigned to this account.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        S.role = 'vendor';
+        S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
+        try {
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(200);
+          if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
+        } catch (e) { }
+        goScreen('s-vendor');
+        setEl('vendor-title', counter.icon + ' ' + counter.name);
+        toast(counter.icon + ' ' + counter.name + ' loaded', 'success', '✅');
+
+      } else if (loginRole === 'kitchen') {
+        if (!counter) { err.textContent = 'No canteen assigned to this account.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        S.role = 'kitchen';
+        S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
+        try {
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(200);
+          if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
+        } catch (e) { }
+        goScreen('s-kitchen');
+        setEl('kds-title', '📺 ' + counter.name + ' Kitchen');
+        toast(counter.icon + ' ' + counter.name + ' Kitchen active', 'success', '📺');
+
+      } else {
+        // Admin
+        S.role = 'admin';
+        S.user = { id: authResult.id, name: authResult.name, initials: 'CA' };
+        try {
+          const { data } = await sb.from('orders').select('*, order_items(*)').order('created_at', { ascending: false }).limit(100);
+          if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
+        } catch (e) { }
+        goScreen('s-admin');
+        toast('Admin dashboard loaded', 'success', '⚙️');
+      }
+
+    } else {
+      // ── Employee login (ID-based, for backward compat) ──
       let emp = null;
       try {
-        if (sb) { const {data} = await sb.from('employees').select('*').eq('id',id).single(); emp = data; }
-      } catch(e) {}
-      if (!emp) emp = FALLBACK_EMPLOYEES[id] || {id,name:'Employee '+id,department:'L&T',campus:'Powai Campus',wallet_balance:500,subsidy_per_meal:80,initials:id.slice(-2).toUpperCase(),meal_pass_active:true,meal_pass_used:0,meal_pass_limit:30};
+        if (sb) { const { data } = await sb.from('employees').select('*').eq('id', id).single(); emp = data; }
+      } catch (e) { }
+      if (!emp) { err.textContent = 'Employee not found. Please register first.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
       S.user = emp; S.role = 'employee';
-      // Reload menu fresh from DB at login time
       if (sb) {
-        const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available', true).limit(500);
-        if (freshMenu?.length) {
-          S.menu = freshMenu;
-          S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; });
-          console.log('[Login] Fresh menu loaded:', freshMenu.length, 'items');
-        }
-        const {data: freshCans} = await sb.from('canteens').select('*').order('id');
+        const { data: freshMenu } = await sb.from('menu_items').select('*').eq('is_available', true).limit(500);
+        if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
+        const { data: freshCans } = await sb.from('canteens').select('*').order('id');
         if (freshCans?.length) S.canteens = freshCans;
       }
       renderHome();
       goScreen('s-home');
       toast(`Welcome back, ${emp.name.split(' ')[0]}! 👋`, 'success', '✅');
-    } else if (loginRole === 'vendor') {
-      const counter = COUNTER_MAP[id];
-      if (!counter) {
-        err.textContent = 'Invalid Counter ID. Use counter-c1 to counter-c7';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
-      S.role = 'vendor';
-      S.user = {id, name: counter.name + ' Vendor', initials: counter.icon, canteen_id: counter.id};
-      try {
-        if (sb) {
-          const {data} = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200);
-          if (data?.length) S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
-        }
-      } catch(e) { console.warn('Order fetch failed:', e.message); }
-      goScreen('s-vendor');
-      setEl('vendor-title', counter.icon + ' ' + counter.name);
-      toast(counter.icon + ' ' + counter.name + ' loaded', 'success', '✅');
-    } else if (loginRole === 'kitchen') {
-      const counter = COUNTER_MAP[id];
-      if (!counter) {
-        err.textContent = 'Invalid Counter ID. Use counter-c1 to counter-c7';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
-      S.role = 'kitchen';
-      S.user = {id, name: counter.name + ' Kitchen', initials: counter.icon, canteen_id: counter.id};
-      try {
-        if (sb) {
-          const {data} = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200);
-          if (data?.length) S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
-        }
-      } catch(e) { console.warn('Order fetch failed:', e.message); }
-      // DEBUG: show what we fetched
-      console.log('[Kitchen] allOrders after fetch:', S.allOrders.length, S.allOrders);
-      if (S.allOrders.length === 0) {
-        // Try direct fetch and show result as alert
-        try {
-          if (sb) {
-            const {data, error} = await sb.from('orders').select('*').limit(10);
-            const msg = error ? 'DB Error: ' + error.message : 
-              data?.length ? 'Found ' + data.length + ' orders in DB. Status values: ' + [...new Set(data.map(o=>o.status))].join(', ') :
-              'DB connected but 0 orders found in orders table';
-            toast(msg, data?.length ? 'success' : 'warn', '🔍');
-          } else {
-            toast('Supabase not connected! Using offline mode.', 'error', '❌');
-          }
-        } catch(e) { toast('DB fetch error: ' + e.message, 'error', '❌'); }
-      }
-      goScreen('s-kitchen');
-      setEl('kds-title', '📺 ' + counter.name + ' Kitchen');
-      toast(counter.icon + ' ' + counter.name + ' Kitchen active', 'success', '📺');
-    } else {
-      S.role = 'admin';
-      S.user = {id:'admin-001',name:'Campus Admin',initials:'CA'};
-      // Fetch all orders from Supabase BEFORE rendering
-      try {
-        if (sb) {
-          const {data} = await sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
-          if (data?.length) S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
-        }
-      } catch(e) { console.warn('Order fetch failed:', e.message); }
-      goScreen('s-admin');
-      toast('Admin dashboard loaded', 'success', '⚙️');
     }
-  } catch(e) {
-    err.textContent = 'Login failed. Please try again.';
+  } catch (e) {
+    err.textContent = 'Login failed: ' + (e.message || 'Please try again.');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
@@ -1735,9 +1734,9 @@ function selCat(cat) {
 }
 
 function renderMenu(searchQuery) {
-  console.log('[renderMenu] S.menu total:', S.menu.length, '| selCanteen:', S.selCanteen?.id);
+  // console.log('[renderMenu] S.menu total:', S.menu.length, '| selCanteen:', S.selCanteen?.id);
   let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
-  console.log('[renderMenu] filtered items for', S.selCanteen?.id, ':', items.length);
+  // console.log('[renderMenu] filtered items for', S.selCanteen?.id, ':', items.length);
   if (S.selCat !== 'All') items = items.filter(m => m.category === S.selCat);
   if (S.vegOnly) items = items.filter(m => m.is_veg);
   if (searchQuery) {
@@ -1939,126 +1938,135 @@ async function placeOrder() {
   if (S.cart.length === 0) { toast('Your cart is empty!', 'error', '🛒'); return; }
   if (S.selCanteen && !S.selCanteen.is_open) { toast('This canteen is currently closed!', 'error', '🚫'); return; }
   if (S.selPay === 'upi') { toast('UPI coming soon! Please use FoodHub Wallet.', 'warn', '📱'); return; }
-  const iTotal = S.cart.reduce((s,i) => s+i.price*i.qty, 0);
-  const gstAmount = Math.round(iTotal * 0.05);
-  const youPay = iTotal + gstAmount;
-  if (S.user.wallet_balance < youPay) {
-    toast(`Insufficient balance! You have ₹${Math.round(S.user.wallet_balance)}, need ₹${youPay} (incl. 5% GST)`, 'error', '💸');
-    return;
-  }
+  if (!sb) { toast('Database not connected!', 'error', '❌'); return; }
+
   const btn = document.getElementById('pay-btn');
   btn.classList.add('btn-loading'); btn.disabled = true;
+
   try {
-  await new Promise(r => setTimeout(r, 800));
-  // ── Group cart items by canteen ──────────────────────────────────────
-  const byCanteen = {};
-  S.cart.forEach(i => {
-    const menuItem = S.menu.find(m => m.id === i.id);
-    const cid = menuItem?.canteen_id || S.selCanteen?.id || 'c1';
-    if (!byCanteen[cid]) byCanteen[cid] = [];
-    byCanteen[cid].push(i);
-  });
-  const splitOrders = [];
-  // ── Create one order per counter ─────────────────────────────────────
-  for (const cid of Object.keys(byCanteen)) {
-    const canteen = S.canteens.find(c => c.id === cid) || {id:cid, name:'Counter', icon:'🍽️'};
-    const items = byCanteen[cid];
-    const cTotal = items.reduce((s,i) => s+i.price*i.qty, 0);
-    if (!S.tokenCounters[cid]) S.tokenCounters[cid] = 1;
-    const token = S.tokenCounters[cid]++;
-    const orderId = 'ord-' + Date.now() + '-' + cid;
-    const order = {
-      id: orderId, token_number: token,
-      employee_id: S.user.id, employee_name: S.user.name,
-      canteen_id: cid, canteen_name: canteen.name, canteen_icon: canteen.icon,
-      pickup_slot: S.selSlot, status: 'new',
-      item_total: cTotal, subsidy_applied: 0, amount_paid: cTotal,
-      items: items.map(i => ({...i})), created_at: new Date(),
-    };
-    splitOrders.push(order);
-    S.orders.unshift(order);
-    S.allOrders.unshift({...order});
-    try {
-      if (sb) {
-        const { error: oErr } = await sb.from('orders').insert([{
-          id: orderId, token_number: token,
-          employee_id: S.user.id, employee_name: S.user.name,
-          canteen_id: cid, canteen_name: canteen.name, canteen_icon: canteen.icon,
-          pickup_slot: S.selSlot, status: 'new',
-          item_total: cTotal, subsidy_applied: 0, amount_paid: cTotal,
-          payment_method: 'wallet',
-        }]);
-        if (!oErr) {
-          await sb.from('order_items').insert(items.map(i => ({
-            order_id: orderId, item_id: i.id, item_name: i.name,
-            item_emoji: i.emoji||'', quantity: i.qty,
-            unit_price: i.price, total_price: i.price*i.qty,
-          })));
-          await sb.from('canteens').update({token_counter: S.tokenCounters[cid]}).eq('id', cid);
-        } else { console.error('[Order]', cid, oErr.message); }
+    // ── Group cart items by canteen ──────────────────────────────────────
+    const byCanteen = {};
+    S.cart.forEach(i => {
+      const menuItem = S.menu.find(m => m.id === i.id);
+      const cid = menuItem?.canteen_id || S.selCanteen?.id || 'c1';
+      if (!byCanteen[cid]) byCanteen[cid] = [];
+      byCanteen[cid].push(i);
+    });
+
+    const splitOrders = [];
+    let totalPaid = 0;
+    let newBalance = S.user.wallet_balance;
+
+    // ── Create one order per counter via server-side function ──────────
+    for (const cid of Object.keys(byCanteen)) {
+      const canteen = S.canteens.find(c => c.id === cid) || { id: cid, name: 'Counter', icon: '🍽️' };
+      const items = byCanteen[cid];
+
+      // Call server-side atomic function
+      const { data: result, error: rpcErr } = await sb.rpc('place_order', {
+        p_employee_id: S.user.id,
+        p_canteen_id: cid,
+        p_canteen_name: canteen.name,
+        p_canteen_icon: canteen.icon || '🍽️',
+        p_pickup_slot: S.selSlot,
+        p_items: items.map(i => ({
+          id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price
+        })),
+        p_payment_method: 'wallet'
+      });
+
+      if (rpcErr) {
+        toast('Order failed: ' + rpcErr.message, 'error', '❌');
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
       }
-    } catch(e) { console.warn('[Order] error:', e.message); }
-  }
-  // ── Deduct wallet (full total once) ──────────────────────────────────
-  S.user.wallet_balance -= youPay;
-  try {
-    if (sb) {
-      await sb.from('employees').update({wallet_balance: S.user.wallet_balance}).eq('id', S.user.id);
-      await sb.from('wallet_transactions').insert([{
-        employee_id: S.user.id, type:'debit', amount: youPay,
-        description: `${splitOrders.length} counter order — ₹${youPay}`,
-      }]);
+
+      if (!result?.success) {
+        toast(result?.error || 'Order failed. Please try again.', 'error', '❌');
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
+
+      // Server returned verified data
+      const order = {
+        id: result.order_id,
+        token_number: result.token_number,
+        employee_id: S.user.id,
+        employee_name: S.user.name,
+        canteen_id: cid,
+        canteen_name: canteen.name,
+        canteen_icon: canteen.icon,
+        pickup_slot: S.selSlot,
+        status: 'new',
+        item_total: result.item_total,
+        gst_amount: result.gst_amount,
+        amount_paid: result.total_paid,
+        subsidy_applied: 0,
+        items: items.map(i => ({ ...i })),
+        created_at: new Date(),
+      };
+
+      splitOrders.push(order);
+      S.orders.unshift(order);
+      S.allOrders.unshift({ ...order });
+      totalPaid += result.total_paid;
+      newBalance = result.new_balance;
     }
-  } catch(e) {}
-  // ── Update inventory ──────────────────────────────────────────────────
-  S.cart.forEach(i => { if (S.inventory[i.id] !== undefined) S.inventory[i.id] = Math.max(0, S.inventory[i.id] - i.qty); });
-  if (youPay > 0) S.txns.unshift({type:'debit',icon:'🍽️',name:`${splitOrders.length} counter order`,date:'Just now',amount:youPay});
-  // ── Update success screen ─────────────────────────────────────────────
-  setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
-  const firstOrder = splitOrders[0];
-  const numCounters = splitOrders.length;
-  // Token display
-  setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & '));
-  setEl('suc-can', numCounters > 1 ? `${numCounters} Counters` : firstOrder.canteen_icon+' '+firstOrder.canteen_name);
-  setEl('suc-time', '⏰ Ready by ' + S.selSlot);
-  setEl('suc-sub', 'Show this screen to kitchen staff');
-  setEl('suc-canteen-token-label', numCounters > 1 ? 'Your Tokens' : firstOrder.canteen_name + ' · Token');
-  // Multi-counter breakdown
-  if (numCounters > 1) {
-    const breakdown = splitOrders.map(o => `${o.canteen_icon} ${o.canteen_name} → #${o.token_number}`).join('<br>');
-    const bd = document.getElementById('suc-counter-breakdown');
-    if (bd) { bd.innerHTML = breakdown; bd.style.display = ''; }
-  }
-  // Fill invoice
-  const now = new Date();
-  setEl('inv-date', now.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) + ' ' + now.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'}));
-  setEl('inv-orderid', 'Order #' + splitOrders.map(o=>o.token_number).join('/'));
-  setEl('inv-emp', S.user.name);
-  setEl('inv-empid', S.user.id + ' · ' + (S.user.department||'L&T'));
-  setEl('inv-slot', S.selSlot);
-  setEl('inv-subtotal', '₹' + iTotal);
-  setEl('inv-gst', '₹' + gstAmount);
-  setEl('inv-total', '₹' + youPay);
-  // Invoice items
-  const invItemsEl = document.getElementById('inv-items');
-  if (invItemsEl) {
-    const allItems = splitOrders.flatMap(o => o.items.map(i => ({...i, counter: o.canteen_name, icon: o.canteen_icon})));
-    invItemsEl.innerHTML = allItems.map(i => `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div>
-          <div style="font-size:13px;font-weight:600;color:var(--dark)">${i.emoji||''} ${i.item_name||i.name}</div>
-          <div style="font-size:11px;color:var(--muted)">${i.counter} × ${i.quantity||i.qty}</div>
-        </div>
-        <div style="font-size:13px;font-weight:700;color:var(--dark)">₹${(i.price||i.unit_price) * (i.quantity||i.qty)}</div>
-      </div>`).join('');
-  }
-  setEl('h-orders-count', `📋 ${S.orders.length} orders today`);
-  const orderId = firstOrder.id;
-  const token = firstOrder.token_number;
-  // Update badge
-  const badgeEl = document.getElementById('ord-badge');
-  if (badgeEl) { badgeEl.textContent = S.orders.filter(o=>o.status!=='done').length; badgeEl.classList.remove('hidden'); }
-  generateQR(token, orderId);
+
+    // ── Update local state with server-verified balance ──────────────
+    S.user.wallet_balance = newBalance;
+    setEl('nav-bal', '₹' + Math.round(newBalance));
+
+    // ── Update inventory locally ──────────────────────────────────────
+    S.cart.forEach(i => {
+      if (S.inventory[i.id] !== undefined) S.inventory[i.id] = Math.max(0, S.inventory[i.id] - i.qty);
+    });
+    if (totalPaid > 0) S.txns.unshift({ type: 'debit', icon: '🍽️', name: `${splitOrders.length} counter order`, date: 'Just now', amount: totalPaid });
+
+    // ── Update success screen ─────────────────────────────────────────
+    const firstOrder = splitOrders[0];
+    const numCounters = splitOrders.length;
+    const iTotal = splitOrders.reduce((s, o) => s + (o.item_total || 0), 0);
+    const gstAmount = splitOrders.reduce((s, o) => s + (o.gst_amount || 0), 0);
+
+    setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & '));
+    setEl('suc-can', numCounters > 1 ? `${numCounters} Counters` : firstOrder.canteen_icon + ' ' + firstOrder.canteen_name);
+    setEl('suc-time', '⏰ Ready by ' + S.selSlot);
+    setEl('suc-sub', 'Show this screen to kitchen staff');
+    setEl('suc-canteen-token-label', numCounters > 1 ? 'Your Tokens' : firstOrder.canteen_name + ' · Token');
+
+    if (numCounters > 1) {
+      const breakdown = splitOrders.map(o => `${o.canteen_icon} ${o.canteen_name} → #${o.token_number}`).join('<br>');
+      const bd = document.getElementById('suc-counter-breakdown');
+      if (bd) { bd.innerHTML = breakdown; bd.style.display = ''; }
+    }
+
+    const now = new Date();
+    setEl('inv-date', now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
+    setEl('inv-orderid', 'Order #' + splitOrders.map(o => o.token_number).join('/'));
+    setEl('inv-emp', S.user.name);
+    setEl('inv-empid', S.user.id + ' · ' + (S.user.department || 'L&T'));
+    setEl('inv-slot', S.selSlot);
+    setEl('inv-subtotal', '₹' + iTotal);
+    setEl('inv-gst', '₹' + gstAmount);
+    setEl('inv-total', '₹' + totalPaid);
+
+    const invItemsEl = document.getElementById('inv-items');
+    if (invItemsEl) {
+      const allItems = splitOrders.flatMap(o => o.items.map(i => ({ ...i, counter: o.canteen_name, icon: o.canteen_icon })));
+      invItemsEl.innerHTML = allItems.map(i => `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--dark)">${i.emoji || ''} ${i.item_name || i.name}</div>
+            <div style="font-size:11px;color:var(--muted)">${i.counter} × ${i.quantity || i.qty}</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:var(--dark)">₹${(i.price || i.unit_price) * (i.quantity || i.qty)}</div>
+        </div>`).join('');
+    }
+    setEl('h-orders-count', `📋 ${S.orders.length} orders today`);
+    const badgeEl = document.getElementById('ord-badge');
+    if (badgeEl) { badgeEl.textContent = S.orders.filter(o => o.status !== 'done').length; badgeEl.classList.remove('hidden'); }
+    generateQR(firstOrder.token_number, firstOrder.id);
   // Simulate kitchen update after 2s
   // No auto status changes — kitchen controls status manually
   S.cart = [];
@@ -3372,15 +3380,17 @@ function toggleDark(){
 // ══════════════════════════════════════════════════════
 function saveSession(){
   if(!S.user) return;
-  try { localStorage.setItem('fh-session', JSON.stringify({role:S.role, user:S.user, ts:Date.now()})); } catch(e){}
+  // Only store identifiers — never store wallet_balance or role from client
+  try { localStorage.setItem('fh-session', JSON.stringify({userId:S.user.id, phone:S.user.phone||'', role:S.role, ts:Date.now()})); } catch(e){}
 }
 function loadSession(){
   try {
     const raw = localStorage.getItem('fh-session');
     if(!raw) return false;
     const sess = JSON.parse(raw);
-    if(Date.now()-sess.ts > 8*60*60*1000) { localStorage.removeItem('fh-session'); return false; } // 8h expiry
-    S.user = sess.user; S.role = sess.role;
+    if(Date.now()-sess.ts > 4*60*60*1000) { localStorage.removeItem('fh-session'); return false; } // 4h expiry
+    if(!sess.userId || !sess.role) return false;
+    S._pendingSession = sess; // Will be verified from DB in init()
     return true;
   } catch(e){ return false; }
 }
@@ -3691,7 +3701,7 @@ function startRealtime() {
         }
       })
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') console.log('[FoodHub] Realtime connected');
+        if (status === 'SUBSCRIBED') // console.log('[FoodHub] Realtime connected');
         if (status === 'CHANNEL_ERROR') console.warn('[FoodHub] Realtime error — falling back to polling');
       });
   } catch(e) { console.warn('Realtime setup failed:', e); }
@@ -4113,21 +4123,33 @@ async function processRefund(){
   const amount = parseFloat(document.getElementById('rf-amount')?.value);
   const reason = document.getElementById('rf-reason')?.value;
   if(!empId||!amount||amount<=0){ toast('Please fill all fields correctly','error','⚠️'); return; }
-  // Update local state if current user
-  if(S.user?.id===empId){ S.user.wallet_balance+=amount; setEl('nav-bal','₹'+Math.round(S.user.wallet_balance)); }
-  const emp = FALLBACK_EMPLOYEES[empId];
-  if(emp) emp.wallet_balance += amount;
-  S.txns.unshift({type:'credit',icon:'💚',name:`Admin Refund — ${reason}`,date:'Just now',amount});
-  try{
-    if(sb){
-      await sb.from('wallet_transactions').insert([{employee_id:empId,type:'credit',amount,description:`Admin Refund — ${reason}`}]);
-      const {data:e}=await sb.from('employees').select('wallet_balance').eq('id',empId).single();
-      if(e) await sb.from('employees').update({wallet_balance:(e.wallet_balance||0)+amount}).eq('id',empId);
+
+  // Use server-side function with admin auth
+  if (!sb || !S._staffAuth) { toast('Not authorized. Please login as admin.', 'error', '🔒'); return; }
+
+  try {
+    const { data: result, error: rpcErr } = await sb.rpc('admin_wallet_credit', {
+      p_admin_id: S._staffAuth.id,
+      p_admin_password: S._staffAuth.pw,
+      p_employee_id: empId,
+      p_amount: amount,
+      p_reason: reason || 'Admin refund'
+    });
+
+    if (rpcErr || !result?.success) {
+      toast(result?.error || rpcErr?.message || 'Refund failed', 'error', '❌');
+      return;
     }
-  }catch(e){}
-  addNotif(`₹${amount} refund credited to your wallet (${reason})`, '💚');
-  closeModal();
-  toast(`₹${amount} credited to ${empId}'s wallet`,'success','💚');
+
+    // Update local state if current user
+    if(S.user?.id===empId){ S.user.wallet_balance = result.new_balance; setEl('nav-bal','₹'+Math.round(result.new_balance)); }
+    S.txns.unshift({type:'credit',icon:'💚',name:`Admin Refund — ${reason}`,date:'Just now',amount});
+    addNotif(`₹${amount} refund credited to wallet (${reason})`, '💚');
+    closeModal();
+    toast(`₹${amount} credited to ${result.employee_name || empId}'s wallet`,'success','💚');
+  } catch(e) {
+    toast('Refund failed: ' + e.message, 'error', '❌');
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -4567,21 +4589,32 @@ doLogin = async function(){
   checkAutoOpenClose();
 };
 
-// Patch: init — restore session, init dark mode, error handler
+// Patch: init — restore session from DB (not localStorage), init dark mode
 const _origInit = init;
 init = async function(){
   applyDark();
-  // Try to restore session
-  if(loadSession()){
+  // Try to restore session — loadSession() now only sets S._pendingSession
+  if(loadSession() && S._pendingSession){
     await loadData();
     await new Promise(r=>setTimeout(r,1800));
     document.getElementById('s-loading')?.classList.remove('active');
-    if(S.role==='employee'){ renderHome(); goScreen('s-home'); toast('Welcome back, '+S.user.name.split(' ')[0]+'!','success','👋'); }
-    else if(S.role==='vendor'){ goScreen('s-vendor'); }
-    else if(S.role==='kitchen'){ goScreen('s-kitchen'); }
-    else if(S.role==='admin'){ goScreen('s-admin'); }
-    setTimeout(addARIA,500);
-    return;
+    const sess = S._pendingSession;
+    S._pendingSession = null;
+    // Re-verify user from DB (don't trust localStorage data)
+    if(sess.role === 'employee' && sb){
+      try {
+        const {data: emp} = await sb.from('employees').select('*').eq('id', sess.userId).single();
+        if(emp){
+          S.user = emp; S.role = 'employee';
+          renderHome(); goScreen('s-home');
+          toast('Welcome back, '+emp.name.split(' ')[0]+'!','success','👋');
+          setTimeout(addARIA,500);
+          return;
+        }
+      } catch(e){}
+    }
+    // For staff roles, require re-login (can't re-verify without password)
+    // Fall through to login screen
   }
   await _origInit();
   setTimeout(addARIA,500);
