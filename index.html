@@ -5,52 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <title>L&T FoodHub</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-<script>
-// Firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyAu-7TS7nVCOq3gNS7ZTd-xHLQwcv1P6V8",
-  authDomain: "lt-foodhub.firebaseapp.com",
-  projectId: "lt-foodhub",
-  storageBucket: "lt-foodhub.firebasestorage.app",
-  messagingSenderId: "172929297774",
-  appId: "1:172929297774:web:3e7cbdc2ed98512fd1657f",
-  measurementId: "G-0YMJX00PGK"
-};
-firebase.initializeApp(firebaseConfig);
-const fbAuth = firebase.auth();
-// reCAPTCHA verifier — invisible
-let recaptchaVerifier = null;
-let _recaptchaSolved = false;
-
-function initRecaptcha(callback) {
-  try {
-    if (recaptchaVerifier) { recaptchaVerifier.clear(); recaptchaVerifier = null; }
-  } catch(_) {}
-  _recaptchaSolved = false;
-  const container = document.getElementById('recaptcha-container');
-  if (container) container.innerHTML = '';
-  try {
-    recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-      size: 'normal',
-      callback: (token) => {
-        _recaptchaSolved = true;
-        console.log('[reCAPTCHA] solved');
-        if (callback) callback();
-      },
-      'expired-callback': () => {
-        _recaptchaSolved = false;
-        recaptchaVerifier = null;
-        toast('Security check expired. Please verify again.', 'warn', '⚠️');
-      }
-    });
-    recaptchaVerifier.render();
-  } catch(e) { console.warn('Recaptcha init failed:', e); }
-}
-</script>
-<link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 <style>
 
 /* ===== MOBILE SCROLL NUCLEAR FIX ===== */
@@ -728,8 +686,6 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <button class="login-btn" onclick="doLogin()" id="login-btn"><span>Sign In →</span></button>
       <div class="login-err" id="login-err"></div>
     </div>
-    <!-- reCAPTCHA renders here when sending OTP -->
-    <div id="recaptcha-container" style="margin-top:12px;display:flex;justify-content:center"></div>
   </div>
 </div>
 ══════════════════════════════════ -->
@@ -1196,11 +1152,11 @@ async function loadData() {
     ]);
     S.canteens = canRes.data?.length ? canRes.data : FALLBACK_CANTEENS;
     S.menu = menuRes.data?.length ? menuRes.data : FALLBACK_MENU;
-    // console.log('[FoodHub] Loaded', S.menu.length, 'menu items from', S.canteens.length, 'canteens');
+    // // removed debug log
     // DEBUG: show count per canteen
     const counts = {};
     S.menu.forEach(m => { counts[m.canteen_id] = (counts[m.canteen_id]||0)+1; });
-    // console.log('[FoodHub] Items per canteen:', JSON.stringify(counts));
+    // // removed debug log
     window._menuDebug = {total: S.menu.length, perCanteen: counts};
     // Load app settings (subsidy, monthly limit, etc.)
     if (settingsRes.data?.length) {
@@ -1718,9 +1674,9 @@ function selCat(cat) {
 }
 
 function renderMenu(searchQuery) {
-  // console.log('[renderMenu] S.menu total:', S.menu.length, '| selCanteen:', S.selCanteen?.id);
+  // // removed debug log
   let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
-  // console.log('[renderMenu] filtered items for', S.selCanteen?.id, ':', items.length);
+  // // removed debug log
   if (S.selCat !== 'All') items = items.filter(m => m.category === S.selCat);
   if (S.vegOnly) items = items.filter(m => m.is_veg);
   if (searchQuery) {
@@ -2219,7 +2175,7 @@ async function submitRating(orderId) {
         }
       }
     }
-  } catch(e) { console.warn('Rating sync failed:', e); }
+  } catch(e) {}
   closeModal();
   toast('Thanks for your feedback! 🙏', 'success', '⭐');
   selectedRating = 0;
@@ -2562,7 +2518,7 @@ async function updateOrderStatus(id, status) {
   // Save to DB — await so poll doesn't overwrite
   try {
     if (sb) await sb.from('orders').update({status}).eq('id', id);
-  } catch(e) { console.warn('[updateOrderStatus]', e); }
+  } catch(e) {}
   // Notify employee if ready
   if (status === 'ready') {
     const order = ao || o;
@@ -2594,7 +2550,7 @@ async function fetchAllOrders() {
         else { ex.status = o.status; ex.items = o.order_items||ex.items; }
       });
     }
-  } catch(e) { console.warn('[FoodHub] fetchAllOrders failed:', e.message); }
+  } catch(e) {}
 }
 
 function startPoll() {
@@ -3130,7 +3086,7 @@ async function toggleCanteen(id, el) {
   // Sync to Supabase
   try {
     if (sb) await sb.from('canteens').update({ is_open: c.is_open }).eq('id', id);
-  } catch(e) { console.warn('Canteen toggle sync failed:', e); }
+  } catch(e) {}
   toast(`${c.name} ${c.is_open?'opened':'closed'}`, c.is_open?'success':'warn', c.is_open?'✅':'🚫');
 }
 
@@ -3359,7 +3315,7 @@ async function updateSubsidy() {
       await sb.from('app_settings').upsert([{ key: 'subsidy_per_meal', value: String(val), updated_at: new Date().toISOString() }], { onConflict: 'key' });
       await sb.from('app_settings').upsert([{ key: 'subsidy_updated_by', value: S.user?.id || 'admin', updated_at: new Date().toISOString() }], { onConflict: 'key' });
     }
-  } catch(e) { console.warn('Settings sync failed:', e); }
+  } catch(e) {}
   toast(`Subsidy updated to ₹${val}/meal`, 'success', '💰');
   renderAdmin('settings');
 }
@@ -3438,17 +3394,54 @@ document.addEventListener('keydown', (e) => {
   const blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
   const el = document.getElementById('pwa-manifest');
   if(el) el.href = URL.createObjectURL(blob);
-  // Service Worker for offline caching
+  // Enhanced Service Worker — caches app shell, fonts, and API responses
   if('serviceWorker' in navigator){
     const swCode = `
-const CACHE='foodhub-v5';
-const ASSETS=['/'];
-self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS).catch(()=>{}))));
+const CACHE_NAME='foodhub-v12';
+const STATIC_ASSETS=['/'];
+const API_CACHE='foodhub-api-v1';
+const FONT_CACHE='foodhub-fonts-v1';
+
+self.addEventListener('install',e=>{
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(STATIC_ASSETS).catch(()=>{})));
+});
+
+self.addEventListener('activate',e=>{
+  e.waitUntil(caches.keys().then(keys=>Promise.all(
+    keys.filter(k=>k!==CACHE_NAME&&k!==API_CACHE&&k!==FONT_CACHE).map(k=>caches.delete(k))
+  )));
+  self.clients.claim();
+});
+
 self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET')return;
+  if(e.request.method!=='GET') return;
+  const url=e.request.url;
+
+  // Cache fonts permanently
+  if(url.includes('fonts.googleapis.com')||url.includes('fonts.gstatic.com')){
+    e.respondWith(caches.open(FONT_CACHE).then(c=>c.match(e.request).then(r=>{
+      if(r) return r;
+      return fetch(e.request).then(res=>{c.put(e.request,res.clone());return res;}).catch(()=>new Response('',{status:503}));
+    })));
+    return;
+  }
+
+  // Supabase API — stale-while-revalidate (show cached, fetch fresh in background)
+  if(url.includes('supabase.co/rest')){
+    e.respondWith(caches.open(API_CACHE).then(c=>c.match(e.request).then(cached=>{
+      const fetchPromise=fetch(e.request).then(res=>{
+        if(res.ok) c.put(e.request,res.clone());
+        return res;
+      }).catch(()=>cached||new Response(JSON.stringify({data:[]}),{headers:{'Content-Type':'application/json'}}));
+      return cached||fetchPromise;
+    })));
+    return;
+  }
+
+  // App shell — cache first, network fallback
   e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{
-    const clone=res.clone();
-    caches.open(CACHE).then(c=>c.put(e.request,clone));
+    if(res.ok){const clone=res.clone();caches.open(CACHE_NAME).then(c=>c.put(e.request,clone));}
     return res;
   }).catch(()=>caches.match('/'))));
 });`;
@@ -3515,7 +3508,7 @@ window.onerror = function(msg, src, line, col, err){
   return false;
 };
 window.onunhandledrejection = function(e){
-  console.warn('[FoodHub Unhandled Promise]', e.reason);
+  // warn removed
 };
 
 // ══════════════════════════════════════════════════════
@@ -3743,7 +3736,7 @@ function playNewOrderAlert(){
     });
     // Vibration
     if(navigator.vibrate) navigator.vibrate([200,100,200]);
-  } catch(e){ console.warn('Audio alert failed',e); }
+  } catch(e){}
 }
 // ── Supabase Realtime channel ──
 let _realtimeChannel = null;
@@ -3808,10 +3801,10 @@ function startRealtime() {
         }
       })
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') // console.log('[FoodHub] Realtime connected');
+        if (status === 'SUBSCRIBED') // // removed debug log
         if (status === 'CHANNEL_ERROR') console.warn('[FoodHub] Realtime error — falling back to polling');
       });
-  } catch(e) { console.warn('Realtime setup failed:', e); }
+  } catch(e) {}
 }
 function stopRealtime() {
   if (_realtimeChannel && sb) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
@@ -4019,7 +4012,7 @@ async function saveOperatingHours(cid){
         break_start: hours.breakStart || null, break_end: hours.breakEnd || null
       }).eq('id', cid);
     }
-  } catch(e) { console.warn('Hours sync failed:', e); }
+  } catch(e) {}
   closeModal();
   toast('Operating hours saved!','success','⏰');
   checkAutoOpenClose();
