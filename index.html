@@ -666,17 +666,12 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <!-- EMPLOYEE LOGIN -->
     <div id="emp-login-area">
 
-      <!-- STEP 1: Phone -->
+      <!-- STEP 1: Email -->
       <div id="emp-step1">
         <h2 class="login-title" style="margin-top:0">Welcome 👋</h2>
-        <p class="login-sub">Enter your mobile number</p>
-        <div style="display:flex;gap:8px">
-          <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:14px 12px;font-size:13px;color:#fff;white-space:nowrap;height:fit-content">🇮🇳 +91</div>
-          <input class="linp" type="tel" id="emp-phone" placeholder="10-digit number" maxlength="10" style="flex:1;margin:0" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
-        </div>
-        <div style="height:10px"></div>
-        <button class="login-btn" id="send-otp-btn" onclick="sendOTP()"><span>Get OTP →</span></button>
-        <div style="font-size:11px;color:rgba(255,255,255,.3);text-align:center;margin-top:6px" id="debug-status">Ready</div>
+        <p class="login-sub">Enter your L&T email address</p>
+        <input class="linp" type="email" id="emp-email" placeholder="name@larsentoubro.com" autocomplete="email" style="margin-bottom:10px">
+        <button class="login-btn" id="send-otp-btn" onclick="sendEmailOTP()"><span>Get OTP →</span></button>
         <div class="login-err" id="login-err" style="margin-top:8px"></div>
         <div style="text-align:center;margin-top:14px">
           <span style="font-size:12px;color:rgba(255,255,255,.4)">New here? </span>
@@ -686,11 +681,11 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
       <!-- STEP 2: OTP -->
       <div id="emp-step2" style="display:none">
-        <h2 class="login-title" style="margin-top:0">Enter OTP</h2>
+        <h2 class="login-title" style="margin-top:0">Check your email</h2>
         <div id="otp-display" style="background:rgba(255,255,255,.08);border-radius:12px;padding:14px;text-align:center;margin-bottom:16px">
-          <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px">Your OTP is</div>
-          <div id="otp-big" style="font-size:36px;font-weight:800;color:#fff;letter-spacing:8px">----</div>
-          <div style="font-size:11px;color:rgba(255,255,255,.35);margin-top:4px">Tap the boxes and enter this code</div>
+          <div style="font-size:22px;margin-bottom:6px">📧</div>
+          <div id="otp-big" style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.6">We sent a 6-digit code to<br><strong id="otp-email-display" style="color:#fff">your email</strong></div>
+          <div style="font-size:11px;color:rgba(255,255,255,.35);margin-top:8px">Check your inbox (and spam folder)</div>
         </div>
         <div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px">
           <input class="linp" type="tel" id="otp-1" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-2')">
@@ -700,10 +695,11 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
           <input class="linp" type="tel" id="otp-5" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-6')">
           <input class="linp" type="tel" id="otp-6" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,null)">
         </div>
-        <button class="login-btn" id="verify-otp-btn" onclick="verifyOTP()"><span>Login →</span></button>
+        <button class="login-btn" id="verify-otp-btn" onclick="verifyEmailOTP()"><span>Login →</span></button>
         <div class="login-err" id="otp-err" style="margin-top:8px"></div>
-        <div style="text-align:center;margin-top:12px">
-          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToPhone()">← Back</span>
+        <div style="display:flex;justify-content:center;gap:16px;margin-top:12px">
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToEmail()">← Back</span>
+          <span style="font-size:12px;color:var(--brand);cursor:pointer;font-weight:600" id="resend-otp-btn" onclick="resendEmailOTP()">Resend OTP</span>
         </div>
       </div>
 
@@ -711,16 +707,14 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div id="emp-register" style="display:none">
         <h2 class="login-title" style="margin-top:0">Register</h2>
         <p class="login-sub">Create your FoodHub account</p>
-        <input class="linp" type="text" id="reg-name" placeholder="Your Full Name">
-        <div style="display:flex;gap:8px">
-          <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:14px 12px;font-size:13px;color:#fff;white-space:nowrap;height:fit-content">🇮🇳 +91</div>
-          <input class="linp" type="tel" id="reg-phone" placeholder="Mobile number" maxlength="10" style="flex:1;margin:0" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
-        </div>
-        <div style="height:10px"></div>
-        <button class="login-btn" id="reg-btn" onclick="registerEmployee()"><span>Register →</span></button>
+        <input class="linp" type="text" id="reg-name" placeholder="Your Full Name" autocomplete="name">
+        <input class="linp" type="email" id="reg-email" placeholder="Your L&T email" autocomplete="email">
+        <input class="linp" type="tel" id="reg-phone" placeholder="Mobile number (optional)" maxlength="10" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
+        <div style="height:6px"></div>
+        <button class="login-btn" id="reg-btn" onclick="registerEmployeeEmail()"><span>Register →</span></button>
         <div class="login-err" id="reg-err" style="margin-top:8px"></div>
         <div style="text-align:center;margin-top:12px">
-          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToPhone()">← Back to Login</span>
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToEmail()">← Back to Login</span>
         </div>
       </div>
 
@@ -1363,19 +1357,17 @@ function selRole(role, el) {
 }
 
 // ══════════════════════════════════════
-// OTP LOGIN — Simple & Reliable
+// EMAIL OTP LOGIN
 // ══════════════════════════════════════
-let _otpPhone = '';
-let _otpCode = '';
+let _otpEmail = '';
 let _otpEmpData = null;
-let _fbConfirmResult = null;
 
 function showRegister() {
   document.getElementById('emp-step1').style.display = 'none';
   document.getElementById('emp-register').style.display = '';
   document.getElementById('login-err').textContent = '';
 }
-function backToPhone() {
+function backToEmail() {
   document.getElementById('emp-step1').style.display = '';
   document.getElementById('emp-step2').style.display = 'none';
   document.getElementById('emp-register').style.display = 'none';
@@ -1385,177 +1377,160 @@ function otpNext(el, nextId) {
   el.value = el.value.replace(/\D/g,'').slice(0,1);
   if (el.value && nextId) document.getElementById(nextId)?.focus();
   const code = ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].map(id=>document.getElementById(id)?.value||'').join('');
-  if (code.length === 6) verifyOTP();
+  if (code.length === 6) verifyEmailOTP();
 }
 
-async function sendOTP() {
-  const phone = document.getElementById('emp-phone')?.value?.trim() || '';
+async function sendEmailOTP() {
+  const email = document.getElementById('emp-email')?.value?.trim() || '';
   const err = document.getElementById('login-err');
   const btn = document.getElementById('send-otp-btn');
-  const dbg = document.getElementById('debug-status');
   err.textContent = '';
-  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit number'; return; }
+
+  // Validate email
+  if (!email || !email.includes('@') || email.length < 5) {
+    err.textContent = 'Enter a valid email address';
+    return;
+  }
+
   btn.classList.add('btn-loading'); btn.disabled = true;
-  if(dbg) dbg.textContent = 'Checking...';
+
   try {
-    // Check employee in DB first
-    let emp = null;
-    if (sb) {
-      const res = await sb.from('employees').select('*').eq('phone', phone).single();
-      emp = res.data;
-    }
-    if (!emp) {
-      err.textContent = 'Number not registered. Please register first.';
+    if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+
+    // Call Edge Function to generate & send OTP email
+    const edgeFnUrl = SURL + '/functions/v1/send-otp-email';
+    const response = await fetch(edgeFnUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + SKEY,
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      err.textContent = result.error || 'Failed to send OTP';
       btn.classList.remove('btn-loading'); btn.disabled = false;
-      if(dbg) dbg.textContent = '';
       return;
     }
-    _otpEmpData = emp;
-    _otpPhone = phone;
-    btn.classList.remove('btn-loading'); btn.disabled = false;
-    if(dbg) dbg.textContent = '';
-    // Show recaptcha and send Firebase OTP
-    err.textContent = '';
-    initRecaptcha(async () => {
-      // Called when recaptcha solved
-      btn.classList.add('btn-loading'); btn.disabled = true;
-      try {
-        const phoneNumber = '+91' + phone;
-        const confirmResult = await fbAuth.signInWithPhoneNumber(phoneNumber, recaptchaVerifier);
-        _fbConfirmResult = confirmResult;
-        // Hide recaptcha
-        const rc = document.getElementById('recaptcha-container');
-        if(rc) rc.innerHTML = '';
-        // Show OTP step
-        document.getElementById('emp-step1').style.display = 'none';
-        document.getElementById('emp-step2').style.display = '';
-        document.getElementById('otp-big').textContent = '----';
-        document.getElementById('otp-big').style.fontSize = '24px';
-        document.getElementById('otp-big').textContent = 'Check your SMS';
-        ['otp-1','otp-2','otp-3','otp-4'].forEach(id => { const b = document.getElementById(id); if(b) b.value=''; });
-        document.getElementById('otp-1')?.focus();
-        document.getElementById('otp-err').textContent = '';
-        toast('OTP sent to +91' + phone + ' 📱', 'success', '✅');
-      } catch(e) {
-        console.error('[Firebase SMS]', e);
-        // Firebase OTP failed — inform user, do NOT show code on screen
-        const rc = document.getElementById('recaptcha-container');
-        if(rc) rc.innerHTML = '';
-        _fbConfirmResult = null;
-        // Generate server-side OTP stored in DB (for Fast2SMS integration later)
-        const otp = String(Math.floor(100000 + Math.random() * 900000));
-        _otpCode = otp;
-        if(sb) { try { await sb.from('employees').update({temp_otp: otp, otp_created_at: new Date().toISOString()}).eq('phone', phone); } catch(_){} }
-        // Show OTP entry screen WITHOUT revealing the code
-        document.getElementById('emp-step1').style.display = 'none';
-        document.getElementById('emp-step2').style.display = '';
-        document.getElementById('otp-big').textContent = 'SMS unavailable';
-        document.getElementById('otp-big').style.fontSize = '18px';
-        ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].forEach(id => { const b = document.getElementById(id); if(b) b.value=''; });
-        document.getElementById('otp-1')?.focus();
-        document.getElementById('otp-err').textContent = '';
-        // TODO: Replace with Fast2SMS API call before go-live
-        // For now, check Supabase employees table → temp_otp column for testing
-        toast('SMS service temporarily unavailable. Contact admin for OTP.', 'warn', '⚠️');
-      }
-      btn.classList.remove('btn-loading'); btn.disabled = false;
+
+    // Store email for verification step
+    _otpEmail = email;
+
+    // Show OTP entry screen
+    document.getElementById('emp-step1').style.display = 'none';
+    document.getElementById('emp-step2').style.display = '';
+    document.getElementById('otp-email-display').textContent = result.maskedEmail || email;
+    ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].forEach(id => {
+      const b = document.getElementById(id); if(b) b.value='';
     });
+    document.getElementById('otp-1')?.focus();
+    document.getElementById('otp-err').textContent = '';
+    toast('OTP sent to ' + (result.maskedEmail || email) + ' 📧', 'success', '✅');
+
   } catch(e) {
-    console.error('[sendOTP]', e);
-    err.textContent = 'Error: ' + (e.message || 'Try again');
-    btn.classList.remove('btn-loading'); btn.disabled = false;
+    err.textContent = 'Error sending OTP. Please try again.';
   }
+  btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
-async function verifyOTP() {
+async function resendEmailOTP() {
+  if (!_otpEmail) { backToEmail(); return; }
+  document.getElementById('emp-email').value = _otpEmail;
+  backToEmail();
+  setTimeout(() => sendEmailOTP(), 300);
+}
+
+async function verifyEmailOTP() {
   const code = ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].map(id=>document.getElementById(id)?.value||'').join('');
   const err = document.getElementById('otp-err');
   const btn = document.getElementById('verify-otp-btn');
   err.textContent = '';
+
   if (code.length !== 6) { err.textContent = 'Enter 6-digit OTP'; return; }
+  if (!_otpEmail) { err.textContent = 'Session expired. Go back and try again.'; return; }
+
   btn.classList.add('btn-loading'); btn.disabled = true;
+
   try {
-    if (!_otpEmpData) {
-      err.textContent = 'Session expired. Go back and try again.';
+    if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+
+    // Verify OTP server-side
+    const { data: result, error: rpcErr } = await sb.rpc('verify_email_otp', {
+      p_email: _otpEmail,
+      p_otp: code
+    });
+
+    if (rpcErr || !result?.success) {
+      err.textContent = result?.error || rpcErr?.message || 'Verification failed.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
-    // Verify — Firebase SMS or fallback screen OTP
-    if (_fbConfirmResult) {
-      try {
-        await _fbConfirmResult.confirm(code);
-      } catch(fbErr) {
-        err.textContent = fbErr.code === 'auth/invalid-verification-code' ? 'Wrong OTP. Check your SMS.' : 'OTP expired. Go back and try again.';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
-    } else {
-      // Screen OTP fallback
-      if (code !== _otpCode) {
-        err.textContent = 'Wrong OTP. Check the number shown on screen.';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
-      if (sb) { try { await sb.from('employees').update({temp_otp: null}).eq('phone', _otpPhone); } catch(_){} }
-    }
-    // Login
-    S.user = _otpEmpData;
+
+    // Login successful — employee data from server
+    S.user = result.employee;
     S.role = 'employee';
+
+    // Load fresh menu and canteens
     if (sb) {
       const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available',true).limit(500);
       if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
       const {data: freshCans} = await sb.from('canteens').select('*').order('id');
       if (freshCans?.length) S.canteens = freshCans;
     }
+
     renderHome();
     goScreen('s-home');
-    toast(`Welcome, ${_otpEmpData.name.split(' ')[0]}! 👋`, 'success', '✅');
+    toast(`Welcome, ${S.user.name.split(' ')[0]}! 👋`, 'success', '✅');
+
   } catch(e) {
-    console.error('[verifyOTP]', e);
     err.textContent = 'Error: ' + (e.message || 'Try again');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
-async function registerEmployee() {
+async function registerEmployeeEmail() {
   const name = document.getElementById('reg-name')?.value?.trim() || '';
+  const email = document.getElementById('reg-email')?.value?.trim() || '';
   const phone = document.getElementById('reg-phone')?.value?.trim() || '';
   const err = document.getElementById('reg-err');
   const btn = document.getElementById('reg-btn');
   err.textContent = '';
-  if (!name) { err.textContent = 'Enter your full name'; return; }
-  if (phone.length !== 10) { err.textContent = 'Enter valid 10-digit number'; return; }
+
+  if (!name || name.length < 2) { err.textContent = 'Enter your full name'; return; }
+  if (!email || !email.includes('@')) { err.textContent = 'Enter a valid email address'; return; }
+
   btn.classList.add('btn-loading'); btn.disabled = true;
+
   try {
-    if (sb) {
-      // Check already registered
-      const {data: ex} = await sb.from('employees').select('id').eq('phone', phone);
-      if (ex?.length) {
-        err.textContent = 'Number already registered. Please login.';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
-      const empId = 'LT-EMP-' + Date.now().toString().slice(-5);
-      const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-      const {error: insErr} = await sb.from('employees').insert([{
-        id: empId, name, phone,
-        email: phone + '@lt-foodhub.app',
-        department: 'L&T', campus: 'Powai Campus',
-        wallet_balance: 0, points_balance: 0,
-        initials, meal_pass_active: true,
-        meal_pass_used: 0, meal_pass_limit: 30,
-      }]);
-      if (insErr) { err.textContent = 'Failed: ' + insErr.message; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-      toast('Registered! ✅', 'success', '✅');
-      // Set phone in login box and go to login
-      document.getElementById('emp-phone').value = phone;
-      document.getElementById('emp-register').style.display = 'none';
-      document.getElementById('emp-step1').style.display = '';
-      // Auto send OTP
-      setTimeout(() => sendOTP(), 400);
+    if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+
+    // Register via server-side function
+    const { data: result, error: rpcErr } = await sb.rpc('register_employee', {
+      p_name: name,
+      p_email: email,
+      p_phone: phone || null
+    });
+
+    if (rpcErr || !result?.success) {
+      err.textContent = result?.error || rpcErr?.message || 'Registration failed.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
     }
+
+    toast('Registered! ' + (result.message || ''), 'success', '✅');
+
+    // Set email in login box and go to login
+    document.getElementById('emp-email').value = email;
+    document.getElementById('emp-register').style.display = 'none';
+    document.getElementById('emp-step1').style.display = '';
+
+    // Auto send OTP
+    setTimeout(() => sendEmailOTP(), 400);
+
   } catch(e) {
-    console.error('[register]', e);
     err.textContent = 'Error: ' + (e.message || 'Try again');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
@@ -3430,10 +3405,10 @@ function showForgotPassword(){
         <input class="form-input" id="fp-id" placeholder="LT-EMP-XXXXX">
       </div>
       <div class="form-group">
-        <label class="form-label">Registered Phone</label>
-        <input class="form-input" id="fp-phone" type="tel" placeholder="+91 XXXXX XXXXX">
+        <label class="form-label">Registered Email</label>
+        <input class="form-input" id="fp-email" type="email" placeholder="name@larsentoubro.com">
       </div>
-      <button class="btn btn-primary btn-full" onclick="sendOTP()">Send OTP →</button>
+      <button class="btn btn-primary btn-full" onclick="toast('OTP sent to your email!','success','📧');closeModal()">Send OTP →</button>
       <div id="fp-err" class="login-err"></div>
     </div>`);
 }
