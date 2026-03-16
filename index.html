@@ -1920,6 +1920,14 @@ async function placeOrder() {
   if (S.selPay === 'upi') { toast('UPI coming soon! Please use FoodHub Wallet.', 'warn', '📱'); return; }
   if (!sb) { toast('Database not connected!', 'error', '❌'); return; }
 
+  // FIX BUG 2: Quick client-side balance estimate before hitting server
+  const estimatedTotal = S.cart.reduce((s,i) => s + i.price * i.qty, 0);
+  const estimatedWithFees = Math.ceil(estimatedTotal * 1.05 + 3.54); // rough: 5% GST + platform fee
+  if (S.user.wallet_balance < estimatedWithFees) {
+    toast(`Insufficient balance! You have ₹${Math.round(S.user.wallet_balance)}, need ~₹${estimatedWithFees}`, 'error', '💸');
+    return;
+  }
+
   const btn = document.getElementById('pay-btn');
   btn.classList.add('btn-loading'); btn.disabled = true;
 
@@ -1936,61 +1944,70 @@ async function placeOrder() {
     const splitOrders = [];
     let totalPaid = 0;
     let newBalance = S.user.wallet_balance;
+    const failedCounters = [];
 
     // ── Create one order per counter via server-side function ──────────
+    // FIX BUG 1: Don't return early on partial failure — collect all results
     for (const cid of Object.keys(byCanteen)) {
       const canteen = S.canteens.find(c => c.id === cid) || { id: cid, name: 'Counter', icon: '🍽️' };
       const items = byCanteen[cid];
 
-      // Call server-side atomic function
-      const { data: result, error: rpcErr } = await sb.rpc('place_order', {
-        p_employee_id: S.user.id,
-        p_canteen_id: cid,
-        p_canteen_name: canteen.name,
-        p_canteen_icon: canteen.icon || '🍽️',
-        p_pickup_slot: S.selSlot,
-        p_items: items.map(i => ({
-          id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price
-        })),
-        p_payment_method: 'wallet'
-      });
+      try {
+        const { data: result, error: rpcErr } = await sb.rpc('place_order', {
+          p_employee_id: S.user.id,
+          p_canteen_id: cid,
+          p_canteen_name: canteen.name,
+          p_canteen_icon: canteen.icon || '🍽️',
+          p_pickup_slot: S.selSlot,
+          p_items: items.map(i => ({
+            id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price
+          })),
+          p_payment_method: 'wallet'
+        });
 
-      if (rpcErr) {
-        toast('Order failed: ' + rpcErr.message, 'error', '❌');
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
+        if (rpcErr || !result?.success) {
+          failedCounters.push({ canteen: canteen.name, error: result?.error || rpcErr?.message || 'Unknown error' });
+          continue; // Don't stop — try remaining counters
+        }
+
+        const order = {
+          id: result.order_id,
+          token_number: result.token_number,
+          employee_id: S.user.id,
+          employee_name: S.user.name,
+          canteen_id: cid,
+          canteen_name: canteen.name,
+          canteen_icon: canteen.icon,
+          pickup_slot: S.selSlot,
+          status: 'new',
+          item_total: result.item_total,
+          gst_amount: result.gst_amount,
+          amount_paid: result.total_paid,
+          subsidy_applied: 0,
+          items: items.map(i => ({ ...i })),
+          created_at: new Date(),
+        };
+
+        splitOrders.push(order);
+        S.orders.unshift(order);
+        S.allOrders.unshift({ ...order });
+        totalPaid += result.total_paid;
+        newBalance = result.new_balance;
+      } catch(e) {
+        failedCounters.push({ canteen: canteen.name, error: e.message });
       }
+    }
 
-      if (!result?.success) {
-        toast(result?.error || 'Order failed. Please try again.', 'error', '❌');
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
+    // If ALL counters failed, show error
+    if (splitOrders.length === 0) {
+      toast('Order failed: ' + (failedCounters[0]?.error || 'Please try again'), 'error', '❌');
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
 
-      // Server returned verified data
-      const order = {
-        id: result.order_id,
-        token_number: result.token_number,
-        employee_id: S.user.id,
-        employee_name: S.user.name,
-        canteen_id: cid,
-        canteen_name: canteen.name,
-        canteen_icon: canteen.icon,
-        pickup_slot: S.selSlot,
-        status: 'new',
-        item_total: result.item_total,
-        gst_amount: result.gst_amount,
-        amount_paid: result.total_paid,
-        subsidy_applied: 0,
-        items: items.map(i => ({ ...i })),
-        created_at: new Date(),
-      };
-
-      splitOrders.push(order);
-      S.orders.unshift(order);
-      S.allOrders.unshift({ ...order });
-      totalPaid += result.total_paid;
-      newBalance = result.new_balance;
+    // If SOME counters failed, warn but show success for the ones that went through
+    if (failedCounters.length > 0) {
+      toast(`⚠️ ${failedCounters.length} counter(s) failed: ${failedCounters.map(f=>f.canteen).join(', ')}. Partial order placed.`, 'warn', '⚠️');
     }
 
     // ── Update local state with server-verified balance ──────────────
@@ -5055,33 +5072,37 @@ async function posBill() {
       });
       if (error || !result?.success) { toast(result?.error || error?.message || 'Billing failed', 'error', '❌'); return; }
       toast(`Token #${result.token_number} — ₹${result.total_paid} billed to ${empId}`, 'success', '✅');
-      printPOSReceipt(result.token_number, empId, 'wallet', subtotal, gst, total);
+      printPOSReceipt(result.token_number, empId, 'wallet', subtotal, fees.foodGst, total);
     } catch(e) { toast('Error: ' + e.message, 'error', '❌'); return; }
   } else {
-    // Cash order — insert directly with 'cash' payment
+    // Cash order — use a dedicated POS function or insert with proper handling
     const token = (S.tokenCounters[cid] || 1);
     S.tokenCounters[cid] = token + 1;
     const orderId = 'pos-' + Date.now() + '-' + cid;
     try {
       if (sb) {
-        await sb.from('orders').insert([{
+        const { error: oErr } = await sb.from('orders').insert([{
           id: orderId, token_number: token,
           employee_id: 'CASH', employee_name: 'Walk-up Customer',
           canteen_id: cid, canteen_name: canteen.name, canteen_icon: canteen.icon,
           pickup_slot: 'Counter', status: 'new',
-          item_total: subtotal, gst_amount: gst, amount_paid: total,
+          item_total: subtotal, gst_amount: Math.round(fees.foodGst * 100) / 100,
+          platform_fee: fees.platformFee, platform_gst: Math.round(fees.platformGst * 100) / 100,
+          amount_paid: Math.round(fees.grandTotal * 100) / 100,
           payment_method: 'cash', subsidy_applied: 0
         }]);
-        await sb.from('order_items').insert(posCart.map(i => ({
+        if (oErr) { toast('Order save failed: ' + oErr.message, 'error', '❌'); return; }
+        const { error: iErr } = await sb.from('order_items').insert(posCart.map(i => ({
           order_id: orderId, item_id: i.id, item_name: i.name,
           item_emoji: i.emoji || '', quantity: i.qty,
           unit_price: i.price, total_price: i.price * i.qty
         })));
+        if (iErr) toast('Items save warning: ' + iErr.message, 'warn', '⚠️');
         await sb.from('canteens').update({ token_counter: token + 1 }).eq('id', cid);
       }
     } catch(e) { toast('Error saving order: ' + e.message, 'error', '❌'); }
     toast(`Token #${token} — ₹${total} CASH`, 'success', '💵');
-    printPOSReceipt(token, 'Walk-up', 'cash', subtotal, gst, total);
+    printPOSReceipt(token, 'Walk-up', 'cash', subtotal, fees.foodGst, total);
   }
   posCart = [];
   closeModal();
