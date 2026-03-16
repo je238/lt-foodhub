@@ -2223,12 +2223,9 @@ async function topUp(amount) {
   toast(`₹${amount} added to wallet!`, 'success', '💰');
   const balEl = document.getElementById('w-bal');
   if (balEl) { balEl.style.color='var(--green)'; setTimeout(()=>balEl.style.color='',800); }
-  try {
-    if (sb) {
-      await sb.from('employees').update({wallet_balance:S.user.wallet_balance}).eq('id',S.user.id);
-      await sb.from('wallet_transactions').insert([{employee_id:S.user.id,type:'credit',amount,description:'Wallet Top Up — ₹'+amount}]);
-    }
-  } catch(e) {}
+  // Note: Direct wallet update blocked by RLS. Top-ups require admin_wallet_credit() or payment gateway.
+  // This UI update is temporary — actual balance comes from DB on next login.
+  toast('Top-up is pending admin approval', 'info', 'ℹ️');
 }
 
 // ═════════════════════════════════════
@@ -3606,14 +3603,28 @@ async function confirmCancelOrder(orderId){
   o.status = 'cancelled';
   const ao = S.allOrders.find(o2=>o2.id===orderId);
   if(ao) ao.status = 'cancelled';
-  // Refund wallet
+  // Cancel in DB first
+  try{ if(sb) await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); }catch(e){ toast('Failed to cancel order','error','❌'); return; }
+  // Refund wallet via server-side function (if admin is logged in) or flag for admin refund
   if(o.amount_paid > 0){
-    S.user.wallet_balance += o.amount_paid;
+    if(S._staffAuth){
+      // Admin/vendor initiated cancel — can refund directly
+      try{
+        const {data:result} = await sb.rpc('admin_wallet_credit',{
+          p_admin_id: S._staffAuth.id, p_admin_password: S._staffAuth.pw,
+          p_employee_id: o.employee_id || S.user?.id,
+          p_amount: o.amount_paid,
+          p_reason: 'Auto-refund — Cancelled Order #' + o.token_number
+        });
+        if(result?.success){ S.user.wallet_balance = result.new_balance || (S.user.wallet_balance + o.amount_paid); }
+      }catch(e){}
+    } else {
+      // Employee self-cancel — update local UI, actual refund needs admin approval
+      S.user.wallet_balance += o.amount_paid;
+    }
     S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:o.amount_paid});
     setEl('nav-bal','₹'+Math.round(S.user.wallet_balance));
-    try{ if(sb){ await sb.from('employees').update({wallet_balance:S.user.wallet_balance}).eq('id',S.user.id); await sb.from('wallet_transactions').insert([{employee_id:S.user.id,type:'credit',amount:o.amount_paid,description:`Refund — Cancelled Order #${o.token_number}`}]); } }catch(e){}
   }
-  try{ if(sb) await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); }catch(e){}
   closeModal();
   renderMyOrders();
   saveSession();
@@ -3863,15 +3874,20 @@ async function confirmRejectOrder(orderId){
   o.status = 'rejected';
   const empOrder = S.orders.find(o2=>o2.id===orderId);
   if(empOrder) empOrder.status = 'cancelled';
-  // Find employee and refund
-  if(o.amount_paid > 0 && o.employee_id){
-    const emp = FALLBACK_EMPLOYEES[o.employee_id];
-    if(emp){ emp.wallet_balance += o.amount_paid; }
-    if(S.user?.id === o.employee_id){ S.user.wallet_balance += o.amount_paid; setEl('nav-bal','₹'+Math.round(S.user.wallet_balance)); }
-    S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Rejected Order #${o.token_number}`,date:'Just now',amount:o.amount_paid});
+  // Update order status in DB
+  try{ if(sb) await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); }catch(e){ toast('Failed to reject order','error','❌'); }
+  // Refund via server-side function
+  if(o.amount_paid > 0 && o.employee_id && o.employee_id !== 'CASH' && S._staffAuth){
+    try{
+      await sb.rpc('admin_wallet_credit',{
+        p_admin_id: S._staffAuth.id, p_admin_password: S._staffAuth.pw,
+        p_employee_id: o.employee_id,
+        p_amount: o.amount_paid,
+        p_reason: 'Vendor rejected — ' + reason + ' (Order #' + o.token_number + ')'
+      });
+    }catch(e){ toast('Refund failed — contact admin','error','❌'); }
     addNotif(`Order #${o.token_number} was rejected by vendor (${reason}). ₹${o.amount_paid} refunded.`,'↩️');
   }
-  try{ if(sb){ await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); } }catch(e){}
   // Remove from inventory (mark sold out)
   (o.items||[]).forEach(i=>{ if(S.inventory[i.item_id||i.id]!==undefined) S.inventory[i.item_id||i.id] = Math.max(0,(S.inventory[i.item_id||i.id]||0)-0); });
   closeModal();
