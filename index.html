@@ -236,6 +236,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .form-input::placeholder{color:var(--muted)}
 .form-input:disabled{opacity:.6;cursor:not-allowed}
 .form-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M6 8L0 0h12z' fill='%2364748b'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;padding-right:36px}
+.form-hint{font-size:11px;color:var(--muted);margin-top:4px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .form-hint{font-size:11px;color:var(--muted);margin-top:4px}
 .form-error{font-size:11px;color:var(--red);margin-top:4px;font-weight:600}
@@ -2199,11 +2200,7 @@ function rateOrder() {
         <span class="star" onclick="setRating(5,this)">⭐</span>
       </div>
       <div id="rating-val" style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:12px">Tap a star to rate</div>
-      <textarea id="rating-comment" class="form-input" rows="2" maxlength="200" placeholder="Tell us more (optional)..." style="margin-bottom:12px"></textarea>
-      <div class="form-group">
-        <label class="form-label">Comments (optional)</label>
-        <textarea class="form-input" id="rating-comment" rows="3" placeholder="What did you love or want improved?"></textarea>
-      </div>
+      <textarea id="rating-comment" class="form-input" rows="2" maxlength="200" placeholder="What did you love or want improved?" style="margin-bottom:12px"></textarea>
       <button class="btn btn-primary btn-full" onclick="submitRating('${lastOrder.id}')">Submit Rating</button>
     </div>
   `);
@@ -2398,13 +2395,28 @@ async function processTopUp(amount) {
 // ═════════════════════════════════════
 async function renderMyOrders() {
   if (!S.user) return;
-  let orders = [...S.orders];
+  // Always fetch fresh from DB to ensure items are loaded
   try {
     if (sb) {
       const {data} = await sb.from('orders').select('*, order_items(*)').eq('employee_id',S.user.id).order('created_at',{ascending:false}).limit(30);
-      if (data?.length) data.forEach(o => { if (!orders.find(lo => lo.id===o.id)) orders.push({...o,items:o.order_items||[]}); });
+      if (data?.length) {
+        data.forEach(o => {
+          const existing = S.orders.find(lo => lo.id === o.id);
+          if (existing) {
+            // Update status and ensure items are loaded
+            existing.status = o.status;
+            existing.rating = o.rating;
+            if (o.order_items?.length && (!existing.items || !existing.items.length)) {
+              existing.items = o.order_items;
+            }
+          } else {
+            S.orders.push({...o, items: o.order_items || []});
+          }
+        });
+      }
     }
   } catch(e) {}
+  let orders = [...S.orders];
   const filtered = S.orderFilter === 'all' ? orders :
     S.orderFilter === 'ready' ? orders.filter(o => o.status === 'ready') :
     S.orderFilter === 'new' ? orders.filter(o => ['new','preparing'].includes(o.status)) :
@@ -2468,10 +2480,11 @@ async function markPickup(id) {
 
 function rateOrderById(id) {
   const lastOrder = S.orders.find(o => o.id === id);
-  if (!lastOrder) return;
+  if (!lastOrder) { toast('Order not found — try refreshing', 'warn', '⚠️'); return; }
+  selectedRating = 0;
   showModal(`
     <div class="modal-head">
-      <span class="modal-title">Rate Your Order</span>
+      <span class="modal-title">⭐ Rate Your Order</span>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
@@ -2488,9 +2501,8 @@ function rateOrderById(id) {
         <span class="star" onclick="setRating(5,this)">⭐</span>
       </div>
       <div id="rating-val" style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:12px">Tap a star to rate</div>
-      <textarea id="rating-comment" class="form-input" rows="2" maxlength="200" placeholder="Tell us more (optional)..." style="margin-bottom:12px"></textarea>
-      <textarea class="form-input" id="rating-comment" rows="2" placeholder="Any feedback?"></textarea>
-      <button class="btn btn-primary btn-full" style="margin-top:12px" onclick="submitRating('${id}')">Submit</button>
+      <textarea id="rating-comment" class="form-input" rows="2" maxlength="200" placeholder="What did you love or want improved?" style="margin-bottom:12px"></textarea>
+      <button class="btn btn-primary btn-full" onclick="submitRating('${id}')">Submit Rating</button>
     </div>
   `);
 }
@@ -3714,17 +3726,32 @@ function confirmNewPw(){
 // ══════════════════════════════════════════════════════
 function reorder(orderId){
   const order = S.orders.find(o=>o.id===orderId);
-  if(!order||!order.items?.length){ toast('Order not found','error','⚠️'); return; }
+  if(!order){ toast('Order not found','error','⚠️'); return; }
+  // Items may be empty — try to refetch
+  if(!order.items?.length){
+    if(sb){
+      sb.from('order_items').select('*').eq('order_id',orderId).then(({data})=>{
+        if(data?.length){ order.items = data; doReorder(order); }
+        else toast('No items found in this order','error','⚠️');
+      }).catch(()=>toast('Failed to load order items','error','❌'));
+    } else { toast('Cannot load order items offline','error','⚠️'); }
+    return;
+  }
+  doReorder(order);
+}
+function doReorder(order){
   const targetCanteen = S.canteens.find(c=>c.id===order.canteen_id);
   if(targetCanteen && !targetCanteen.is_open){ toast(`${targetCanteen.name} is currently closed!`,'error','🚫'); return; }
   S.cart = [];
   S.selCanteen = targetCanteen || S.selCanteen;
   order.items.forEach(item=>{
-    const menuItem = S.menu.find(m=>m.id===(item.item_id||item.id));
+    const itemId = item.item_id || item.id;
+    const menuItem = S.menu.find(m=>m.id===itemId);
     if(menuItem && menuItem.is_available!==false){
+      const qty = item.quantity || item.qty || 1;
       const ex = S.cart.find(c=>c.id===menuItem.id);
-      if(ex) ex.qty += (item.quantity||item.qty||1);
-      else S.cart.push({...menuItem, qty:(item.quantity||item.qty||1)});
+      if(ex) ex.qty += qty;
+      else S.cart.push({...menuItem, qty});
     }
   });
   if(!S.cart.length){ toast('All items from this order are currently unavailable','warn','⚠️'); return; }
@@ -5306,9 +5333,16 @@ function printPOSReceipt(token, customer, method, subtotal, gst, total) {
 // COMPLAINT SYSTEM — Employee files, Admin resolves
 // ══════════════════════════════════════════════════════
 
-function showComplaint(orderId) {
-  const o = S.orders.find(o => o.id === orderId) || S.allOrders.find(o => o.id === orderId);
-  if (!o) return;
+async function showComplaint(orderId) {
+  let o = S.orders.find(o => o.id === orderId) || S.allOrders.find(o => o.id === orderId);
+  if (!o) { toast('Order not found', 'error', '⚠️'); return; }
+  // Fetch items if not loaded
+  if ((!o.items || !o.items.length) && sb) {
+    try {
+      const {data} = await sb.from('order_items').select('*').eq('order_id', orderId);
+      if (data?.length) o.items = data;
+    } catch(e) {}
+  }
   showModal(`
     <div class="modal-head">
       <span class="modal-title">⚠️ File a Complaint</span>
