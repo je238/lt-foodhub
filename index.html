@@ -1192,7 +1192,7 @@ async function loadData() {
     if (!sb) throw new Error('No Supabase');
     const [canRes, menuRes, settingsRes] = await Promise.all([
       sb.from('canteens').select('*').order('id'),
-      sb.from('menu_items').select('*').order('id').limit(500),
+      sb.from('menu_items').select('*').order('id').limit(700),
       sb.from('app_settings').select('*').catch(() => ({ data: [] }))
     ]);
     S.canteens = canRes.data?.length ? canRes.data : FALLBACK_CANTEENS;
@@ -1489,7 +1489,7 @@ async function verifyEmailOTP() {
 
     // Load fresh menu and canteens
     if (sb) {
-      const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available',true).limit(500);
+      const {data: freshMenu} = await sb.from('menu_items').select('*').eq('is_available',true).limit(700);
       if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
       const {data: freshCans} = await sb.from('canteens').select('*').order('id');
       if (freshCans?.length) S.canteens = freshCans;
@@ -1641,7 +1641,7 @@ async function doLogin() {
       if (!emp) { err.textContent = 'Employee not found. Please register first.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
       S.user = emp; S.role = 'employee';
       if (sb) {
-        const { data: freshMenu } = await sb.from('menu_items').select('*').eq('is_available', true).limit(500);
+        const { data: freshMenu } = await sb.from('menu_items').select('*').eq('is_available', true).limit(700);
         if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
         const { data: freshCans } = await sb.from('canteens').select('*').order('id');
         if (freshCans?.length) S.canteens = freshCans;
@@ -2139,14 +2139,17 @@ function afterSuccess() {
 }
 
 function goToMyOrders() {
-  renderHome();
+  // Navigate to home screen first
   goScreen('s-home');
-  // Switch to orders tab
+  // Switch to orders tab properly
   setTimeout(() => {
-    const ordersTab = document.querySelector('.bnav-item[onclick*="orders"]');
-    if (ordersTab) ordersTab.click();
-    else goScreen('s-orders');
-  }, 100);
+    goTab('orders');
+    // Activate the orders nav button
+    document.querySelectorAll('.bni').forEach(b => b.classList.remove('act'));
+    const ordNav = document.getElementById('ord-nav');
+    if (ordNav) ordNav.classList.add('act');
+    renderMyOrders();
+  }, 150);
 }
 
 // ═════════════════════════════════════
@@ -5016,6 +5019,14 @@ init = async function(){
         const {data: emp} = await sb.from('employees').select('*').eq('id', sess.userId).single();
         if(emp){
           S.user = emp; S.role = 'employee';
+          // Force refresh menu from DB (loadData may have used cache/fallback)
+          try {
+            const {data: freshMenu} = await sb.from('menu_items').select('*').order('id').limit(700);
+            if (freshMenu?.length) S.menu = freshMenu;
+            const {data: freshCans} = await sb.from('canteens').select('*').order('id');
+            if (freshCans?.length) S.canteens = freshCans;
+            S.selCanteen = S.canteens.find(c => c.is_open) || S.canteens[0];
+          } catch(e) {}
           renderHome(); goScreen('s-home');
           toast('Welcome back, '+emp.name.split(' ')[0]+'!','success','👋');
           setTimeout(addARIA,500);
