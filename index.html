@@ -1042,6 +1042,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div class="chip" onclick="kdsFilter('new',this)">🆕 New</div>
     <div class="chip" onclick="kdsFilter('preparing',this)">⏳ Preparing</div>
     <div class="chip" onclick="kdsFilter('ready',this)">✅ Ready</div>
+    <div class="chip" style="background:#065f46;color:#fff;border-color:#065f46" onclick="showDailyMenuSelector()">📋 Today's Menu</div>
     <div class="chip" onclick="kdsFilter('12:00 PM',this)">12:00 PM</div>
     <div class="chip" onclick="kdsFilter('12:30 PM',this)">12:30 PM</div>
     <div class="chip" onclick="kdsFilter('1:00 PM',this)">1:00 PM</div>
@@ -1073,6 +1074,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div class="admin-tab" onclick="adminTab('canteens',this)">🏪 Canteens</div>
     <div class="admin-tab" onclick="adminTab('employees',this)">👥 Employees</div>
     <div class="admin-tab" onclick="adminTab('revenue',this)">💰 Revenue</div>
+    <div class="admin-tab" onclick="adminTab('complaints',this)">⚠️ Complaints</div>
     <div class="admin-tab" onclick="adminTab('settings',this)">⚙️ Settings</div>
   </div>
   <div class="scroll page-wide" id="admin-body" style="flex:1;padding:14px 14px 24px;max-width:560px;width:100%;margin:0 auto">
@@ -2651,6 +2653,7 @@ function renderAdmin(tab) {
     canteens: renderAdminCanteens,
     employees: renderAdminEmployees,
     revenue: renderAdminRevenue,
+    complaints: renderAdminComplaints,
     settings: renderAdminSettings,
   };
   (renders[t] || renderAdminOverview)(el);
@@ -4603,6 +4606,7 @@ renderMyOrders = async function(){
         ${canCancel?`<button class="btn btn-danger btn-sm" onclick="showCancelOrder('${o.id}')">✕ Cancel</button>`:''}
         ${o.status==='done'||o.status==='cancelled'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="reorder('${o.id}')">🔄 Reorder</button>`:''}
         ${o.status==='done'&&!o.rating?`<button class="btn btn-ghost btn-sm" onclick="rateOrderById('${o.id}')">⭐ Rate</button>`:''}
+        ${o.status==='done'?`<button class="btn btn-danger btn-sm" onclick="showComplaint('${o.id}')">⚠️ Complaint</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -4634,6 +4638,7 @@ renderVendor = function(){
     actBar.className='vendor-extra-actions';
     actBar.style.cssText='display:flex;gap:8px;padding:10px 0;flex-wrap:wrap;border-top:1px solid var(--border);margin-top:12px';
     actBar.innerHTML=`
+      <button class="btn btn-primary btn-sm" onclick="showDailyMenuSelector()">📋 Today's Menu</button>
       <button class="btn btn-ghost btn-sm" onclick="showSoldOutPanel()">🚫 Sold-Out</button>
       <button class="btn btn-ghost btn-sm" onclick="showOperatingHours()">⏰ Hours</button>
       <button class="btn btn-ghost btn-sm" onclick="toggleDark()">🌙 Dark</button>`;
@@ -5175,6 +5180,261 @@ function printPOSReceipt(token, customer, method, subtotal, gst, total) {
   </body></html>`;
   const w = window.open('', '_blank', 'width=320,height=500');
   if (w) { w.document.write(receiptHtml); w.document.close(); setTimeout(() => w.print(), 500); }
+}
+
+// ══════════════════════════════════════════════════════
+// COMPLAINT SYSTEM — Employee files, Admin resolves
+// ══════════════════════════════════════════════════════
+
+function showComplaint(orderId) {
+  const o = S.orders.find(o => o.id === orderId) || S.allOrders.find(o => o.id === orderId);
+  if (!o) return;
+  showModal(`
+    <div class="modal-head">
+      <span class="modal-title">⚠️ File a Complaint</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--light2);border-radius:12px;padding:12px;margin-bottom:16px">
+        <div style="font-weight:700;font-size:14px">Order #${o.token_number} · ${o.canteen_name || ''}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Paid ₹${o.amount_paid || 0} · ${fmtDate(o.created_at)}</div>
+        <div style="font-size:12px;margin-top:6px">${(o.items || []).map(i => (i.emoji || '') + ' ' + (i.item_name || i.name) + ' ×' + (i.quantity || i.qty)).join(', ')}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Complaint Type</label>
+        <select class="form-input form-select" id="complaint-type">
+          <option value="not_delivered">🚫 Order not delivered</option>
+          <option value="wrong_item">🔄 Wrong item received</option>
+          <option value="quality">👎 Food quality issue</option>
+          <option value="quantity">📉 Less quantity than ordered</option>
+          <option value="late">⏰ Extremely late delivery</option>
+          <option value="other">📝 Other issue</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Describe the issue</label>
+        <textarea class="form-input" id="complaint-desc" rows="3" placeholder="What happened? Be specific so we can help faster..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Upload Photo Proof (optional but helps)</label>
+        <input type="file" id="complaint-photo" accept="image/*" capture="environment" class="form-input" style="padding:8px">
+        <div class="form-hint">Take a photo at the counter showing the issue — this speeds up refund approval</div>
+      </div>
+      <div style="background:var(--amber-l);border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--amber)">
+        <strong>How it works:</strong> Your complaint goes to the admin team. If approved, ₹${o.amount_paid || 0} will be refunded to your wallet within 24 hours. Photo proof significantly speeds up the process.
+      </div>
+      <button class="btn btn-primary btn-full" onclick="submitComplaint('${orderId}')">Submit Complaint</button>
+    </div>`);
+}
+
+async function submitComplaint(orderId) {
+  const o = S.orders.find(o => o.id === orderId) || S.allOrders.find(o => o.id === orderId);
+  if (!o || !sb) return;
+  const type = document.getElementById('complaint-type')?.value;
+  const desc = document.getElementById('complaint-desc')?.value?.trim();
+  if (!desc || desc.length < 10) { toast('Please describe the issue in detail (min 10 characters)', 'warn', '⚠️'); return; }
+
+  // Handle photo — convert to base64 URL (store as text, or could use Supabase Storage)
+  let photoUrl = '';
+  const photoFile = document.getElementById('complaint-photo')?.files?.[0];
+  if (photoFile) {
+    try {
+      photoUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(photoFile);
+      });
+      // Truncate if too large (Supabase text column limit)
+      if (photoUrl.length > 500000) photoUrl = photoUrl.slice(0, 500000);
+    } catch(e) { photoUrl = ''; }
+  }
+
+  try {
+    const { error } = await sb.from('complaints').insert([{
+      order_id: orderId,
+      employee_id: S.user?.id,
+      employee_name: S.user?.name,
+      canteen_id: o.canteen_id,
+      canteen_name: o.canteen_name,
+      type: type,
+      description: desc,
+      photo_url: photoUrl || null,
+      status: 'open'
+    }]);
+    if (error) { toast('Failed to submit: ' + error.message, 'error', '❌'); return; }
+    closeModal();
+    toast('Complaint submitted! Admin will review within 24 hours.', 'success', '✅');
+    addNotif('Your complaint for Order #' + o.token_number + ' has been submitted', '⚠️');
+  } catch(e) { toast('Error: ' + e.message, 'error', '❌'); }
+}
+
+// Admin: View complaints
+async function renderAdminComplaints(el) {
+  el.innerHTML = '<div class="loader"></div>';
+  try {
+    if (!sb) return;
+    const { data: complaints } = await sb.from('complaints').select('*').order('created_at', { ascending: false }).limit(50);
+    if (!complaints?.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No complaints</div><div class="empty-sub">All clear!</div></div>'; return; }
+    const openCount = complaints.filter(c => c.status === 'open').length;
+    el.innerHTML = `
+      <div class="stats-grid" style="margin-bottom:14px">
+        <div class="stat-card"><div class="stat-label">Open</div><div class="stat-val" style="color:var(--red)">${openCount}</div></div>
+        <div class="stat-card"><div class="stat-label">Total</div><div class="stat-val">${complaints.length}</div></div>
+      </div>
+      ${complaints.map(c => {
+        const typeLabels = { not_delivered: '🚫 Not Delivered', wrong_item: '🔄 Wrong Item', quality: '👎 Quality', quantity: '📉 Quantity', late: '⏰ Late', other: '📝 Other' };
+        const statusBadge = { open: 'badge-new', reviewing: 'badge-prep', refunded: 'badge-ready', rejected: 'badge-done', resolved: 'badge-done' };
+        return `
+        <div class="card" style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+            <div>
+              <div style="font-weight:700;font-size:14px">${typeLabels[c.type] || c.type}</div>
+              <div style="font-size:12px;color:var(--muted)">${c.employee_name} · Order ${c.order_id?.slice(-8) || '—'} · ${c.canteen_name || ''}</div>
+              <div style="font-size:11px;color:var(--muted)">${fmtDate(c.created_at)}</div>
+            </div>
+            <span class="badge ${statusBadge[c.status] || 'badge-done'}">${c.status}</span>
+          </div>
+          <div style="font-size:13px;margin-bottom:8px;color:var(--dark);line-height:1.5">${c.description || ''}</div>
+          ${c.photo_url ? `<div style="margin-bottom:8px"><img src="${c.photo_url}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border)"></div>` : ''}
+          ${c.admin_note ? `<div style="background:var(--light2);border-radius:8px;padding:8px;font-size:12px;margin-bottom:8px"><strong>Admin:</strong> ${c.admin_note}</div>` : ''}
+          ${c.status === 'open' ? `
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-green btn-sm" style="flex:1" onclick="resolveComplaint(${c.id}, 'refund', ${c.refund_amount || 0})">💚 Refund ₹${c.refund_amount || '?'}</button>
+              <button class="btn btn-ghost btn-sm" onclick="resolveComplaint(${c.id}, 'resolve', 0)">✅ Resolve</button>
+              <button class="btn btn-danger btn-sm" onclick="resolveComplaint(${c.id}, 'reject', 0)">✕ Reject</button>
+            </div>
+          ` : ''}
+        </div>`;
+      }).join('')}`;
+  } catch(e) { el.innerHTML = '<div class="empty"><div class="empty-title">Failed to load complaints</div></div>'; }
+}
+
+async function resolveComplaint(complaintId, action, amount) {
+  if (!sb || !S._staffAuth) { toast('Admin login required', 'error', '🔒'); return; }
+  // If refund, ask for amount
+  if (action === 'refund') {
+    const refundAmt = prompt('Enter refund amount (₹):', amount || '0');
+    if (!refundAmt || isNaN(refundAmt) || parseFloat(refundAmt) <= 0) return;
+    amount = parseFloat(refundAmt);
+  }
+  const note = prompt('Add a note (optional):', '') || '';
+  try {
+    const { data: result, error } = await sb.rpc('resolve_complaint', {
+      p_admin_id: S._staffAuth.id,
+      p_admin_password: S._staffAuth.pw,
+      p_complaint_id: complaintId,
+      p_action: action,
+      p_note: note,
+      p_refund_amount: amount
+    });
+    if (error || !result?.success) { toast(result?.error || error?.message || 'Failed', 'error', '❌'); return; }
+    toast(`Complaint ${result.action}${result.amount ? ' — ₹' + result.amount + ' refunded' : ''}`, 'success', '✅');
+    renderAdmin('complaints');
+  } catch(e) { toast('Error: ' + e.message, 'error', '❌'); }
+}
+
+// ══════════════════════════════════════════════════════
+// DAILY MENU — Kitchen selects today's available dishes
+// ══════════════════════════════════════════════════════
+
+async function showDailyMenuSelector() {
+  const cid = S.user?.canteen_id || 'c1';
+  const canteen = S.canteens.find(c => c.id === cid) || { name: 'Counter' };
+  const items = S.menu.filter(m => m.canteen_id === cid);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Fetch today's selections
+  let todaySelections = {};
+  try {
+    if (sb) {
+      const { data } = await sb.from('daily_menu').select('menu_item_id, is_available').eq('canteen_id', cid).eq('date', today);
+      if (data?.length) data.forEach(d => { todaySelections[d.menu_item_id] = d.is_available; });
+    }
+  } catch(e) {}
+
+  const hasSelections = Object.keys(todaySelections).length > 0;
+
+  showModal(`
+    <div class="modal-head">
+      <span class="modal-title">📋 Today's Menu — ${canteen.name}</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:75svh;overflow-y:auto">
+      <div style="background:var(--blue-l);border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--blue)">
+        <strong>Select dishes available today.</strong> Unselected dishes will be grayed out for employees. You can change this anytime during the day.
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+        <button class="btn btn-ghost btn-sm" onclick="dailyMenuSelectAll(true)">✅ Select All</button>
+        <button class="btn btn-ghost btn-sm" onclick="dailyMenuSelectAll(false)">❌ Clear All</button>
+        <span style="font-size:12px;color:var(--muted);padding:7px 0" id="daily-count">${hasSelections ? Object.values(todaySelections).filter(v => v).length : items.length} selected</span>
+      </div>
+      <div id="daily-menu-list">
+        ${items.map(m => {
+          const isOn = hasSelections ? (todaySelections[m.id] === true) : true;
+          return `
+          <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--light2);border-radius:11px;margin-bottom:7px" id="dm-row-${m.id}">
+            <span style="font-size:22px">${m.emoji || '🍽️'}</span>
+            <div style="flex:1">
+              <div style="font-weight:700;font-size:13px">${m.name}</div>
+              <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${m.category || ''}</div>
+            </div>
+            <div class="toggle ${isOn ? 'on' : ''}" onclick="toggleDailyItem('${m.id}', this)" data-item-id="${m.id}"></div>
+          </div>`;
+        }).join('')}
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="saveDailyMenu('${cid}')">💾 Save Today's Menu</button>
+    </div>`);
+}
+
+function toggleDailyItem(id, el) {
+  el.classList.toggle('on');
+  updateDailyCount();
+}
+
+function dailyMenuSelectAll(on) {
+  document.querySelectorAll('#daily-menu-list .toggle').forEach(t => {
+    t.classList.toggle('on', on);
+  });
+  updateDailyCount();
+}
+
+function updateDailyCount() {
+  const count = document.querySelectorAll('#daily-menu-list .toggle.on').length;
+  const el = document.getElementById('daily-count');
+  if (el) el.textContent = count + ' selected';
+}
+
+async function saveDailyMenu(cid) {
+  if (!sb) { toast('Database not connected', 'error', '❌'); return; }
+  const today = new Date().toISOString().slice(0, 10);
+  const selections = [];
+  document.querySelectorAll('#daily-menu-list .toggle').forEach(t => {
+    const itemId = t.getAttribute('data-item-id');
+    const isOn = t.classList.contains('on');
+    selections.push({ canteen_id: cid, menu_item_id: itemId, date: today, is_available: isOn, set_by: S.user?.id || 'kitchen' });
+  });
+
+  try {
+    // Delete old selections for today
+    await sb.from('daily_menu').delete().eq('canteen_id', cid).eq('date', today);
+    // Insert new selections
+    const { error } = await sb.from('daily_menu').insert(selections);
+    if (error) { toast('Failed: ' + error.message, 'error', '❌'); return; }
+
+    // Also update menu_items is_available
+    for (const sel of selections) {
+      const item = S.menu.find(m => m.id === sel.menu_item_id);
+      if (item) item.is_available = sel.is_available;
+      try { await sb.from('menu_items').update({ is_available: sel.is_available }).eq('id', sel.menu_item_id); } catch(e) {}
+    }
+
+    closeModal();
+    const availCount = selections.filter(s => s.is_available).length;
+    toast(`Today's menu saved! ${availCount} dishes available, ${selections.length - availCount} unavailable`, 'success', '📋');
+    if (S.role === 'vendor') renderVendor();
+    if (S.role === 'kitchen') renderKDS();
+  } catch(e) { toast('Error: ' + e.message, 'error', '❌'); }
 }
 
 // ══════════════════════════════════════════════════════
