@@ -1244,11 +1244,23 @@ async function loadData() {
 // ═════════════════════════════════════
 // NAVIGATION
 // ═════════════════════════════════════
+// Track navigation for browser back button
+let _navHistory = [];
+let _handlingPopState = false;
+
 function goScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.add('active');
+  // Push to browser history so phone back button works
+  if (!_handlingPopState && id !== 's-loading') {
+    const currentState = { screen: id, tab: null };
+    if (_navHistory.length === 0 || _navHistory[_navHistory.length - 1]?.screen !== id) {
+      _navHistory.push(currentState);
+      try { history.pushState(currentState, '', ''); } catch(e) {}
+    }
+  }
   // Lock body scroll for flex-layout screens (vendor/kitchen/admin scroll internally)
   const isFlexScreen = ['s-vendor','s-kitchen','s-admin'].includes(id);
   document.body.style.overflow = isFlexScreen ? 'hidden' : '';
@@ -1259,6 +1271,8 @@ function goScreen(id) {
   else if(cf) cf.classList.add('gone');
   // Close notif panel
   document.getElementById('notif-panel')?.classList.add('hidden');
+  // Close any open modal
+  closeModal();
   if (id === 's-cart') {
     S.selPay = 'wallet';
     document.querySelectorAll('.pay-option').forEach(p => p.classList.remove('active'));
@@ -1282,6 +1296,12 @@ function goTab(tab, btn) {
     const map = {home:0,orders:1,wallet:2,profile:3};
     document.querySelectorAll('.bni')[map[tab]]?.classList.add('act');
   }
+  // Push tab change to history
+  if (!_handlingPopState && tab !== 'home') {
+    const currentState = { screen: 's-home', tab: tab };
+    _navHistory.push(currentState);
+    try { history.pushState(currentState, '', ''); } catch(e) {}
+  }
   const cf = document.getElementById('cart-float');
   if (tab === 'home') updateCartFloat();
   else if(cf) cf.classList.add('gone');
@@ -1290,6 +1310,40 @@ function goTab(tab, btn) {
   if (tab === 'orders') renderMyOrders();
   if (tab === 'profile') renderProfile();
 }
+
+// Handle phone back button
+window.addEventListener('popstate', function(e) {
+  _handlingPopState = true;
+  _navHistory.pop(); // Remove current
+
+  // If modal is open, just close it
+  const modal = document.getElementById('modal-container');
+  if (modal && modal.children.length > 0) {
+    closeModal();
+    // Re-push so next back still works
+    try { history.pushState({}, '', ''); } catch(e) {}
+    _handlingPopState = false;
+    return;
+  }
+
+  const prev = _navHistory[_navHistory.length - 1];
+
+  if (prev) {
+    if (prev.tab) {
+      goTab(prev.tab);
+    } else if (prev.screen) {
+      goScreen(prev.screen);
+    }
+  } else {
+    // No history left — go to home tab if on employee, or login
+    if (S.role === 'employee' && S.user) {
+      goScreen('s-home');
+      goTab('home');
+    }
+    // If already at home, let browser handle (exits app naturally)
+  }
+  _handlingPopState = false;
+});
 
 // ═════════════════════════════════════
 // TOAST SYSTEM
