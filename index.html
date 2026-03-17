@@ -3805,6 +3805,17 @@ function playNewOrderAlert(){
 }
 // ── Supabase Realtime channel ──
 let _realtimeChannel = null;
+// Debounced dashboard render — prevents render storm when 100+ orders arrive in seconds
+let _renderDashboardTimer = null;
+function debouncedRenderDashboard() {
+  if (_renderDashboardTimer) clearTimeout(_renderDashboardTimer);
+  _renderDashboardTimer = setTimeout(() => {
+    _renderDashboardTimer = null;
+    if (S.role === 'vendor') renderVendor();
+    if (S.role === 'kitchen') renderKDS();
+  }, 800); // Collect events for 800ms, then render once
+}
+
 function startRealtime() {
   if (!sb || _realtimeChannel) return;
   try {
@@ -3832,12 +3843,10 @@ function startRealtime() {
           if (sb) sb.from('order_items').select('*').eq('order_id', o.id).then(({ data }) => {
             const ord = S.allOrders.find(ex => ex.id === o.id);
             if (ord && data) ord.items = data;
-            if (S.role === 'vendor') renderVendor();
-            if (S.role === 'kitchen') renderKDS();
+            debouncedRenderDashboard();
           }).catch(() => {});
           checkNewOrders();
-          if (S.role === 'vendor') renderVendor();
-          if (S.role === 'kitchen') renderKDS();
+          debouncedRenderDashboard();
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, payload => {
@@ -3846,8 +3855,7 @@ function startRealtime() {
         if (ex) { ex.status = o.status; ex.rating = o.rating; }
         const empOrd = S.orders.find(e => e.id === o.id);
         if (empOrd) { empOrd.status = o.status; }
-        if (S.role === 'vendor') renderVendor();
-        if (S.role === 'kitchen') renderKDS();
+        debouncedRenderDashboard();
         if (S.role === 'employee') {
           const myOrd = S.orders.find(e => e.id === o.id);
           if (myOrd) {
