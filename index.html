@@ -28,6 +28,33 @@ html, body {
   height: auto !important;
   overflow: visible !important;
 }
+/* Vendor, Kitchen, Admin — flex column layout with internal scroll */
+#s-vendor.active, #s-kitchen.active, #s-admin.active {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
+  height: 100svh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+#s-vendor.active > .scroll,
+#s-kitchen.active > .scroll,
+#s-admin.active > .scroll,
+#s-admin.active > .scroll.page-wide {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+#s-vendor.active > .vendor-header,
+#s-vendor.active > .kds-filterbar,
+#s-kitchen.active > .vendor-header,
+#s-kitchen.active > .kds-filterbar,
+#s-admin.active > .admin-header,
+#s-admin.active > .admin-nav {
+  flex-shrink: 0 !important;
+}
 /* ===== END SCROLL FIX ===== */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -171,7 +198,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .page{padding:14px 14px 90px;max-width:520px;width:100%;margin:0 auto}
 .page-wide{padding:0 0 90px}
 /* Vendor / Kitchen / Admin scroll areas */
-#vendor-body,#kds-body,#admin-body{padding-bottom:30px}
+#vendor-body,#kds-body,#admin-body{padding-bottom:60px}
 
 /* ─── SECTIONS ─── */
 .sec-title{font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:12px;color:var(--dark);display:flex;align-items:center;justify-content:space-between}
@@ -465,7 +492,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .kitchen-timer.over{color:var(--red)}
 
 /* KDS Filter Bar */
-.kds-filterbar{display:flex;gap:7px;padding:12px 14px;background:var(--white);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;position:sticky;top:0;z-index:10}
+.kds-filterbar{display:flex;gap:7px;padding:12px 14px;background:var(--white);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;flex-shrink:0;z-index:10}
 .kds-filterbar::-webkit-scrollbar{display:none}
 
 /* ═══════════════════════════════
@@ -474,7 +501,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .admin-header{background:linear-gradient(135deg,#0F172A 0%,#1a0a2e 100%);padding:20px 16px;color:#fff}
 .admin-title{font-family:var(--fh);font-size:22px;font-weight:700;margin-bottom:2px}
 .admin-sub{font-size:11px;opacity:.4}
-.admin-nav{display:flex;gap:3px;overflow-x:auto;padding:0 14px 0;background:var(--white);border-bottom:1px solid var(--border);scrollbar-width:none}
+.admin-nav{display:flex;gap:3px;overflow-x:auto;padding:0 14px 0;background:var(--white);border-bottom:1px solid var(--border);scrollbar-width:none;flex-shrink:0}
 .admin-nav::-webkit-scrollbar{display:none}
 .admin-tab{padding:14px 14px;font-size:12px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;transition:.2s;white-space:nowrap;flex-shrink:0}
 .admin-tab.active{color:var(--brand);border-bottom-color:var(--brand)}
@@ -1204,6 +1231,10 @@ function goScreen(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.add('active');
+  // Lock body scroll for flex-layout screens (vendor/kitchen/admin scroll internally)
+  const isFlexScreen = ['s-vendor','s-kitchen','s-admin'].includes(id);
+  document.body.style.overflow = isFlexScreen ? 'hidden' : '';
+  document.documentElement.style.overflow = isFlexScreen ? 'hidden' : '';
   // Hide cart float unless on home
   const cf = document.getElementById('cart-float');
   if (id === 's-home') updateCartFloat();
@@ -1613,6 +1644,9 @@ function logout() {
   S.txns = []; S.notifs = [];
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('s-login').classList.add('active');
+  // Restore body scroll (was locked for vendor/kitchen/admin)
+  document.body.style.overflow = '';
+  document.documentElement.style.overflow = '';
 }
 
 // ═════════════════════════════════════
