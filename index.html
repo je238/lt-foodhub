@@ -735,7 +735,6 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
         <div class="wallet-lbl">Wallet</div>
       </div>
     </div>
-    <div class="icon-btn" id="dark-toggle" onclick="toggleDark()" aria-label="Toggle dark mode">🌙</div>
     <div class="icon-btn" onclick="toggleNotifPanel()" id="notif-btn">
       🔔
       <div class="notif-dot hidden" id="notif-dot"></div>
@@ -1183,7 +1182,7 @@ const FALLBACK_EMPLOYEES = {};
 async function init() {
   await loadData();
   await new Promise(r => setTimeout(r, 1800));
-  document.getElementById('s-loading').classList.remove('active');
+  document.getElementById('s-loading')?.classList.remove('active');
   goScreen('s-login');
 }
 
@@ -1551,7 +1550,7 @@ async function verifyEmailOTP() {
 
     renderHome();
     goScreen('s-home');
-    toast(`Welcome, ${S.user.name.split(' ')[0]}! 👋`, 'success', '✅');
+    toast(`Welcome, ${(S.user.name||'').split(' ')[0]}! 👋`, 'success', '✅');
 
   } catch(e) {
     err.textContent = 'Error: ' + (e.message || 'Try again');
@@ -1702,7 +1701,7 @@ async function doLogin() {
       }
       renderHome();
       goScreen('s-home');
-      toast(`Welcome back, ${emp.name.split(' ')[0]}! 👋`, 'success', '✅');
+      toast(`Welcome back, ${(emp.name||'').split(' ')[0]}! 👋`, 'success', '✅');
     }
   } catch (e) {
     err.textContent = 'Login failed: ' + (e.message || 'Please try again.');
@@ -2026,11 +2025,11 @@ async function placeOrder() {
   if (S.selPay === 'upi') { toast('UPI coming soon! Please use FoodHub Wallet.', 'warn', '📱'); return; }
   if (!sb) { toast('Database not connected!', 'error', '❌'); return; }
 
-  // FIX BUG 2: Quick client-side balance estimate before hitting server
+  // Quick client-side balance estimate before hitting server
   const estimatedTotal = S.cart.reduce((s,i) => s + i.price * i.qty, 0);
-  const estimatedWithFees = Math.ceil(estimatedTotal * 1.05 + 3.54); // rough: 5% GST + platform fee
-  if (S.user.wallet_balance < estimatedWithFees) {
-    toast(`Insufficient balance! You have ₹${Math.round(S.user.wallet_balance)}, need ~₹${estimatedWithFees}`, 'error', '💸');
+  const estimatedFees = calcFees(estimatedTotal);
+  if (S.user.wallet_balance < estimatedFees.grandTotal) {
+    toast(`Insufficient balance! You have ₹${Math.round(S.user.wallet_balance)}, need ₹${estimatedFees.grandTotal.toFixed(2)}`, 'error', '💸');
     return;
   }
 
@@ -2527,7 +2526,7 @@ async function markPickup(id) {
   const ao = S.allOrders.find(o => o.id === id);
   if (o) o.status = 'done';
   if (ao) ao.status = 'done';
-  try { if(sb) await sb.from('orders').update({status:'done'}).eq('id',id); } catch(e) {}
+  try { if(sb) { const{error}=await sb.from('orders').update({status:'done'}).eq('id',id); if(error) toast('Update failed','warn','⚠️'); } } catch(e) { toast('Update failed','warn','⚠️'); }
   renderMyOrders();
   const badge = document.getElementById('ord-badge');
   const readyCnt = S.orders.filter(o2 => o2.status === 'ready').length;
@@ -2748,8 +2747,11 @@ async function updateOrderStatus(id, status) {
   if (ao) ao.status = status;
   // Save to DB — await so poll doesn't overwrite
   try {
-    if (sb) await sb.from('orders').update({status}).eq('id', id);
-  } catch(e) {}
+    if (sb) {
+      const { error } = await sb.from('orders').update({status}).eq('id', id);
+      if (error) toast('Status save failed: ' + error.message, 'warn', '⚠️');
+    }
+  } catch(e) { toast('Status update failed', 'warn', '⚠️'); }
   // Notify employee if ready
   if (status === 'ready') {
     const order = ao || o;
@@ -2769,19 +2771,21 @@ async function fetchAllOrders() {
   try {
     if (!sb) return;
     let query = sb.from('orders').select('*, order_items(*)').order('created_at', {ascending: false}).limit(200);
-    // For vendor/kitchen — only fetch their counter's orders
     if ((S.role === 'vendor' || S.role === 'kitchen') && S.user?.canteen_id) {
       query = query.eq('canteen_id', S.user.canteen_id);
     }
-    const {data} = await query;
+    const {data, error} = await query;
+    if (error) { toast('Failed to load orders', 'warn', '⚠️'); return; }
     if (data?.length) {
       data.forEach(o => {
         const ex = S.allOrders.find(e => e.id === o.id);
         if (!ex) S.allOrders.unshift({...o, items: o.order_items||[]});
         else { ex.status = o.status; ex.items = o.order_items||ex.items; }
       });
+      // Cap at 500 to prevent memory issues with high traffic
+      if (S.allOrders.length > 500) S.allOrders.length = 500;
     }
-  } catch(e) {}
+  } catch(e) { console.warn('fetchAllOrders error:', e); }
 }
 
 function startPoll() {
@@ -3019,12 +3023,12 @@ function filterAdminCat(cat, el) {
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }
 
-function toggleMenuItem(id, toggleEl) {
+async function toggleMenuItem(id, toggleEl) {
   const item = S.menu.find(m => m.id === id);
   if (!item) return;
   item.is_available = !item.is_available;
   toggleEl.classList.toggle('on', item.is_available);
-  try { if(sb) sb.from('menu_items').update({is_available:item.is_available}).eq('id',id); } catch(e) {}
+  try { if(sb){ const{error}=await sb.from('menu_items').update({is_available:item.is_available}).eq('id',id); if(error) toast('Toggle failed','warn','⚠️'); } } catch(e) {}
   toast(`${item.name} ${item.is_available?'enabled':'disabled'}`, item.is_available?'success':'warn', item.is_available?'✅':'🚫');
 }
 
@@ -3050,10 +3054,10 @@ function deleteMenuItem(id) {
   `);
 }
 
-function confirmDeleteItem(id) {
+async function confirmDeleteItem(id) {
   S.menu = S.menu.filter(m => m.id !== id);
   closeModal();
-  try { if(sb) sb.from('menu_items').delete().eq('id',id); } catch(e) {}
+  try { if(sb){ const{error}=await sb.from('menu_items').delete().eq('id',id); if(error) toast('Delete failed: '+error.message,'error','❌'); } } catch(e) { toast('Delete failed','error','❌'); }
   toast('Item deleted', 'success', '🗑️');
   renderAdmin('menu');
 }
@@ -3116,7 +3120,7 @@ function showAddItemModal() {
   `);
 }
 
-function saveNewItem() {
+async function saveNewItem() {
   const name = document.getElementById('new-name').value.trim();
   const price = parseFloat(document.getElementById('new-price').value);
   if (!name || isNaN(price) || price <= 0) { toast('Please fill name and price!', 'error', '⚠️'); return; }
@@ -3138,7 +3142,7 @@ function saveNewItem() {
   };
   S.menu.unshift(newItem);
   S.inventory[newItem.id] = newItem.stock;
-  try { if(sb) sb.from('menu_items').insert([newItem]); } catch(e) {}
+  try { if(sb){ const{error}=await sb.from('menu_items').insert([newItem]); if(error) toast('Add failed: '+error.message,'error','❌'); } } catch(e) { toast('Add item failed','error','❌'); }
   closeModal();
   toast(`"${name}" added to menu!`, 'success', '✅');
   renderAdmin('menu');
@@ -3186,7 +3190,7 @@ function showEditItemModal(id) {
   `);
 }
 
-function saveEditItem(id) {
+async function saveEditItem(id) {
   const m = S.menu.find(m => m.id === id);
   if (!m) return;
   m.name = document.getElementById('e-name').value.trim() || m.name;
@@ -3195,7 +3199,7 @@ function saveEditItem(id) {
   m.emoji = document.getElementById('e-emoji').value || m.emoji;
   m.subsidy_amount = parseFloat(document.getElementById('e-subsidy').value) || 0;
   S.inventory[m.id] = parseInt(document.getElementById('e-stock').value) || 0;
-  try { if(sb) sb.from('menu_items').update({name:m.name,price:m.price,description:m.description,emoji:m.emoji,subsidy_amount:m.subsidy_amount}).eq('id',id); } catch(e) {}
+  try { if(sb){ const{error}=await sb.from('menu_items').update({name:m.name,price:m.price,description:m.description,emoji:m.emoji,subsidy_amount:m.subsidy_amount}).eq('id',id); if(error) toast('Save failed: '+error.message,'error','❌'); } } catch(e) { toast('Save failed','error','❌'); }
   closeModal();
   toast('Item updated!', 'success', '✅');
   renderAdmin('menu');
@@ -3694,18 +3698,9 @@ self.addEventListener('fetch',e=>{
 // ══════════════════════════════════════════════════════
 // ② DARK MODE
 // ══════════════════════════════════════════════════════
-let darkMode = localStorage.getItem('fh-dark')==='1' || window.matchMedia('(prefers-color-scheme: dark)').matches;
-function applyDark(){
-  document.documentElement.classList.toggle('dark',darkMode);
-  const btn = document.getElementById('dark-toggle');
-  if(btn) btn.textContent = darkMode ? '☀️' : '🌙';
-}
-function toggleDark(){
-  darkMode = !darkMode;
-  localStorage.setItem('fh-dark', darkMode?'1':'0');
-  applyDark();
-  toast(darkMode?'Dark mode on 🌙':'Light mode on ☀️','info', darkMode?'🌙':'☀️');
-}
+// Dark mode removed — light only
+function applyDark(){}
+function toggleDark(){}
 
 // ══════════════════════════════════════════════════════
 // ③ SESSION PERSISTENCE (Remember Me)
@@ -4215,14 +4210,14 @@ function showSoldOutPanel(){
         </div>`).join('')}
     </div>`);
 }
-function vendorToggleItem(id, toggleEl){
+async function vendorToggleItem(id, toggleEl){
   const item = S.menu.find(m=>m.id===id);
   if(!item) return;
   item.is_available = !item.is_available;
   if(!item.is_available) S.inventory[id] = 0;
   toggleEl.classList.toggle('on', item.is_available);
   toast(`${item.name} marked ${item.is_available?'available':'sold out'}`, item.is_available?'success':'warn', item.is_available?'✅':'🚫');
-  try{ if(sb) sb.from('menu_items').update({is_available:item.is_available}).eq('id',id); }catch(e){}
+  try{ if(sb){ const{error}=await sb.from('menu_items').update({is_available:item.is_available}).eq('id',id); if(error) toast('Update failed: '+error.message,'error','❌'); } }catch(e){ toast('Update failed','error','❌'); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -4314,13 +4309,13 @@ function switchKDSCanteen(cid, el){
 // ══════════════════════════════════════════════════════
 // ⑯ KDS: ORDER BUMP (tap to complete / dismiss)
 // ══════════════════════════════════════════════════════
-function bumpOrder(orderId){
+async function bumpOrder(orderId){
   const o = S.allOrders.find(o=>o.id===orderId);
   if(!o) return;
   if(o.status==='new') o.status='preparing';
   else if(o.status==='preparing') o.status='ready';
   else if(o.status==='ready') o.status='done';
-  try{ if(sb) sb.from('orders').update({status:o.status}).eq('id',orderId); }catch(e){}
+  try{ if(sb){ const{error}=await sb.from('orders').update({status:o.status}).eq('id',orderId); if(error) toast('Status save failed','warn','⚠️'); } }catch(e){ toast('Status update failed','warn','⚠️'); }
   renderKDS();
   if(o.status==='ready') playNewOrderAlert();
 }
@@ -4464,7 +4459,7 @@ async function importEmployees(){
       campus: 'Powai Campus',
       wallet_balance: r.wallet || 500,
       points_balance: 0,
-      initials: r.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2),
+      initials: (r.name||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2),
       meal_pass_active: true,
       meal_pass_used: 0,
       meal_pass_limit: 30,
@@ -4844,8 +4839,7 @@ renderVendor = function(){
     actBar.innerHTML=`
       <button class="btn btn-primary btn-sm" onclick="showDailyMenuSelector()">📋 Today's Menu</button>
       <button class="btn btn-ghost btn-sm" onclick="showSoldOutPanel()">🚫 Sold-Out</button>
-      <button class="btn btn-ghost btn-sm" onclick="showOperatingHours()">⏰ Hours</button>
-      <button class="btn btn-ghost btn-sm" onclick="toggleDark()">🌙 Dark</button>`;
+      <button class="btn btn-ghost btn-sm" onclick="showOperatingHours()">⏰ Hours</button>`;
     el.appendChild(actBar);
   }
   // Add reject buttons to new orders
@@ -4942,7 +4936,6 @@ renderAdminSettings = function(el){
         <button class="btn btn-ghost btn-full" onclick="showBulkImport()">📋 Bulk Import Employees</button>
         <button class="btn btn-ghost btn-full" onclick="showRefundModal('','',0)">💚 Issue Manual Refund</button>
         <button class="btn btn-ghost btn-full" onclick="showAdminHoursConfig()">⏰ Canteen Hours Config</button>
-        <button class="btn btn-ghost btn-full" onclick="toggleDark()">🌙 Toggle Dark Mode</button>
       </div>
     </div>`;
   el.appendChild(extra);
@@ -5082,7 +5075,7 @@ init = async function(){
             S.selCanteen = S.canteens.find(c => c.is_open) || S.canteens[0];
           } catch(e) {}
           renderHome(); goScreen('s-home');
-          toast('Welcome back, '+emp.name.split(' ')[0]+'!','success','👋');
+          toast('Welcome back, '+(emp.name||'').split(' ')[0]+'!','success','👋');
           setTimeout(addARIA,500);
           return;
         }
@@ -5152,25 +5145,6 @@ async function saveAllCanteenHours(){
 }
 
 // Dark mode CSS variables override
-const darkCSS = document.createElement('style');
-darkCSS.textContent=`
-html.dark{color-scheme:dark}
-html.dark body{background:#0F172A;color:#e2e8f0}
-html.dark .screen{background:#0F172A}
-html.dark .card,.dark .menu-item,.dark .order-card,.dark .kitchen-card,.dark .txn-item,.dark .canteen-card,.dark .menu-mgmt-item,.dark .inventory-item,.dark .emp-row,.dark .meal-pass-card{background:#1E293B;border-color:#334155}
-html.dark .tnav,.dark .bnav,.dark .admin-nav,.dark .kds-filterbar{background:#1E293B;border-color:#334155}
-html.dark .form-input,.dark .stat-card,.dark .summary-box,.dark .slot-picker,.dark .pay-option{background:#1E293B;border-color:#334155;color:#e2e8f0}
-html.dark .light2,.dark .toggle-row{background:#334155}
-html.dark .light{background:#1E293B}
-html.dark .chip:not(.active){background:#1E293B;border-color:#334155;color:#94a3b8}
-html.dark .notif-panel{background:#1E293B;border-color:#334155}
-html.dark .modal{background:#1E293B}
-html.dark .muted{color:#94a3b8}
-html.dark .border{border-color:#334155}
-html.dark input::placeholder,html.dark textarea::placeholder{color:#475569}
-`;
-document.head.appendChild(darkCSS);
-
 // Install banner HTML injection
 (function injectInstallBanner(){
   const banner = document.createElement('div');
@@ -5307,7 +5281,8 @@ async function posBill() {
   const canteen = S.canteens.find(c => c.id === cid) || { name: 'Counter', icon: '🍽️' };
   const subtotal = posCart.reduce((s, i) => s + i.price * i.qty, 0);
   const fees = calcFees(subtotal);
-  const total = Math.round(fees.grandTotal);
+  const total = Math.round(fees.grandTotal * 100) / 100;
+  const cartSnapshot = posCart.map(i => ({...i})); // snapshot before clearing
 
   // If employee ID provided, use wallet via server-side function
   if (empId && sb) {
@@ -5318,52 +5293,42 @@ async function posBill() {
         p_canteen_name: canteen.name,
         p_canteen_icon: canteen.icon || '🍽️',
         p_pickup_slot: 'Counter',
-        p_items: posCart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price })),
+        p_items: cartSnapshot.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price })),
         p_payment_method: 'wallet'
       });
       if (error || !result?.success) { toast(result?.error || error?.message || 'Billing failed', 'error', '❌'); return; }
       toast(`Token #${result.token_number} — ₹${result.total_paid} billed to ${empId}`, 'success', '✅');
-      printPOSReceipt(result.token_number, empId, 'wallet', subtotal, fees.foodGst, total);
+      printPOSReceipt(result.token_number, empId, 'wallet', subtotal, fees, cartSnapshot);
     } catch(e) { toast('Error: ' + e.message, 'error', '❌'); return; }
   } else {
-    // Cash order — use a dedicated POS function or insert with proper handling
-    const token = (S.tokenCounters[cid] || 1);
-    S.tokenCounters[cid] = token + 1;
-    const orderId = 'pos-' + Date.now() + '-' + cid;
+    // Cash order — use server-side RPC to bypass RLS safely
+    let token = 1;
     try {
       if (sb) {
-        const { error: oErr } = await sb.from('orders').insert([{
-          id: orderId, token_number: token,
-          employee_id: 'CASH', employee_name: 'Walk-up Customer',
-          canteen_id: cid, canteen_name: canteen.name, canteen_icon: canteen.icon,
-          pickup_slot: 'Counter', status: 'new',
-          item_total: subtotal, gst_amount: Math.round(fees.foodGst * 100) / 100,
-          platform_fee: fees.platformFee, platform_gst: Math.round(fees.platformGst * 100) / 100,
-          amount_paid: Math.round(fees.grandTotal * 100) / 100,
-          payment_method: 'cash', subsidy_applied: 0
-        }]);
-        if (oErr) { toast('Order save failed: ' + oErr.message, 'error', '❌'); return; }
-        const { error: iErr } = await sb.from('order_items').insert(posCart.map(i => ({
-          order_id: orderId, item_id: i.id, item_name: i.name,
-          item_emoji: i.emoji || '', quantity: i.qty,
-          unit_price: i.price, total_price: i.price * i.qty
-        })));
-        if (iErr) toast('Items save warning: ' + iErr.message, 'warn', '⚠️');
-        await sb.from('canteens').update({ token_counter: token + 1 }).eq('id', cid);
+        const { data: result, error } = await sb.rpc('pos_cash_order', {
+          p_canteen_id: cid,
+          p_canteen_name: canteen.name,
+          p_canteen_icon: canteen.icon || '🍽️',
+          p_items: cartSnapshot.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price }))
+        });
+        if (error || !result?.success) { toast(result?.error || error?.message || 'Cash order failed', 'error', '❌'); return; }
+        token = result.token_number;
+        toast(`Token #${token} — ₹${result.total_paid} CASH`, 'success', '💵');
+        printPOSReceipt(token, 'Walk-up', 'cash', subtotal, fees, cartSnapshot);
+      } else {
+        toast('Database not connected', 'error', '❌'); return;
       }
-    } catch(e) { toast('Error saving order: ' + e.message, 'error', '❌'); }
-    toast(`Token #${token} — ₹${total} CASH`, 'success', '💵');
-    printPOSReceipt(token, 'Walk-up', 'cash', subtotal, fees.foodGst, total);
+    } catch(e) { toast('Error: ' + e.message, 'error', '❌'); return; }
   }
   posCart = [];
   closeModal();
   fetchAllOrders().then(() => renderVendor());
 }
 
-function printPOSReceipt(token, customer, method, subtotal, gst, total) {
+function printPOSReceipt(token, customer, method, subtotal, fees, items) {
   const canteen = S.canteens.find(c => c.id === S.user?.canteen_id) || { name: 'Counter', icon: '🍽️' };
   const now = new Date();
-  const fees = calcFees(subtotal);
+  if (!items || !items.length) { toast('Receipt: no items to print', 'warn', '⚠️'); return; }
   const receiptHtml = `<html><head><style>
     body{font-family:monospace;font-size:13px;max-width:300px;margin:0 auto;padding:16px}
     .center{text-align:center} .divider{border-top:1px dashed #000;margin:8px 0}
@@ -5378,7 +5343,7 @@ function printPOSReceipt(token, customer, method, subtotal, gst, total) {
     <div class="big">#${token}</div>
     <div class="center" style="font-size:11px">${customer} · ${method.toUpperCase()}</div>
     <div class="divider"></div>
-    ${posCart.map(i=>`<div class="row"><span>${i.emoji||''} ${i.name}</span><span>×${i.qty} ₹${i.price*i.qty}</span></div>`).join('')}
+    ${items.map(i=>`<div class="row"><span>${i.emoji||''} ${i.name}</span><span>×${i.qty} ₹${i.price*i.qty}</span></div>`).join('')}
     <div class="divider"></div>
     <div class="row"><span>Subtotal</span><span>₹${subtotal}</span></div>
     <div class="row"><span>GST 5%</span><span>₹${fees.foodGst.toFixed(2)}</span></div>
