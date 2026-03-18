@@ -715,6 +715,20 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <button class="login-btn" onclick="doLogin()" id="login-btn"><span>Sign In →</span></button>
       <div class="login-err" id="login-err"></div>
     </div>
+
+    <!-- FOOTER -->
+    <div style="margin-top:24px;text-align:center;border-top:1px solid rgba(255,255,255,.08);padding-top:16px">
+      <div style="font-size:11px;color:rgba(255,255,255,.25);margin-bottom:6px">Powered by</div>
+      <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,.55);margin-bottom:12px;font-family:var(--fh)">SLP Hospitality</div>
+      <div style="display:flex;justify-content:center;gap:14px;flex-wrap:wrap">
+        <a href="https://slphospitality.com/privacy-policy" target="_blank" style="font-size:11px;color:rgba(255,255,255,.35);text-decoration:underline">Privacy Policy</a>
+        <span style="font-size:11px;color:rgba(255,255,255,.15)">·</span>
+        <a href="https://slphospitality.com/refund-policy" target="_blank" style="font-size:11px;color:rgba(255,255,255,.35);text-decoration:underline">Refund Policy</a>
+        <span style="font-size:11px;color:rgba(255,255,255,.15)">·</span>
+        <a href="https://slphospitality.com" target="_blank" style="font-size:11px;color:rgba(255,255,255,.35);text-decoration:underline">About Us</a>
+      </div>
+      <div style="font-size:10px;color:rgba(255,255,255,.15);margin-top:10px">© 2025 SLP Hospitality · All rights reserved</div>
+    </div>
   </div>
 </div>
 <!-- ══════════════════════════════════
@@ -807,17 +821,15 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <!-- Top Up Section -->
     <div class="card" style="margin-bottom:16px">
       <div class="card-title">💳 Add Money to Wallet</div>
-      <div class="topup-grid">
-        <div class="topup-btn" onclick="showTopUp(1000)">₹1,000</div>
-        <div class="topup-btn" onclick="showTopUp(2000)">₹2,000</div>
-        <div class="topup-btn" onclick="showTopUp(3000)">₹3,000</div>
-        <div class="topup-btn" onclick="showTopUp(5000)">₹5,000</div>
+      <div style="background:linear-gradient(135deg,var(--blue) 0%,var(--blue2) 100%);border-radius:14px;padding:20px;text-align:center;margin-bottom:4px">
+        <div style="font-size:28px;margin-bottom:8px">🏦</div>
+        <div style="font-family:var(--fh);font-size:16px;font-weight:700;color:#fff;margin-bottom:4px">Online Top-up Coming Soon</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.6);margin-bottom:12px">ICICI Bank payment gateway being activated</div>
+        <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:10px 14px;font-size:12px;color:rgba(255,255,255,.8)">
+          💡 To add money now — contact your HR or canteen manager
+        </div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input class="form-input" type="number" id="custom-topup" placeholder="Custom amount" style="flex:1;margin:0">
-        <button class="btn btn-primary btn-sm" onclick="showTopUp(parseInt(document.getElementById('custom-topup')?.value)||0)">Add</button>
-      </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">Payment powered by ICICI Bank · Secure UPI / Net Banking / Card</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;text-align:center">Payment will be powered by ICICI Bank · Secure UPI / Net Banking / Card</div>
     </div>
     <div class="section-header">
       <div class="section-title">Transactions</div>
@@ -850,6 +862,18 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div id="fav-items"><div style="font-size:13px;color:var(--muted)">Order food to see your favorites!</div></div>
     </div>
     <button class="btn btn-danger btn-full" style="margin-top:4px" onclick="logout()">Sign Out</button>
+    <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Powered by</div>
+      <div style="font-size:13px;font-weight:700;color:var(--mid);margin-bottom:10px;font-family:var(--fh)">SLP Hospitality</div>
+      <div style="display:flex;justify-content:center;gap:12px;flex-wrap:wrap">
+        <a href="https://slphospitality.com/privacy-policy" target="_blank" style="font-size:11px;color:var(--muted);text-decoration:underline">Privacy Policy</a>
+        <span style="font-size:11px;color:var(--border2)">·</span>
+        <a href="https://slphospitality.com/refund-policy" target="_blank" style="font-size:11px;color:var(--muted);text-decoration:underline">Refund Policy</a>
+        <span style="font-size:11px;color:var(--border2)">·</span>
+        <a href="https://slphospitality.com" target="_blank" style="font-size:11px;color:var(--muted);text-decoration:underline">slphospitality.com</a>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:8px">© 2025 SLP Hospitality · v2.0</div>
+    </div>
   </div>
 
   <!-- Bottom Nav -->
