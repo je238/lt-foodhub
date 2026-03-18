@@ -717,6 +717,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     </div>
   </div>
 </div>
+<!-- ══════════════════════════════════
+     HOME SCREEN
 ══════════════════════════════════ -->
 <div class="screen" id="s-home">
   <!-- Top Nav -->
@@ -2973,7 +2975,15 @@ function generateDemoOrders() {
   }));
 }
 
-function renderAdminMenu(el) {
+async function renderAdminMenu(el) {
+  el.innerHTML = '<div class="loader"></div>';
+  // Always fetch fresh from DB so we see all items
+  if (sb) {
+    try {
+      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(500);
+      if (data?.length) S.menu = data;
+    } catch(e) {}
+  }
   el.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <div class="search-bar" style="flex:1;margin-bottom:0">
@@ -2982,13 +2992,28 @@ function renderAdminMenu(el) {
       </div>
       <button class="btn btn-primary" onclick="showAddItemModal()">+ Add</button>
     </div>
+    <div class="chip-row" id="admin-menu-canteens" style="margin-bottom:8px">
+      <div class="chip active" onclick="filterAdminCanteen('All',this)">All Counters</div>
+      ${S.canteens.map(c=>`<div class="chip" onclick="filterAdminCanteen('${c.id}',this)">${c.icon} ${c.name}</div>`).join('')}
+    </div>
     <div class="chip-row" id="admin-menu-cats">
-      <div class="chip active" onclick="filterAdminCat('All',this)">All</div>
-      ${[...new Set(S.menu.map(m=>m.category))].map(c=>`<div class="chip" onclick="filterAdminCat('${c}',this)">${c}</div>`).join('')}
+      <div class="chip active" onclick="filterAdminCat('All',this)">All Categories</div>
+      ${[...new Set(S.menu.map(m=>m.category).filter(Boolean))].sort().map(c=>`<div class="chip" onclick="filterAdminCat('${c}',this)">${c}</div>`).join('')}
     </div>
     <div id="admin-menu-list">
       ${S.menu.map(m => renderAdminMenuItem(m)).join('')}
     </div>`;
+}
+
+let _adminMenuCanteen = 'All';
+function filterAdminCanteen(cid, el) {
+  _adminMenuCanteen = cid;
+  _adminMenuCat = 'All';
+  document.querySelectorAll('#admin-menu-canteens .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('#admin-menu-cats .chip').forEach(c => c.classList.toggle('active', c.textContent === 'All Categories'));
+  const items = cid === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === cid);
+  setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }
 
 function renderAdminMenuItem(m) {
@@ -3366,17 +3391,39 @@ async function renderAdminEmployees(el) {
 }
 
 async function searchAdminEmployees(q) {
-  if (!q || q.length < 2) { renderAdminEmployees(document.getElementById('admin-body')); return; }
+  const el = document.getElementById('emp-list');
+  if (!el) return;
+  if (!q || q.length < 1) {
+    // Re-fetch and show all on clear
+    try {
+      if (!sb) return;
+      const {data} = await sb.from('employees').select('id, name, email, phone, department, wallet_balance, initials').order('created_at', {ascending:false}).limit(50);
+      el.innerHTML = (data||[]).map(e => `
+        <div class="emp-row">
+          <div class="emp-av">${e.initials||initials(e.name)}</div>
+          <div class="emp-body">
+            <div class="emp-name">${e.name}</div>
+            <div class="emp-detail">${e.id} · ${e.email||''} · ${e.department||'L&T'}</div>
+          </div>
+          <div>
+            <div class="emp-balance">₹${Math.round(e.wallet_balance||0)}</div>
+            <div style="font-size:9px;color:var(--muted);text-align:right">wallet</div>
+          </div>
+        </div>`).join('') || '<div class="empty"><div class="empty-title">No employees found</div></div>';
+    } catch(e) { toast('Search failed: ' + e.message, 'error', '❌'); }
+    return;
+  }
   try {
     if (!sb) return;
-    const {data} = await sb.from('employees').select('id, name, email, phone, department, wallet_balance, initials')
+    el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted)">Searching...</div>';
+    const {data, error} = await sb.from('employees')
+      .select('id, name, email, phone, department, wallet_balance, initials')
       .or(`name.ilike.%${q}%,email.ilike.%${q}%,id.ilike.%${q}%`)
-      .limit(20);
-    const el = document.getElementById('emp-list');
-    if (!el) return;
-    if (!data?.length) { el.innerHTML = '<div class="empty"><div class="empty-title">No employees found</div></div>'; return; }
+      .limit(30);
+    if (error) { toast('Search error: ' + error.message, 'error', '❌'); return; }
+    if (!data?.length) { el.innerHTML = '<div class="empty"><div class="empty-title">No employees found for "' + q + '"</div></div>'; return; }
     el.innerHTML = data.map(e => `
-      <div class="emp-row">
+      <div class="emp-row" onclick="showEmpDetail('${e.id}')">
         <div class="emp-av">${e.initials||initials(e.name)}</div>
         <div class="emp-body">
           <div class="emp-name">${e.name}</div>
@@ -3387,7 +3434,38 @@ async function searchAdminEmployees(q) {
           <div style="font-size:9px;color:var(--muted);text-align:right">wallet</div>
         </div>
       </div>`).join('');
-  } catch(e) {}
+  } catch(e) { toast('Search failed: ' + e.message, 'error', '❌'); }
+}
+
+function showEmpDetail(empId) {
+  const e = { id: empId };
+  showModal(`
+    <div class="modal-head">
+      <span class="modal-title">Employee Actions</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-primary btn-full" onclick="closeModal();showRefundModal('${empId}','',0)">💚 Add / Refund Wallet</button>
+        <button class="btn btn-ghost btn-full" onclick="viewEmpOrders('${empId}')">📋 View Orders</button>
+      </div>
+    </div>`);
+}
+async function viewEmpOrders(empId) {
+  closeModal();
+  if (!sb) return;
+  try {
+    const {data} = await sb.from('orders').select('token_number, canteen_name, amount_paid, status, created_at').eq('employee_id', empId).order('created_at', {ascending:false}).limit(10);
+    if (!data?.length) { toast('No orders found for this employee', 'info', '📋'); return; }
+    showModal(`
+      <div class="modal-head"><span class="modal-title">Orders — ${empId}</span><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        ${data.map(o=>`<div style="padding:10px;background:var(--light2);border-radius:9px;margin-bottom:7px;font-size:13px">
+          <div style="font-weight:700">#${o.token_number} · ${o.canteen_name}</div>
+          <div style="color:var(--muted)">${fmtDate(o.created_at)} · ₹${o.amount_paid} · ${o.status}</div>
+        </div>`).join('')}
+      </div>`);
+  } catch(e) { toast('Failed to load orders', 'error', '❌'); }
 }
 
 async function renderAdminRevenue(el) {
