@@ -502,8 +502,9 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .admin-header{background:linear-gradient(135deg,#0F172A 0%,#1a0a2e 100%);padding:20px 16px;color:#fff}
 .admin-title{font-family:var(--fh);font-size:22px;font-weight:700;margin-bottom:2px}
 .admin-sub{font-size:11px;opacity:.4}
-.admin-nav{display:flex;gap:3px;overflow-x:auto;padding:0 14px 0;background:var(--white);border-bottom:1px solid var(--border);scrollbar-width:none;flex-shrink:0}
+.admin-nav{display:flex;gap:3px;overflow-x:auto;padding:0 14px 0;background:var(--white);border-bottom:1px solid var(--border);scrollbar-width:none;flex-shrink:0;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
 .admin-nav::-webkit-scrollbar{display:none}
+.admin-nav::-webkit-scrollbar-button{display:none}
 .admin-tab{padding:14px 14px;font-size:12px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;transition:.2s;white-space:nowrap;flex-shrink:0}
 .admin-tab.active{color:var(--brand);border-bottom-color:var(--brand)}
 
@@ -1058,6 +1059,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div class="chip" onclick="kdsFilter('preparing',this)">⏳ Preparing</div>
     <div class="chip" onclick="kdsFilter('ready',this)">✅ Ready</div>
     <div class="chip" style="background:#065f46;color:#fff;border-color:#065f46" onclick="showDailyMenuSelector()">📋 Today's Menu</div>
+    <div class="chip" style="background:#7C3AED;color:#fff;border-color:#7C3AED" onclick="showSoldOutPanel()">🚫 Stock</div>
     <div class="chip" onclick="kdsFilter('12:00 PM',this)">12:00 PM</div>
     <div class="chip" onclick="kdsFilter('12:30 PM',this)">12:30 PM</div>
     <div class="chip" onclick="kdsFilter('1:00 PM',this)">1:00 PM</div>
@@ -3511,7 +3513,7 @@ function renderAdminSettings(el) {
         <div style="display:flex;justify-content:space-between;padding:10px;background:var(--light2);border-radius:9px"><span style="font-size:13px;font-weight:600">Realtime</span><span style="font-weight:700">${_realtimeChannel?'Active':'Inactive'}</span></div>
       </div>
     </div>
-    <button class="btn btn-danger btn-full" onclick="if(confirm('Reset all demo data?'))location.reload()">🔄 Reset Demo Data</button>`;
+    `;
   // Fetch live counts
   if (sb) {
     sb.from('orders').select('id',{count:'exact',head:true}).then(({count})=>{ const el=document.getElementById('admin-order-count'); if(el) el.textContent=count?.toLocaleString('en-IN')||'0'; });
@@ -3750,27 +3752,51 @@ function showForgotPassword(){
     <div class="modal-body">
       <div style="text-align:center;padding:8px 0 20px">
         <div style="font-size:48px;margin-bottom:12px">🔐</div>
-        <p style="font-size:13px;color:var(--muted)">Enter your Employee ID and registered phone number. We'll send an OTP to reset your password.</p>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Employee ID</label>
-        <input class="form-input" id="fp-id" placeholder="LT-EMP-XXXXX">
+        <p style="font-size:13px;color:var(--muted)">Enter your registered email. We'll send an OTP — use it to log in directly.</p>
       </div>
       <div class="form-group">
         <label class="form-label">Registered Email</label>
         <input class="form-input" id="fp-email" type="email" placeholder="name@larsentoubro.com">
       </div>
-      <button class="btn btn-primary btn-full" onclick="toast('OTP sent to your email!','success','📧');closeModal()">Send OTP →</button>
-      <div id="fp-err" class="login-err"></div>
+      <button class="btn btn-primary btn-full" id="fp-btn" onclick="sendForgotOTP()">Send OTP →</button>
+      <div id="fp-err" class="login-err" style="margin-top:8px"></div>
     </div>`);
 }
-function confirmNewPw(){
-  const pw = document.getElementById('np-pw')?.value;
-  const pw2 = document.getElementById('np-pw2')?.value;
-  if(!pw||pw.length<8){ toast('Password must be 8+ characters','error','⚠️'); return; }
-  if(pw!==pw2){ toast('Passwords do not match','error','⚠️'); return; }
-  closeModal();
-  toast('Password reset successfully! Please login.','success','✅');
+async function sendForgotOTP(){
+  const email = document.getElementById('fp-email')?.value?.trim();
+  const err = document.getElementById('fp-err');
+  const btn = document.getElementById('fp-btn');
+  err.textContent = '';
+  if (!email || !email.includes('@')) { err.textContent = 'Enter a valid email'; return; }
+  btn.classList.add('btn-loading'); btn.disabled = true;
+  try {
+    if (!sb) { err.textContent = 'Database not connected'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+    const edgeFnUrl = SURL + '/functions/v1/send-otp-email';
+    const res = await fetch(edgeFnUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
+      body: JSON.stringify({ email })
+    });
+    const result = await res.json();
+    if (!result.success) {
+      err.textContent = result.error || 'Email not found. Please register first.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
+    closeModal();
+    // Pre-fill login email and go to OTP step
+    document.getElementById('emp-email').value = email;
+    _otpEmail = email;
+    document.getElementById('emp-step1').style.display = 'none';
+    document.getElementById('emp-step2').style.display = '';
+    document.getElementById('otp-email-display').textContent = result.maskedEmail || email;
+    ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].forEach(id => { const b = document.getElementById(id); if(b) b.value=''; });
+    document.getElementById('otp-1')?.focus();
+    toast('OTP sent to ' + (result.maskedEmail || email), 'success', '📧');
+  } catch(e) {
+    err.textContent = 'Error: ' + (e.message || 'Try again');
+  }
+  btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
 // ══════════════════════════════════════════════════════
@@ -4191,24 +4217,54 @@ function printKOT(orderId){
 // ══════════════════════════════════════════════════════
 // ⑬ VENDOR: SOLD-OUT QUICK TOGGLE
 // ══════════════════════════════════════════════════════
-function showSoldOutPanel(){
+async function showSoldOutPanel(){
+  const cid = S.user?.canteen_id || 'c1';
+  // Fetch ALL items from DB for this canteen — not just the 4 fallback items
+  if (sb) {
+    try {
+      const {data} = await sb.from('menu_items').select('*').eq('canteen_id', cid).order('category').order('name');
+      if (data?.length) {
+        data.forEach(dbItem => {
+          const existing = S.menu.find(m => m.id === dbItem.id);
+          if (existing) { existing.is_available = dbItem.is_available; existing.stock = dbItem.stock; }
+          else S.menu.push(dbItem);
+        });
+      }
+    } catch(e) {}
+  }
+  const items = S.menu.filter(m => m.canteen_id === cid);
+  const availCnt = items.filter(m => m.is_available !== false).length;
   showModal(`
     <div class="modal-head">
-      <span class="modal-title">Quick Stock Control</span>
+      <span class="modal-title">🚫 Stock Control</span>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
-    <div class="modal-body">
-      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Toggle items sold-out instantly. Employees will see unavailable items grayed out.</p>
-      ${S.menu.filter(m=>!m.canteen_id||m.canteen_id===(S.user?.canteen_id||'c1')).map(m=>`
-        <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--light2);border-radius:11px;margin-bottom:7px">
+    <div class="modal-body" style="max-height:75svh;overflow-y:auto">
+      <div style="background:var(--light2);border-radius:10px;padding:10px 13px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">${availCnt} of ${items.length} items available</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="stockToggleAll(true)">✅ All On</button>
+          <button class="btn btn-ghost btn-sm" onclick="stockToggleAll(false)">🚫 All Off</button>
+        </div>
+      </div>
+      ${items.length === 0
+        ? '<div style="text-align:center;padding:24px;color:var(--muted)">No menu items found for this counter.</div>'
+        : items.map(m=>`
+        <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--light2);border-radius:11px;margin-bottom:7px;opacity:${m.is_available!==false?1:0.5}">
           <span style="font-size:22px">${m.emoji||'🍽️'}</span>
           <div style="flex:1">
             <div style="font-weight:700;font-size:13px">${m.name}</div>
-            <div style="font-size:11px;color:var(--muted)">Stock: ${S.inventory[m.id]||0} · ₹${m.price}</div>
+            <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${m.category||''}</div>
           </div>
-          <div class="toggle ${m.is_available!==false?'on':''}" onclick="vendorToggleItem('${m.id}',this)"></div>
+          <div class="toggle ${m.is_available!==false?'on':''}" onclick="vendorToggleItem('${m.id}',this)" data-item-id="${m.id}"></div>
         </div>`).join('')}
     </div>`);
+}
+function stockToggleAll(on) {
+  document.querySelectorAll('#modal-container .toggle[data-item-id]').forEach(t => {
+    const wasOn = t.classList.contains('on');
+    if (wasOn !== on) { t.classList.toggle('on', on); vendorToggleItem(t.getAttribute('data-item-id'), t); }
+  });
 }
 async function vendorToggleItem(id, toggleEl){
   const item = S.menu.find(m=>m.id===id);
