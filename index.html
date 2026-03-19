@@ -435,6 +435,17 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .order-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
 .order-token{font-family:var(--fh);font-size:26px;font-weight:700;color:var(--blue);line-height:1}
 .order-token.ready{color:var(--green2)}
+/* ── Pickup OTP styles ── */
+.pickup-otp-box{background:linear-gradient(135deg,var(--green) 0%,var(--green2) 100%);border-radius:16px;padding:16px;text-align:center;margin:10px 0}
+.pickup-otp-code{font-family:var(--fh);font-size:48px;font-weight:700;color:#fff;letter-spacing:10px;line-height:1}
+.pickup-otp-timer{font-size:12px;color:rgba(255,255,255,.7);margin-top:6px}
+.pickup-otp-label{font-size:11px;color:rgba(255,255,255,.6);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+/* Token stamp animation */
+.token-stamp{position:relative;display:inline-block}
+.token-stamp.stamped::after{content:'COLLECTED';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-20deg);font-size:11px;font-weight:800;color:var(--green2);border:2px solid var(--green2);border-radius:4px;padding:2px 6px;opacity:.9;letter-spacing:1px;animation:stampIn .3s cubic-bezier(.34,1.5,.64,1)}
+@keyframes stampIn{from{transform:translate(-50%,-50%) rotate(-20deg) scale(2);opacity:0}to{transform:translate(-50%,-50%) rotate(-20deg) scale(1);opacity:.9}}
+.otp-input-field{font-family:var(--fh);font-size:28px;font-weight:700;text-align:center;letter-spacing:8px;width:100%;background:var(--light2);border:2px solid var(--border);border-radius:12px;padding:12px;color:var(--dark)}
+.otp-input-field:focus{border-color:var(--green);background:var(--green-l)}
 .order-meta{font-size:11px;color:var(--muted);margin-top:2px}
 .order-item-row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:3px}
 .order-item-row strong{color:var(--dark)}
@@ -2743,7 +2754,7 @@ function renderKitchenCard(o, mode) {
       ${!isDone ? `<div class="kitchen-actions">
         ${o.status==='new'?`<button class="btn btn-secondary btn-sm" style="flex:1" onclick="${mode}Action('${o.id}','preparing')">✓ Accept & Start</button><button class="btn btn-ghost btn-sm" onclick="${mode}Action('${o.id}','done')">✕ Bump</button>`:''}
         ${o.status==='preparing'?`<button class="btn btn-green btn-sm" style="flex:1" onclick="${mode}Action('${o.id}','ready')">🔔 Mark Ready</button>`:''}
-        ${o.status==='ready'?`<button class="btn btn-primary btn-sm" style="flex:1;background:var(--green2)" onclick="${mode}Action('${o.id}','done')">📦 Mark Picked Up</button>`:''}
+        ${o.status==='ready'?`<button class="btn btn-primary btn-sm" style="flex:1;background:var(--green2)" onclick="showConfirmOTP('${o.id}')">🔐 Confirm OTP</button>`:''}
       </div>` : ''}
       ${elapsed>0&&!isDone?`<div class="kitchen-timer${timerClass?' '+timerClass:''}">⏱ ${elapsed<1?'Just now':elapsed+'m ago'}</div>`:''}
     </div>`;
@@ -5007,11 +5018,12 @@ renderMyOrders = async function(){
         <div class="order-savings">Paid <strong style="color:var(--brand)">₹${o.amount_paid||0}</strong> · Saved <strong style="color:var(--green2)">₹${o.subsidy_applied||0}</strong>${o.rating?` · ${'⭐'.repeat(o.rating)}`:''}</div>
       </div>
       <div class="order-actions">
-        ${o.status==='ready'?`<button class="btn btn-green btn-sm" style="flex:1" onclick="markPickup('${o.id}')">✅ Picked Up</button>`:''}
+        ${o.status==='ready'?`<button class="btn btn-green btn-sm" style="flex:1" onclick="showPickupOTP('${o.id}')">🔐 Get Pickup OTP</button>`:''}
         ${canCancel?`<button class="btn btn-danger btn-sm" onclick="showCancelOrder('${o.id}')">✕ Cancel</button>`:''}
         ${o.status==='done'||o.status==='cancelled'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="reorder('${o.id}')">🔄 Reorder</button>`:''}
         ${o.status==='done'&&!o.rating?`<button class="btn btn-ghost btn-sm" onclick="rateOrderById('${o.id}')">⭐ Rate</button>`:''}
         ${o.status==='done'?`<button class="btn btn-danger btn-sm" onclick="showComplaint('${o.id}')">⚠️ Complaint</button>`:''}
+        ${o.status==='done'?`<div class="token-stamp stamped" style="font-size:11px;color:var(--green2);font-weight:700;padding:4px 0">✓ Collected ${o.pickup_confirmed_at ? 'at ' + fmtDate(o.pickup_confirmed_at) : ''}</div>`:''}
       </div>
     </div>`;
   }).join('');
@@ -5922,6 +5934,175 @@ updateOrderStatus = async function(id, status) {
     toast('Failed to update order status: ' + (e.message || 'Check connection'), 'error', '❌');
   }
 };
+
+// ══════════════════════════════════════════════════════
+// PICKUP OTP SYSTEM
+// ══════════════════════════════════════════════════════
+
+// Employee: show their pickup OTP
+function showPickupOTP(orderId) {
+  const o = S.orders.find(o => o.id === orderId);
+  if (!o) return;
+
+  // Generate a 4-digit OTP and store with expiry
+  const otp = String(Math.floor(1000 + Math.random() * 9000));
+  const expiry = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+  // Store OTP in DB for kitchen to verify
+  if (sb) {
+    sb.from('orders').update({
+      pickup_otp: otp,
+      pickup_otp_expiry: new Date(expiry).toISOString()
+    }).eq('id', orderId).then(({ error }) => {
+      if (error) toast('Failed to generate OTP', 'error', '❌');
+    });
+  }
+
+  // Show OTP to employee
+  let remaining = 300;
+  showModal(`
+    <div class="modal-head">
+      <span class="modal-title">🔐 Pickup OTP</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:13px;color:var(--muted)">Order #${o.token_number} · ${o.canteen_name}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${(o.items||[]).map(i=>i.item_name||i.name).join(', ')}</div>
+      </div>
+      <div class="pickup-otp-box">
+        <div class="pickup-otp-label">Show this code to kitchen staff</div>
+        <div class="pickup-otp-code" id="otp-display-code">${otp}</div>
+        <div class="pickup-otp-timer" id="otp-countdown">Valid for 5:00</div>
+      </div>
+      <div style="background:var(--light2);border-radius:10px;padding:12px;margin-top:14px;font-size:12px;color:var(--muted);text-align:center">
+        ⚠️ Do not share this code with anyone except the kitchen counter staff
+      </div>
+    </div>`, true);
+
+  // Countdown timer
+  const timer = setInterval(() => {
+    remaining--;
+    const el = document.getElementById('otp-countdown');
+    if (!el) { clearInterval(timer); return; }
+    if (remaining <= 0) {
+      clearInterval(timer);
+      el.textContent = 'OTP expired — tap again to get a new one';
+      el.style.color = '#ff9999';
+      document.getElementById('otp-display-code').textContent = '----';
+      return;
+    }
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    el.textContent = `Valid for ${mins}:${secs.toString().padStart(2,'0')}`;
+  }, 1000);
+}
+
+// Kitchen/Vendor: enter OTP to confirm pickup
+function showConfirmOTP(orderId) {
+  const o = S.allOrders.find(o => o.id === orderId);
+  if (!o) return;
+  showModal(`
+    <div class="modal-head">
+      <span class="modal-title">🔐 Confirm Pickup</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:36px;margin-bottom:8px">🍽️</div>
+        <div style="font-weight:700;font-size:16px">Token #${o.token_number}</div>
+        <div style="font-size:13px;color:var(--muted)">${o.employee_name||'Employee'} · ${o.canteen_name}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">${(o.items||[]).map(i=>i.item_name||i.name).slice(0,3).join(', ')}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Enter Employee's 4-digit OTP</label>
+        <input class="otp-input-field" type="tel" id="confirm-otp-input" maxlength="4" 
+          placeholder="0000" autocomplete="off"
+          oninput="this.value=this.value.replace(/\\D/g,'').slice(0,4);if(this.value.length===4)document.getElementById('confirm-otp-btn').focus()">
+      </div>
+      <div id="confirm-otp-err" style="color:var(--red);font-size:12px;font-weight:600;text-align:center;min-height:18px;margin-bottom:10px"></div>
+      <button class="btn btn-green btn-full btn-lg" id="confirm-otp-btn" onclick="verifyPickupOTP('${orderId}')">✅ Confirm & Hand Over</button>
+    </div>`);
+  setTimeout(() => document.getElementById('confirm-otp-input')?.focus(), 200);
+}
+
+// Verify OTP and mark order as done
+async function verifyPickupOTP(orderId) {
+  const entered = document.getElementById('confirm-otp-input')?.value?.trim();
+  const errEl = document.getElementById('confirm-otp-err');
+  const btn = document.getElementById('confirm-otp-btn');
+
+  if (!entered || entered.length !== 4) {
+    errEl.textContent = 'Please enter the 4-digit OTP';
+    return;
+  }
+
+  btn.classList.add('btn-loading'); btn.disabled = true;
+
+  try {
+    // Fetch fresh OTP from DB
+    const { data, error } = await sb.from('orders')
+      .select('pickup_otp, pickup_otp_expiry, token_number, employee_name')
+      .eq('id', orderId).single();
+
+    if (error || !data) {
+      errEl.textContent = 'Could not verify OTP. Try again.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
+
+    // Check expiry
+    if (data.pickup_otp_expiry && new Date(data.pickup_otp_expiry) < new Date()) {
+      errEl.textContent = '⏰ OTP expired — ask employee to get a new one';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
+
+    // Check OTP match
+    if (data.pickup_otp !== entered) {
+      errEl.textContent = '❌ Wrong OTP — please check and try again';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      // Shake animation
+      const input = document.getElementById('confirm-otp-input');
+      if (input) { input.style.borderColor = 'var(--red)'; setTimeout(() => input.style.borderColor = '', 1000); }
+      return;
+    }
+
+    // OTP correct — mark as done with pickup timestamp
+    const now = new Date().toISOString();
+    await sb.from('orders').update({
+      status: 'done',
+      pickup_confirmed_at: now,
+      pickup_otp: null // Clear OTP after use
+    }).eq('id', orderId);
+
+    // Update local state
+    const ao = S.allOrders.find(o => o.id === orderId);
+    const eo = S.orders.find(o => o.id === orderId);
+    if (ao) { ao.status = 'done'; ao.pickup_confirmed_at = now; }
+    if (eo) { eo.status = 'done'; eo.pickup_confirmed_at = now; }
+
+    closeModal();
+
+    // Token stamp animation on kitchen card
+    const card = document.querySelector(`[data-order-id="${orderId}"]`);
+    if (card) {
+      card.style.transition = 'opacity .5s, transform .5s';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(.95)';
+      setTimeout(() => { if (S.role==='vendor') renderVendor(); else renderKDS(); }, 500);
+    } else {
+      if (S.role === 'vendor') renderVendor();
+      else renderKDS();
+    }
+
+    toast(`✅ Token #${data.token_number} handed over to ${data.employee_name||'employee'}!`, 'success', '🎉');
+
+  } catch(e) {
+    errEl.textContent = 'Error: ' + (e.message || 'Try again');
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+  }
+}
 
 // ══════════════════════════════════════════════════════
 // BOOT
