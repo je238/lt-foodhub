@@ -5,6 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <title>L&T FoodHub</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://browser.sentry-cdn.com/7.99.0/bundle.min.js" crossorigin="anonymous"></script>
+<script>
+  if(typeof Sentry !== 'undefined'){
+    Sentry.init({
+      dsn: "https://examplePublicKey@o0.ingest.sentry.io/0",
+      environment: location.hostname === 'localhost' ? 'development' : 'production',
+      tracesSampleRate: 0.2,
+      beforeSend(event){
+        // Don't send network errors — only real app errors
+        if(event.exception?.values?.[0]?.type === 'NetworkError') return null;
+        return event;
+      }
+    });
+  }
+  window.logError = function(msg, extra){
+    console.error(msg, extra);
+    if(typeof Sentry !== 'undefined') Sentry.captureException(new Error(msg), { extra });
+  };
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -3367,15 +3386,37 @@ function renderAdminInventory(el) {
     }).join('')}`;
 }
 
-function showRestockModal() {
-  S.menu.forEach(m => { S.inventory[m.id] = 80; });
-  toast('All items restocked to 80 units!', 'success', '📦');
+async function showRestockModal() {
+  if(!sb) { toast('No DB connection','error','❌'); return; }
+  try {
+    // Update all items to 80 stock in DB
+    const ids = S.menu.map(m => m.id);
+    for(const id of ids){
+      await sb.from('menu_items').update({stock_quantity: 80}).eq('id', id);
+      S.inventory[id] = 80;
+    }
+    toast('All items restocked to 80 units!', 'success', '📦');
+  } catch(e) {
+    // Fallback to local only
+    S.menu.forEach(m => { S.inventory[m.id] = 80; });
+    toast('Restocked locally (DB sync failed)', 'warning', '📦');
+    if(typeof logError !== 'undefined') logError('Restock all failed', {error: e.message});
+  }
   renderAdmin('inventory');
 }
 
-function restockItem(id, btn) {
-  S.inventory[id] = Math.min(200, (S.inventory[id]||0) + 50);
-  toast('Restocked +50 units', 'success', '📦');
+async function restockItem(id, btn) {
+  const newQty = Math.min(200, (S.inventory[id]||0) + 50);
+  S.inventory[id] = newQty;
+  if(btn) btn.disabled = true;
+  try {
+    await sb.from('menu_items').update({stock_quantity: newQty}).eq('id', id);
+    toast('Restocked +50 units', 'success', '📦');
+  } catch(e) {
+    toast('Restocked locally (DB sync failed)', 'warning', '📦');
+    if(typeof logError !== 'undefined') logError('Restock item failed', {id, error: e.message});
+  }
+  if(btn) btn.disabled = false;
   renderAdmin('inventory');
 }
 
@@ -4071,8 +4112,23 @@ async function confirmCancelOrder(orderId){
         if(result?.success){ S.user.wallet_balance = result.new_balance || (S.user.wallet_balance + o.amount_paid); }
       }catch(e){}
     } else {
-      // Employee self-cancel — update local UI, actual refund needs admin approval
-      S.user.wallet_balance += o.amount_paid;
+      // Employee self-cancel — refund via server-side RPC
+      try {
+        const {data:result} = await sb.rpc('employee_cancel_order', {
+          p_order_id: orderId,
+          p_employee_id: S.user.id
+        });
+        if(result?.success){
+          S.user.wallet_balance = result.new_balance;
+        } else {
+          const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+          if(emp) S.user.wallet_balance = emp.wallet_balance;
+        }
+      } catch(e) {
+        if(typeof logError !== 'undefined') logError('Employee cancel refund failed', {orderId, error: e.message});
+        const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+        if(emp) S.user.wallet_balance = emp.wallet_balance;
+      }
     }
     S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:o.amount_paid});
     setEl('nav-bal','₹'+Math.round(S.user.wallet_balance));
@@ -4750,46 +4806,20 @@ function showBroadcastModal(){
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">Target Audience</label>
-        <select class="form-input form-select" id="bc-target">
-          <option value="all">All Employees (8,000)</option>
-          ${S.canteens.map(c=>`<option value="${c.id}">${c.name} visitors</option>`).join('')}
-          <option value="active">Active today only</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Message Type</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px" id="bc-type-opts">
-          ${['📢 Announcement','⚠️ Alert','🍽️ Menu Update','🎉 Offer'].map((t,i)=>`<div class="slot-item${i===0?' active':''}" onclick="selectCustomOpt('bc-type-opts',this)">${t}</div>`).join('')}
+      <div style="text-align:center;padding:24px 0">
+        <div style="font-size:40px;margin-bottom:12px">📢</div>
+        <div style="font-weight:700;font-size:16px;margin-bottom:8px">Push Notifications Coming Soon</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:20px">Real push notifications require Firebase Cloud Messaging (FCM) setup. This feature will be available after pilot launch.</div>
+        <div style="background:var(--light2);border-radius:12px;padding:16px;text-align:left;font-size:13px">
+          <div style="font-weight:600;margin-bottom:8px">In-app alerts work now:</div>
+          <div style="color:var(--muted)">Employees see notifications instantly when they have the app open — for order ready, stock updates, and announcements.</div>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Message</label>
-        <textarea class="form-input" id="bc-msg" rows="3" maxlength="160" placeholder="e.g. Chicken Biryani sold out today. Try Dal Thali instead!"></textarea>
-        <div class="char-count" id="bc-count">0/160</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Schedule</label>
-        <select class="form-input form-select" id="bc-schedule">
-          <option value="now">Send Now</option>
-          <option value="lunch">At Lunch (12:00 PM)</option>
-          <option value="tomorrow">Tomorrow 9:00 AM</option>
-        </select>
-      </div>
-      <button class="btn btn-primary btn-full" onclick="sendBroadcast()">📢 Send Notification</button>
+      <button class="btn btn-ghost btn-full" onclick="closeModal()">Close</button>
     </div>`);
-  document.getElementById('bc-msg')?.addEventListener('input',function(){ setEl('bc-count',this.value.length+'/160'); });
 }
 function sendBroadcast(){
-  const msg = document.getElementById('bc-msg')?.value.trim();
-  const target = document.getElementById('bc-target')?.value;
-  const schedule = document.getElementById('bc-schedule')?.value;
-  if(!msg){ toast('Please enter a message','error','⚠️'); return; }
   closeModal();
-  const audience = target==='all'?'8,000 employees':target==='active'?'active users':'canteen visitors';
-  toast(`📢 Broadcast ${schedule==='now'?'sent':'scheduled'} to ${audience}!`,'success','📢');
-  addNotif(`Admin broadcast: "${msg.slice(0,50)}${msg.length>50?'...':''}"`, '📢');
 }
 
 // ══════════════════════════════════════════════════════

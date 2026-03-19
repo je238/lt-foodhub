@@ -1,123 +1,125 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { email } = await req.json()
+    const { email } = await req.json();
 
-    if (!email || !email.includes('@')) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Valid email required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    if (!email || !email.includes("@")) {
+      return new Response(JSON.stringify({ success: false, error: "Invalid email" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
+      });
     }
 
-    // Create Supabase admin client (bypasses RLS)
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    const sb = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
-    // Generate OTP server-side
-    const { data: otpResult, error: otpErr } = await supabaseAdmin.rpc('generate_email_otp', {
-      p_email: email
-    })
-
-    if (otpErr || !otpResult?.success) {
-      return new Response(
-        JSON.stringify({ success: false, error: otpResult?.error || otpErr?.message || 'Failed to generate OTP' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    // Check employee exists
+    const { data: emp } = await sb.from("employees").select("id, name, email").eq("email", email).single();
+    if (!emp) {
+      return new Response(JSON.stringify({ success: false, error: "Email not registered. Please register first." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const otp = otpResult.otp
-    const employeeName = otpResult.employee_name || 'Employee'
+    // Generate 6-digit OTP
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    // Send email via Gmail SMTP
-    const GMAIL_USER = Deno.env.get('GMAIL_USER')
-    const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD')
+    // DELETE old OTP for this email, then INSERT fresh — avoids upsert staleness bug
+    await sb.from("email_otps").delete().eq("email", email);
+    await sb.from("email_otps").insert({
+      email,
+      otp_code: otp,
+      expires_at: expiry,
+      attempts: 0,
+      verified: false,
+      created_at: new Date().toISOString(),
+    });
 
-    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
-      console.error('GMAIL credentials not set')
-      return new Response(
-        JSON.stringify({ success: false, error: 'Email service not configured. Contact admin.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    const [user, domain] = email.split("@");
+    const maskedEmail = user.slice(0, 2) + "***@" + domain;
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: 'smtp.gmail.com',
-        port: 465,
-        tls: true,
-        auth: {
-          username: GMAIL_USER,
-          password: GMAIL_APP_PASSWORD,
-        },
+    const resendKey = Deno.env.get("RESEND_API_KEY")!;
+    const fromAddr = Deno.env.get("RESEND_FROM") || "noreply@slphospitality.com";
+
+    const emailRes = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
       },
-    })
-
-    const htmlBody = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <div style="display: inline-block; background: #E8380D; color: white; font-weight: 700; font-size: 16px; padding: 12px 18px; border-radius: 12px;">L&T FoodHub</div>
-        </div>
-        <h2 style="font-size: 22px; font-weight: 600; color: #0F172A; margin: 0 0 8px; text-align: center;">
-          Hi ${employeeName.split(' ')[0]}!
-        </h2>
-        <p style="font-size: 15px; color: #64748B; text-align: center; margin: 0 0 28px;">
-          Here's your one-time login code
-        </p>
-        <div style="background: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 16px; padding: 24px; text-align: center; margin: 0 0 24px;">
-          <div style="font-size: 36px; font-weight: 800; letter-spacing: 10px; color: #E8380D; font-family: monospace;">
-            ${otp}
+      body: JSON.stringify({
+        from: `SLP FoodHub <${fromAddr}>`,
+        to: [email],
+        subject: `Your FoodHub OTP: ${otp}`,
+        html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:'Segoe UI',Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 20px">
+    <tr><td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+        <tr><td style="background:linear-gradient(135deg,#0F172A 0%,#1E3A5F 100%);padding:28px 32px;text-align:center">
+          <div style="display:inline-block;background:#E8380D;border-radius:12px;padding:10px 18px;margin-bottom:12px">
+            <span style="font-size:20px;font-weight:800;color:#fff;letter-spacing:1px">L&T FoodHub</span>
           </div>
-          <p style="font-size: 13px; color: #94A3B8; margin: 12px 0 0;">Valid for 10 minutes</p>
-        </div>
-        <p style="font-size: 13px; color: #94A3B8; text-align: center; line-height: 1.6;">
-          Enter this code in the FoodHub app to sign in.<br>
-          If you didn't request this, please ignore this email.
-        </p>
-        <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 28px 0 16px;">
-        <p style="font-size: 11px; color: #CBD5E1; text-align: center;">
-          L&T FoodHub &middot; Larsen &amp; Toubro &middot; Powai Campus, Mumbai
-        </p>
-      </div>
-    `
-
-    await client.send({
-      from: `L&T FoodHub <${GMAIL_USER}>`,
-      to: email,
-      subject: `${otp} — Your FoodHub Login OTP`,
-      content: `Your FoodHub OTP is: ${otp} (valid for 10 minutes)`,
-      html: htmlBody,
-    })
-
-    await client.close()
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: `OTP sent to ${email}`,
-        maskedEmail: email.replace(/(.{2})(.*)(@)/, '$1***$3')
+          <div style="color:rgba(255,255,255,.6);font-size:13px">Powered by SLP Hospitality</div>
+        </td></tr>
+        <tr><td style="padding:36px 32px;text-align:center">
+          <p style="margin:0 0 8px;font-size:16px;color:#1E293B;font-weight:600">Hello, ${emp.name || "there"} 👋</p>
+          <p style="margin:0 0 28px;font-size:14px;color:#64748B">Use the OTP below to login to your FoodHub account</p>
+          <div style="background:#f1f5f9;border-radius:12px;padding:24px;margin:0 0 24px;display:inline-block;min-width:200px">
+            <div style="font-size:11px;font-weight:700;color:#94A3B8;letter-spacing:2px;margin-bottom:10px;text-transform:uppercase">Your OTP</div>
+            <div style="font-size:42px;font-weight:800;color:#E8380D;letter-spacing:12px;font-family:'Courier New',monospace">${otp}</div>
+          </div>
+          <p style="margin:0 0 8px;font-size:13px;color:#94A3B8">⏰ Valid for <strong>10 minutes</strong> only</p>
+          <p style="margin:0 0 28px;font-size:13px;color:#94A3B8">🔒 Never share this code with anyone</p>
+          <div style="background:#FEF0ED;border-radius:8px;padding:14px;font-size:12px;color:#E8380D">
+            If you didn't request this OTP, please ignore this email.
+          </div>
+        </td></tr>
+        <tr><td style="background:#f8fafc;padding:20px 32px;text-align:center;border-top:1px solid #E2E8F0">
+          <p style="margin:0;font-size:11px;color:#94A3B8">SLP Hospitality · Campus Canteen Management</p>
+          <p style="margin:4px 0 0;font-size:11px;color:#CBD5E1">
+            <a href="https://slphospitality.com" style="color:#CBD5E1">slphospitality.com</a> · 
+            <a href="https://slphospitality.com/privacy-policy" style="color:#CBD5E1">Privacy Policy</a>
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    });
 
-  } catch (err) {
-    console.error('Edge function error:', err)
-    return new Response(
-      JSON.stringify({ success: false, error: 'Failed to send email. Please try again.' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    if (!emailRes.ok) {
+      const err = await emailRes.text();
+      console.error("Resend error:", err);
+      return new Response(JSON.stringify({ success: false, error: "Failed to send email. Try again." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, maskedEmail }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (e) {
+    console.error("Edge function error:", e);
+    return new Response(JSON.stringify({ success: false, error: e.message }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500,
+    });
   }
-})
+});
