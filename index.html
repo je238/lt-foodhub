@@ -763,6 +763,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
         <div class="wallet-lbl">Wallet</div>
       </div>
     </div>
+    <div class="icon-btn" onclick="refreshEmployee(this)" title="Refresh" id="refresh-btn">🔄</div>
     <div class="icon-btn" onclick="toggleNotifPanel()" id="notif-btn">
       🔔
       <div class="notif-dot hidden" id="notif-dot"></div>
@@ -1046,6 +1047,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <div class="live-dot">LIVE</div>
+        <div style="cursor:pointer;font-size:18px;opacity:.7" onclick="refreshVendor(this)" title="Refresh orders">🔄</div>
         <div style="cursor:pointer;font-size:18px" onclick="logout()" title="Sign out">🚪</div>
       </div>
     </div>
@@ -1081,6 +1083,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div style="display:flex;gap:8px;align-items:center">
         <div class="live-dot">LIVE</div>
         <button id="kds-toggle-btn" onclick="toggleKitchenOpen()" style="padding:6px 14px;border-radius:20px;border:none;font-weight:700;font-size:12px;cursor:pointer;background:#22c55e;color:#fff">🟢 OPEN</button>
+        <div style="cursor:pointer;font-size:18px;opacity:.7" onclick="refreshKitchen(this)" title="Refresh orders">🔄</div>
         <div style="cursor:pointer;font-size:18px" onclick="logout()">🚪</div>
       </div>
     </div>
@@ -1117,7 +1120,10 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
         <div class="admin-title">Admin Dashboard</div>
         <div class="admin-sub">L&T Powai Campus · All Canteens</div>
       </div>
-      <div style="cursor:pointer;font-size:18px;opacity:.6" onclick="logout()">🚪</div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div style="cursor:pointer;font-size:18px;opacity:.6" onclick="refreshAdmin(this)" title="Refresh dashboard">🔄</div>
+        <div style="cursor:pointer;font-size:18px;opacity:.6" onclick="logout()">🚪</div>
+      </div>
     </div>
   </div>
   <div class="admin-nav" id="admin-nav">
@@ -6155,6 +6161,78 @@ async function verifyPickupOTP(orderId) {
     errEl.textContent = 'Error: ' + (e.message || 'Try again');
     btn.classList.remove('btn-loading'); btn.disabled = false;
   }
+}
+
+// ══════════════════════════════════════════════════════
+// REFRESH FUNCTIONS
+// ══════════════════════════════════════════════════════
+async function refreshEmployee(btn) {
+  if (btn) { btn.style.transform = 'rotate(360deg)'; btn.style.transition = 'transform .5s'; setTimeout(() => { btn.style.transform = ''; btn.style.transition = ''; }, 500); }
+  try {
+    if (!sb || !S.user) return;
+    // Refresh wallet balance
+    const {data: emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+    if (emp) { S.user.wallet_balance = emp.wallet_balance; setEl('nav-bal', '₹' + Math.round(emp.wallet_balance)); }
+    // Refresh canteens
+    const {data: cans} = await sb.from('canteens').select('*').order('id');
+    if (cans?.length) { S.canteens = cans; renderCanteens(); }
+    // Refresh menu
+    const {data: menu} = await sb.from('menu_items').select('*').eq('is_available', true).limit(700);
+    if (menu?.length) { S.menu = menu; renderMenu(); }
+    // Refresh orders
+    const {data: orders} = await sb.from('orders').select('*, order_items(*)').eq('employee_id', S.user.id).order('created_at',{ascending:false}).limit(30);
+    if (orders?.length) S.orders = orders.map(o => ({...o, items:o.order_items||[]}));
+    toast('Refreshed ✅', 'success', '🔄');
+  } catch(e) { toast('Refresh failed', 'error', '❌'); }
+}
+
+async function refreshVendor(btn) {
+  if (btn) { btn.style.transform = 'rotate(360deg)'; btn.style.transition = 'transform .5s'; setTimeout(() => { btn.style.transform = ''; btn.style.transition = ''; }, 500); }
+  try {
+    if (!sb) return;
+    let q = sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+    if (S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
+    const {data} = await q;
+    if (data?.length) {
+      data.forEach(o => {
+        const ex = S.allOrders.find(x => x.id===o.id);
+        if (!ex) S.allOrders.unshift({...o, items:o.order_items||[]});
+        else { ex.status=o.status; ex.items=o.order_items||ex.items; }
+      });
+    }
+    renderVendor();
+    toast('Orders refreshed ✅', 'success', '🔄');
+  } catch(e) { toast('Refresh failed', 'error', '❌'); }
+}
+
+async function refreshKitchen(btn) {
+  if (btn) { btn.style.transform = 'rotate(360deg)'; btn.style.transition = 'transform .5s'; setTimeout(() => { btn.style.transform = ''; btn.style.transition = ''; }, 500); }
+  try {
+    if (!sb) return;
+    let q = sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+    if (S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
+    const {data} = await q;
+    if (data?.length) {
+      data.forEach(o => {
+        const ex = S.allOrders.find(x => x.id===o.id);
+        if (!ex) S.allOrders.unshift({...o, items:o.order_items||[]});
+        else { ex.status=o.status; ex.items=o.order_items||ex.items; }
+      });
+    }
+    renderKDS();
+    toast('Kitchen display refreshed ✅', 'success', '🔄');
+  } catch(e) { toast('Refresh failed', 'error', '❌'); }
+}
+
+async function refreshAdmin(btn) {
+  if (btn) { btn.style.transform = 'rotate(360deg)'; btn.style.transition = 'transform .5s'; setTimeout(() => { btn.style.transform = ''; btn.style.transition = ''; }, 500); }
+  try {
+    if (!sb) return;
+    const {data} = await sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(200);
+    if (data?.length) S.allOrders = data.map(o => ({...o, items:o.order_items||[]}));
+    renderAdmin(S.adminTab || 'overview');
+    toast('Dashboard refreshed ✅', 'success', '🔄');
+  } catch(e) { toast('Refresh failed', 'error', '❌'); }
 }
 
 // ══════════════════════════════════════════════════════
