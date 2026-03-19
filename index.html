@@ -2818,8 +2818,36 @@ async function fetchAllOrders() {
 
 function startPoll() {
   clearInterval(S.pollInterval);
-  // Employees rely on Supabase Realtime — no polling needed
-  if (S.role === 'employee') return;
+  if (S.role === 'employee') {
+    // Employees: only poll canteen open/close status every 30s as realtime backup
+    S.pollInterval = setInterval(async () => {
+      try {
+        if (!sb) return;
+        const {data} = await sb.from('canteens').select('id, is_open, name, icon');
+        if (data?.length) {
+          let changed = false;
+          data.forEach(fc => {
+            const c = S.canteens.find(x => x.id === fc.id);
+            if (c && c.is_open !== fc.is_open) {
+              const wasOpen = c.is_open;
+              c.is_open = fc.is_open;
+              changed = true;
+              if (!fc.is_open) toast(`${fc.icon||'🍽️'} ${fc.name} is now CLOSED`, 'warn', '🔴');
+              else toast(`${fc.icon||'🍽️'} ${fc.name} is now OPEN 🎉`, 'success', '🟢');
+            }
+          });
+          if (changed) {
+            renderCanteens();
+            if (S.selCanteen && !S.selCanteen.is_open) {
+              const nextOpen = S.canteens.find(x => x.is_open);
+              if (nextOpen) { S.selCanteen = nextOpen; renderMenu(); }
+            }
+          }
+        }
+      } catch(e) {}
+    }, 30000);
+    return;
+  }
   // Vendor/Kitchen: poll every 15s as backup to Realtime
   S.pollInterval = setInterval(async () => {
     try {
@@ -2834,7 +2862,6 @@ function startPoll() {
           if (!ex) { S.allOrders.unshift({...o, items:o.order_items||[]}); changed = true; }
           else if (ex.status !== o.status) { ex.status = o.status; ex.items = o.order_items||ex.items; changed = true; }
         });
-        // Only re-render if data actually changed (prevents DOM flicker)
         if (changed) {
           if (S.role === 'vendor') renderVendor();
           if (S.role === 'kitchen') renderKDS();
@@ -3347,7 +3374,7 @@ function renderAdminCanteens(el) {
 
 // Kitchen open/close toggle
 let _kitchenOpen = true;
-function toggleKitchenOpen() {
+async function toggleKitchenOpen() {
   _kitchenOpen = !_kitchenOpen;
   const btn = document.getElementById('kds-toggle-btn');
   if (_kitchenOpen) {
@@ -3358,10 +3385,24 @@ function toggleKitchenOpen() {
     toast('Kitchen is now CLOSED — no new orders', 'warn', '🔴');
   }
   if (sb) {
-    S.canteens.forEach(c => {
-      sb.from('canteens').update({ is_open: _kitchenOpen }).eq('id', c.id);
-      c.is_open = _kitchenOpen;
-    });
+    // Only update THIS kitchen's canteen — not all canteens
+    const myCid = S.user?.canteen_id;
+    if (myCid) {
+      try {
+        const { error } = await sb.from('canteens').update({ is_open: _kitchenOpen }).eq('id', myCid);
+        if (error) toast('Failed to update status: ' + error.message, 'error', '❌');
+        else {
+          const c = S.canteens.find(x => x.id === myCid);
+          if (c) c.is_open = _kitchenOpen;
+        }
+      } catch(e) { toast('Failed to update status', 'error', '❌'); }
+    } else {
+      // Fallback — update all canteens if no specific canteen_id
+      S.canteens.forEach(c => {
+        sb.from('canteens').update({ is_open: _kitchenOpen }).eq('id', c.id);
+        c.is_open = _kitchenOpen;
+      });
+    }
   }
 }
 
