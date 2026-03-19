@@ -4144,12 +4144,19 @@ function startRealtime() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'canteens' }, payload => {
         const fc = payload.new;
         const c = S.canteens.find(x => x.id === fc.id);
-        if (c && c.is_open !== fc.is_open) {
-          c.is_open = fc.is_open;
+        if (c) {
+          const wasOpen = c.is_open;
+          Object.assign(c, fc);
           if (S.role === 'employee') {
-            renderHome();
-            if (!fc.is_open) toast(`${fc.icon||'🍽️'} ${fc.name} is now CLOSED`, 'warn', '🔴');
-            else toast(`${fc.icon||'🍽️'} ${fc.name} is now OPEN`, 'success', '🟢');
+            renderCanteens();
+            if (S.selCanteen?.id === fc.id && !fc.is_open) {
+              const nextOpen = S.canteens.find(x => x.is_open && x.id !== fc.id);
+              if (nextOpen) { S.selCanteen = nextOpen; renderMenu(); }
+            }
+            if (wasOpen !== fc.is_open) {
+              if (!fc.is_open) toast(`${fc.icon||'🍽️'} ${fc.name} is now CLOSED`, 'warn', '🔴');
+              else toast(`${fc.icon||'🍽️'} ${fc.name} is now OPEN 🎉`, 'success', '🟢');
+            }
           }
         }
       })
@@ -5683,8 +5690,34 @@ async function resolveComplaint(complaintId, action, amount) {
 async function showDailyMenuSelector() {
   const cid = S.user?.canteen_id || 'c1';
   const canteen = S.canteens.find(c => c.id === cid) || { name: 'Counter' };
-  const items = S.menu.filter(m => m.canteen_id === cid);
   const today = new Date().toISOString().slice(0, 10);
+
+  // Show loading modal first
+  showModal(`
+    <div class="modal-head">
+      <span class="modal-title">📋 Today's Menu — ${canteen.name}</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" style="text-align:center;padding:40px 20px">
+      <div class="loader"></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:12px">Loading menu...</div>
+    </div>`);
+
+  // Always fetch ALL items from DB for this canteen
+  if (sb) {
+    try {
+      const {data} = await sb.from('menu_items').select('*').eq('canteen_id', cid).order('category').order('name');
+      if (data?.length) {
+        data.forEach(dbItem => {
+          const existing = S.menu.find(m => m.id === dbItem.id);
+          if (existing) Object.assign(existing, dbItem);
+          else S.menu.push(dbItem);
+        });
+      }
+    } catch(e) {}
+  }
+
+  const items = S.menu.filter(m => m.canteen_id === cid);
 
   // Fetch today's selections
   let todaySelections = {};
@@ -5697,6 +5730,7 @@ async function showDailyMenuSelector() {
 
   const hasSelections = Object.keys(todaySelections).length > 0;
 
+  // Update modal with full content (replaces the loading state)
   showModal(`
     <div class="modal-head">
       <span class="modal-title">📋 Today's Menu — ${canteen.name}</span>
@@ -5706,6 +5740,7 @@ async function showDailyMenuSelector() {
       <div style="background:var(--blue-l);border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--blue)">
         <strong>Select dishes available today.</strong> Unselected dishes will be grayed out for employees. You can change this anytime during the day.
       </div>
+      ${items.length === 0 ? '<div style="text-align:center;padding:24px;color:var(--muted)">No menu items found for this counter.</div>' : `
       <div style="display:flex;justify-content:space-between;margin-bottom:12px">
         <button class="btn btn-ghost btn-sm" onclick="dailyMenuSelectAll(true)">✅ Select All</button>
         <button class="btn btn-ghost btn-sm" onclick="dailyMenuSelectAll(false)">❌ Clear All</button>
@@ -5724,7 +5759,7 @@ async function showDailyMenuSelector() {
             <div class="toggle ${isOn ? 'on' : ''}" onclick="toggleDailyItem('${m.id}', this)" data-item-id="${m.id}"></div>
           </div>`;
         }).join('')}
-      </div>
+      </div>`}
       <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="saveDailyMenu('${cid}')">💾 Save Today's Menu</button>
     </div>`);
 }
