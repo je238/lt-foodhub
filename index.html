@@ -8,20 +8,24 @@
 <script src="https://browser.sentry-cdn.com/7.99.0/bundle.min.js" crossorigin="anonymous"></script>
 <script>
   if(typeof Sentry !== 'undefined'){
-    Sentry.init({
-      dsn: "https://examplePublicKey@o0.ingest.sentry.io/0",
-      environment: location.hostname === 'localhost' ? 'development' : 'production',
-      tracesSampleRate: 0.2,
-      beforeSend(event){
-        // Don't send network errors — only real app errors
-        if(event.exception?.values?.[0]?.type === 'NetworkError') return null;
-        return event;
-      }
-    });
+    // TODO: Replace with your real Sentry DSN from sentry.io
+    // Get free DSN at: sentry.io → New Project → Browser JS
+    const SENTRY_DSN = ""; // Leave empty until you have a real DSN
+    if(SENTRY_DSN) {
+      Sentry.init({
+        dsn: SENTRY_DSN,
+        environment: location.hostname === 'localhost' ? 'development' : 'production',
+        tracesSampleRate: 0.2,
+        beforeSend(event){
+          if(event.exception?.values?.[0]?.type === 'NetworkError') return null;
+          return event;
+        }
+      });
+    }
   }
   window.logError = function(msg, extra){
     console.error(msg, extra);
-    if(typeof Sentry !== 'undefined') Sentry.captureException(new Error(msg), { extra });
+    if(typeof Sentry !== 'undefined' && Sentry.captureException) Sentry.captureException(new Error(msg), { extra });
   };
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3392,7 +3396,7 @@ async function showRestockModal() {
     // Update all items to 80 stock in DB
     const ids = S.menu.map(m => m.id);
     for(const id of ids){
-      await sb.from('menu_items').update({stock_quantity: 80}).eq('id', id);
+      await sb.from('menu_items').update({stock: 80}).eq('id', id);
       S.inventory[id] = 80;
     }
     toast('All items restocked to 80 units!', 'success', '📦');
@@ -3410,7 +3414,7 @@ async function restockItem(id, btn) {
   S.inventory[id] = newQty;
   if(btn) btn.disabled = true;
   try {
-    await sb.from('menu_items').update({stock_quantity: newQty}).eq('id', id);
+    await sb.from('menu_items').update({stock: newQty}).eq('id', id);
     toast('Restocked +50 units', 'success', '📦');
   } catch(e) {
     toast('Restocked locally (DB sync failed)', 'warning', '📦');
@@ -4819,7 +4823,10 @@ function showBroadcastModal(){
     </div>`);
 }
 function sendBroadcast(){
+  const msg = document.getElementById('bc-msg')?.value.trim();
+  if(!msg){ toast('Please enter a message','error','⚠️'); return; }
   closeModal();
+  toast('📢 Broadcast feature coming soon — notifications will be sent via push when ready', 'info', '📢');
 }
 
 // ══════════════════════════════════════════════════════
