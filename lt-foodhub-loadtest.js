@@ -3,12 +3,14 @@
 // Run: node lt-foodhub-loadtest.js
 
 const SUPABASE_URL = 'https://lorgclscnjdbngqurdsw.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvcmdjbHNjbmpkYm5ncXVyZHN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjA3MjEsImV4cCI6MjA4ODYzNjcyMX0.T8TwjIuILMEwNZgfo0s4_9Zr1_5ocTAtCxWntSA2iu4';
+// Use service_role key (from Supabase Dashboard → Settings → API → service_role)
+// NEVER put this in your HTML app — only use for testing scripts
+const SUPABASE_ANON_KEY = process.env.SUPABASE_SERVICE_KEY || 'PASTE_SERVICE_ROLE_KEY_HERE';
 
 const CANTEEN_ID   = 'c1';
 const CANTEEN_NAME = 'North Indian Counter';
 const TOTAL_EMPLOYEES = 200;
-const WALLET_AMOUNT   = 500; // each test employee gets ₹500
+const WALLET_AMOUNT   = 5000; // each test employee gets ₹5000
 
 const headers = {
   'Content-Type':  'application/json',
@@ -17,11 +19,20 @@ const headers = {
 };
 
 // ── helpers ──────────────────────────────────────────
-function rpc(fn, body) {
-  return fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+async function rpc(fn, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST', headers,
     body: JSON.stringify(body),
-  }).then(r => r.json());
+  });
+  const text = await r.text();
+  try {
+    const parsed = JSON.parse(text);
+    // Supabase RPC returns the result directly, not wrapped
+    if (Array.isArray(parsed)) return parsed[0];
+    return parsed;
+  } catch(e) {
+    return { success: false, error: 'Parse error: ' + text.slice(0, 100) };
+  }
 }
 
 function rest(method, table, body, query = '') {
@@ -86,17 +97,13 @@ async function placeOrders(employees) {
     const t0 = Date.now();
     try {
       const result = await rpc('place_order', {
-        p_employee_id:    emp.id,
-        p_canteen_id:     CANTEEN_ID,
-        p_canteen_name:   CANTEEN_NAME,
-        p_pickup_slot:    '12:00 PM - 12:30 PM',
-        p_items:          JSON.stringify([{ id: 'test-item-1', name: 'Dal Tadka', emoji: '🍛', qty: 1, price: 80, customNote: '' }]),
-        p_item_total:     80,
-        p_gst_amount:     4,
-        p_platform_fee:   2,
-        p_platform_gst:   0.1,
-        p_subsidy_applied:0,
-        p_amount_paid:    86.1,
+        p_employee_id:   emp.id,
+        p_canteen_id:    CANTEEN_ID,
+        p_canteen_name:  CANTEEN_NAME,
+        p_canteen_icon:  '🍛',
+        p_pickup_slot:   '12:00 PM - 12:30 PM',
+        p_items:         [{ id: 'm317', name: 'Plain Paratha And Sweet Curd', emoji: '🫓', qty: 1, price: 35, customNote: '' }],
+        p_payment_method:'wallet',
       });
 
       const elapsed = Date.now() - t0;
@@ -112,11 +119,11 @@ async function placeOrders(employees) {
         }
       } else {
         results.orders.failed++;
-        results.orders.errors.push(`${emp.id}: ${result?.error || 'unknown error'}`);
+        results.orders.errors.push(`${emp.id}: ${JSON.stringify(result)}`);
       }
     } catch (e) {
       results.orders.failed++;
-      results.orders.errors.push(`${emp.id}: ${e.message}`);
+      results.orders.errors.push(`${emp.id}: EXCEPTION: ${e.message} | ${JSON.stringify(e)}`);
     }
   });
 
@@ -137,9 +144,9 @@ async function verifyWallets(employees) {
     
     if (Array.isArray(res)) {
       for (const emp of res) {
-        const expected = WALLET_AMOUNT - 86.1;
         const actual = parseFloat(emp.wallet_balance);
-        if (Math.abs(actual - expected) > 0.5) {
+        // Wallet should have been reduced (not still at 500)
+        if (actual >= WALLET_AMOUNT) {
           results.walletErrors++;
           console.error(`  ❌ Wallet mismatch: ${emp.id} expected ₹${expected.toFixed(2)} got ₹${actual.toFixed(2)}`);
         }

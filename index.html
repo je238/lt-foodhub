@@ -1606,6 +1606,7 @@ async function verifyEmailOTP() {
 
     // Login successful — employee data from server
     S.user = result.employee;
+    S.user.wallet_balance = parseFloat(S.user.wallet_balance) || 0;
     S.role = 'employee';
 
     // Load fresh menu and canteens
@@ -1760,7 +1761,9 @@ async function doLogin() {
         if (sb) { const { data } = await sb.from('employees').select('*').eq('id', id).single(); emp = data; }
       } catch (e) { }
       if (!emp) { err.textContent = 'Employee not found. Please register first.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-      S.user = emp; S.role = 'employee';
+      S.user = emp;
+      S.user.wallet_balance = parseFloat(S.user.wallet_balance) || 0;
+      S.role = 'employee';
       if (sb) {
         const { data: freshMenu } = await sb.from('menu_items').select('*').eq('is_available', true).limit(700);
         if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
@@ -1924,6 +1927,19 @@ function toggleVegFilter(el) {
 // CART
 // ═════════════════════════════════════
 function addCart(id) {
+  const totalQty = S.cart.reduce((s,i) => s+i.qty, 0);
+  if (totalQty >= 5) { toast('Max 5 items per order', 'error', '🚫'); return; }
+  // Block cross-canteen ordering from search
+  const newItem = S.menu.find(m => m.id === id);
+  if (newItem && S.cart.length > 0) {
+    const cartCanteen = S.cart[0].canteen_id;
+    if (cartCanteen && newItem.canteen_id && cartCanteen !== newItem.canteen_id) {
+      const cartCanteenName = S.canteens.find(c=>c.id===cartCanteen)?.name || cartCanteen;
+      if (!confirm(`Your cart has items from ${cartCanteenName}. Clear cart and switch counters?`)) return;
+      S.cart = [];
+      updateCartFloat();
+    }
+  }
   const item = S.menu.find(m => m.id === id);
   if (!item) return;
   // If cart has items from a different canteen — warn
@@ -2404,7 +2420,7 @@ async function renderWallet() {
     }
   } catch(e) {}
   const monthSpend = txns.filter(t => t.type==='debit').reduce((s,t) => s+t.amount, 0);
-  setEl('w-spend', 'This month: ₹' + Math.round(monthSpend));
+  // spending removed
   const el = document.getElementById('txn-list');
   if (!el) return;
   if (txns.length === 0) {
@@ -2513,7 +2529,7 @@ async function processTopUp(amount) {
     }
 
     // Update local state
-    S.user.wallet_balance = result.new_balance;
+    S.user.wallet_balance = parseFloat(result.new_balance) || 0;
     setEl('nav-bal', '₹' + Math.round(result.new_balance));
     setEl('w-bal', '₹' + Math.round(result.new_balance));
     S.txns.unshift({ type: 'credit', icon: '💳', name: 'Wallet Top-up via ' + _topUpMethod.toUpperCase(), date: 'Just now', amount });
@@ -4123,15 +4139,15 @@ async function confirmCancelOrder(orderId){
           p_employee_id: S.user.id
         });
         if(result?.success){
-          S.user.wallet_balance = result.new_balance;
+          S.user.wallet_balance = parseFloat(result.new_balance) || 0;
         } else {
           const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-          if(emp) S.user.wallet_balance = emp.wallet_balance;
+          if(emp) S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
         }
       } catch(e) {
         if(typeof logError !== 'undefined') logError('Employee cancel refund failed', {orderId, error: e.message});
         const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-        if(emp) S.user.wallet_balance = emp.wallet_balance;
+        if(emp) S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
       }
     }
     S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:o.amount_paid});
@@ -4335,12 +4351,26 @@ function startRealtime() {
               addNotif(`🔔 Order #${myOrd.token_number} is READY for pickup!`, '🔔');
               toast(`Order #${myOrd.token_number} is READY! Go collect your food 🍽️`, 'success', '🔔');
               playNewOrderAlert();
-              // Update badge
               const badge = document.getElementById('ord-badge');
               if (badge) { badge.textContent = S.orders.filter(o2=>o2.status==='ready').length; badge.classList.remove('hidden'); }
             }
             if (o.status === 'preparing') {
               addNotif(`⏳ Order #${myOrd.token_number} is being prepared`, '⏳');
+            }
+            if (o.status === 'done') {
+              // Kitchen confirmed OTP — auto update employee side
+              myOrd.pickup_confirmed_at = o.pickup_confirmed_at || new Date().toISOString();
+              addNotif(`✅ Order #${myOrd.token_number} collected!`, '✅');
+              toast(`Order #${myOrd.token_number} collected ✅`, 'success', '✅');
+              const badge = document.getElementById('ord-badge');
+              if (badge) { 
+                const readyCount = S.orders.filter(o2=>o2.status==='ready').length;
+                if (readyCount > 0) { badge.textContent = readyCount; } 
+                else { badge.classList.add('hidden'); }
+              }
+              // Refresh orders tab if open
+              const ordTab = document.getElementById('s-orders');
+              if (ordTab?.classList.contains('active')) renderMyOrders();
             }
           }
         }
@@ -4888,7 +4918,7 @@ async function processRefund(){
         p_reason: reason || 'Admin refund'
       });
       if (!rpcErr && result?.success) {
-        if(S.user?.id===empId){ S.user.wallet_balance = result.new_balance; setEl('nav-bal','₹'+Math.round(result.new_balance)); }
+        if(S.user?.id===empId){ S.user.wallet_balance = parseFloat(result.new_balance) || 0; setEl('nav-bal','₹'+Math.round(result.new_balance)); }
         closeModal();
         toast(`₹${amount} credited to ${result.employee_name||empId}'s wallet`,'success','💚');
         addNotif(`₹${amount} refund credited to ${empId} (${reason})`, '💚');
@@ -5108,7 +5138,7 @@ renderMyOrders = async function(){
         <span class="badge ${badgeMap[o.status]||'badge-done'}">${statusMap[o.status]||o.status}</span>
       </div>
       <div>
-        ${(o.items||[]).map(i=>`<div class="order-item-row"><strong>${i.emoji||''} ${i.item_name||i.name} ×${i.quantity||i.qty}${i.customNote?` <small style="color:var(--muted)">(${i.customNote})</small>`:''}</strong><span>₹${(i.unit_price||i.price||0)*(i.quantity||i.qty||1)}</span></div>`).join('')}
+        ${(o.items||[]).map(i=>`<div class="order-item-row"><strong>${i.item_emoji||i.emoji||''} ${i.item_name||i.name||''} ×${i.quantity||i.qty||1}${(i.custom_note||i.customNote)?` <small style="color:var(--muted)">(${i.custom_note||i.customNote})</small>`:''}</strong><span>₹${((i.unit_price||i.price||0)*(i.quantity||i.qty||1)).toFixed(0)}</span></div>`).join('')}
       </div>
       <div class="order-footer">
         <div class="order-savings">Paid <strong style="color:var(--brand)">₹${o.amount_paid||0}</strong> · Saved <strong style="color:var(--green2)">₹${o.subsidy_applied||0}</strong>${o.rating?` · ${'⭐'.repeat(o.rating)}`:''}</div>
@@ -5119,7 +5149,6 @@ renderMyOrders = async function(){
         ${o.status==='done'||o.status==='cancelled'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="reorder('${o.id}')">🔄 Reorder</button>`:''}
         ${o.status==='done'&&!o.rating?`<button class="btn btn-ghost btn-sm" onclick="rateOrderById('${o.id}')">⭐ Rate</button>`:''}
         ${o.status==='done'?`<button class="btn btn-danger btn-sm" onclick="showComplaint('${o.id}')">⚠️ Complaint</button>`:''}
-        ${o.status==='done'?`<div class="token-stamp stamped" style="font-size:11px;color:var(--green2);font-weight:700;padding:4px 0">✓ Collected ${o.pickup_confirmed_at ? 'at ' + fmtDate(o.pickup_confirmed_at) : ''}</div>`:''}
       </div>
     </div>`;
   }).join('');
@@ -5132,7 +5161,7 @@ placeOrder = async function(){
   const iTotal = S.cart.reduce((s,i)=>s+i.price*i.qty,0);
   const subTotal = S.cart.reduce((s,i)=>s+Math.min(i.subsidy_amount||0,i.price)*i.qty,0);
   const youPay = Math.max(0,iTotal-subTotal);
-  if(youPay > 0 && !checkSpendingLimit(youPay)) return;
+  // spending limit removed
   await _origPlaceOrder();
   saveSession();
   checkLowBalance();
@@ -5321,12 +5350,11 @@ renderWallet = async function(){
   const el = document.getElementById('tab-wallet');
   if(!el) return;
   const spent = getMonthlySpent();
-  const limitPct = Math.min(100,Math.round(spent/MONTHLY_LIMIT*100));
-  // Add spending limit bar after wallet hero
+  // spending limit removed
   const hero = el.querySelector('.wallet-hero');
   if(hero && !el.querySelector('.spending-limit-card')){
     const limitCard = document.createElement('div');
-    limitCard.className='card spending-limit-card';
+    limitCard.className='card spending-limit-card'; limitCard.style.display='none';
     limitCard.innerHTML=`
       <div class="card-title">📊 Monthly Spending Limit</div>
       <div style="display:flex;justify-content:space-between;margin-bottom:8px">
