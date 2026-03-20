@@ -6,6 +6,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// FIX 1: Cryptographically secure OTP
+function generateSecureOTP(): string {
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  return String(100000 + (array[0] % 900000));
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -23,6 +30,23 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // FIX 2: Rate limiting — max 3 OTP requests per email per 10 minutes
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { data: recentOtps } = await sb
+      .from("email_otps")
+      .select("created_at")
+      .eq("email", email)
+      .gte("created_at", tenMinutesAgo);
+
+    if (recentOtps && recentOtps.length >= 3) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Too many OTP requests. Please wait 10 minutes before trying again."
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 429,
+      });
+    }
+
     // Check employee exists
     const { data: emp } = await sb.from("employees").select("id, name, email").eq("email", email).single();
     if (!emp) {
@@ -31,11 +55,11 @@ serve(async (req) => {
       });
     }
 
-    // Generate 6-digit OTP
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    // Generate secure OTP
+    const otp = generateSecureOTP();
     const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    // DELETE old OTP for this email, then INSERT fresh — avoids upsert staleness bug
+    // DELETE old OTP, INSERT fresh
     await sb.from("email_otps").delete().eq("email", email);
     await sb.from("email_otps").insert({
       email,
@@ -61,7 +85,8 @@ serve(async (req) => {
       body: JSON.stringify({
         from: `SLP FoodHub <${fromAddr}>`,
         to: [email],
-        subject: `Your FoodHub OTP: ${otp}`,
+        // FIX 3: OTP removed from subject — not visible in email previews
+        subject: `Your FoodHub Login Code`,
         html: `
 <!DOCTYPE html>
 <html>
@@ -92,7 +117,7 @@ serve(async (req) => {
         <tr><td style="background:#f8fafc;padding:20px 32px;text-align:center;border-top:1px solid #E2E8F0">
           <p style="margin:0;font-size:11px;color:#94A3B8">SLP Hospitality · Campus Canteen Management</p>
           <p style="margin:4px 0 0;font-size:11px;color:#CBD5E1">
-            <a href="https://slphospitality.com" style="color:#CBD5E1">slphospitality.com</a> · 
+            <a href="https://slphospitality.com" style="color:#CBD5E1">slphospitality.com</a> ·
             <a href="https://slphospitality.com/privacy-policy" style="color:#CBD5E1">Privacy Policy</a>
           </p>
         </td></tr>
@@ -118,7 +143,7 @@ serve(async (req) => {
 
   } catch (e) {
     console.error("Edge function error:", e);
-    return new Response(JSON.stringify({ success: false, error: e.message }), {
+    return new Response(JSON.stringify({ success: false, error: "An error occurred. Please try again." }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500,
     });
   }
