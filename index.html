@@ -8,9 +8,7 @@
 <script src="https://browser.sentry-cdn.com/7.99.0/bundle.min.js" crossorigin="anonymous"></script>
 <script>
   if(typeof Sentry !== 'undefined'){
-    // TODO: Replace with your real Sentry DSN from sentry.io
-    // Get free DSN at: sentry.io → New Project → Browser JS
-    const SENTRY_DSN = ""; // Leave empty until you have a real DSN
+    const SENTRY_DSN = "https://7ca3473134de59566329c92055e105f6@o4511078990020608.ingest.us.sentry.io/4511079000440832";
     if(SENTRY_DSN) {
       Sentry.init({
         dsn: SENTRY_DSN,
