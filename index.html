@@ -2610,7 +2610,6 @@ async function renderMyOrders() {
           ${o.rating ? ` · Rated ${'⭐'.repeat(o.rating)}` : ''}
         </div>
       </div>
-      ${o.status==='ready'?`<div class="order-actions"><button class="btn btn-green btn-sm btn-full" onclick="markPickup('${o.id}')">✅ Mark as Picked Up</button></div>`:''}
       ${o.status==='done'&&!o.rating?`<div class="order-actions"><button class="btn btn-ghost btn-sm" onclick="rateOrderById('${o.id}')">⭐ Rate Order</button></div>`:''}
     </div>`).join('');
 }
@@ -4151,7 +4150,7 @@ async function confirmCancelOrder(orderId){
           p_amount: o.amount_paid,
           p_reason: 'Auto-refund — Cancelled Order #' + o.token_number
         });
-        if(result?.success){ S.user.wallet_balance = result.new_balance || (S.user.wallet_balance + o.amount_paid); }
+        if(result?.success){ S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + o.amount_paid); }
       }catch(e){}
     } else {
       // Employee self-cancel — refund via server-side RPC
