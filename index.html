@@ -2228,7 +2228,10 @@ async function placeOrder() {
     setEl('inv-slot', S.selSlot);
     // Fee breakdown
     const invFees = calcFees(iTotal);
-    setEl('inv-subtotal', '₹' + Math.round(iTotal));
+    // Use totalPaid to back-calculate subtotal (most reliable source)
+    const platFees = PLATFORM_FEE + Math.round(PLATFORM_FEE * PLATFORM_GST_RATE * 100) / 100;
+    const subtotalFromPaid = iTotal > 0 ? iTotal : Math.round((totalPaid - platFees) / (1 + FOOD_GST_RATE));
+    setEl('inv-subtotal', '₹' + Math.round(subtotalFromPaid));
     setEl('inv-gst', '₹' + invFees.foodGst.toFixed(2));
     setEl('inv-platform', '₹' + invFees.platformFee.toFixed(2));
     setEl('inv-platform-gst', '₹' + invFees.platformGst.toFixed(2));
@@ -4339,7 +4342,14 @@ function startRealtime() {
           // Immediate render — don't wait for debounce
           if (S.role === 'vendor') { renderVendor(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
           if (S.role === 'kitchen') { renderKDS(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
-          if (S.role === 'admin') debouncedRenderDashboard();
+          if (S.role === 'admin') {
+            S.allOrders.unshift({...o, items:[]});
+            if (sb) sb.from('order_items').select('*').eq('order_id', o.id).then(({data}) => {
+              const ord = S.allOrders.find(ex => ex.id === o.id);
+              if (ord && data) ord.items = data;
+              renderAdmin(S.adminTab || 'orders');
+            });
+          }
           // Employee: no toast — they already see their order on success screen
         }
       })
@@ -4349,7 +4359,8 @@ function startRealtime() {
         if (ex) { ex.status = o.status; ex.rating = o.rating; }
         const empOrd = S.orders.find(e => e.id === o.id);
         if (empOrd) { empOrd.status = o.status; }
-        debouncedRenderDashboard();
+        if (S.role === 'admin') renderAdmin(S.adminTab || 'orders');
+        else debouncedRenderDashboard();
         if (S.role === 'employee') {
           const myOrd = S.orders.find(e => e.id === o.id);
           if (myOrd) {
