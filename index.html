@@ -1803,7 +1803,9 @@ function renderHome() {
   setEl('nav-av', S.user.initials || initials(S.user.name));
   setEl('h-subsidy', `🎯 Subsidy ₹${S.user.subsidy_per_meal||80}/meal`);
   setEl('h-pass', S.user.meal_pass_active ? '🎫 Meal Pass Active' : '🚫 No Meal Pass');
-  setEl('h-orders-count', `📋 ${S.orders.length} orders today`);
+  const _todayStr = new Date().toISOString().slice(0,10);
+  const _todayOrders = S.orders.filter(o => o.created_at && o.created_at.slice(0,10) === _todayStr);
+  setEl('h-orders-count', `📋 ${_todayOrders.length} orders today`);
   renderCanteens();
   renderCats();
   renderMenu();
@@ -2255,7 +2257,9 @@ async function placeOrder() {
           <div style="font-size:13px;font-weight:700;color:var(--dark)">₹${(i.price || i.unit_price) * (i.quantity || i.qty)}</div>
         </div>`).join('');
     }
-    setEl('h-orders-count', `📋 ${S.orders.length} orders today`);
+    const _todayStr = new Date().toISOString().slice(0,10);
+  const _todayOrders = S.orders.filter(o => o.created_at && o.created_at.slice(0,10) === _todayStr);
+  setEl('h-orders-count', `📋 ${_todayOrders.length} orders today`);
     const badgeEl = document.getElementById('ord-badge');
     if (badgeEl) { badgeEl.textContent = S.orders.filter(o => o.status !== 'done').length; badgeEl.classList.remove('hidden'); }
     generateQR(firstOrder.token_number, firstOrder.id);
