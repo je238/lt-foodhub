@@ -1930,20 +1930,7 @@ function addCart(id) {
   // Multi-counter ordering is supported — no canteen restriction
   const item = S.menu.find(m => m.id === id);
   if (!item) return;
-  // If cart has items from a different canteen — warn
-  if (S.cart.length > 0 && item.canteen_id && S.selCanteen?.id !== item.canteen_id) {
-    const itemCanteen = S.canteens.find(c => c.id === item.canteen_id)?.name || 'another counter';
-    const cartCanteen = S.selCanteen?.name || 'current counter';
-    if (!confirm(`This item is from ${itemCanteen}.\nYour cart has items from ${cartCanteen}.\n\nClear cart and switch to ${itemCanteen}?`)) return;
-    S.cart = [];
-    S.selCanteen = S.canteens.find(c => c.id === item.canteen_id) || S.selCanteen;
-    updateCartFloat();
-    renderCanteens();
-  }
-  // Update selected canteen to match item
-  if (item.canteen_id && (!S.selCanteen || S.selCanteen.id !== item.canteen_id)) {
-    S.selCanteen = S.canteens.find(c => c.id === item.canteen_id) || S.selCanteen;
-  }
+  // Multi-counter allowed — just add to cart from any counter
   const ex = S.cart.find(c => c.id === id);
   if (ex) ex.qty++;
   else S.cart.push({...item, qty:1});
@@ -2214,12 +2201,15 @@ async function placeOrder() {
     S.cart.forEach(i => {
       if (S.inventory[i.id] !== undefined) S.inventory[i.id] = Math.max(0, S.inventory[i.id] - i.qty);
     });
-    if (totalPaid > 0) S.txns.unshift({ type: 'debit', icon: '🍽️', name: `${splitOrders.length} counter order`, date: 'Just now', amount: totalPaid });
+    if (totalPaid > 0) {
+      const txnDetails = splitOrders.map(o => `${o.canteen_icon||'🍽️'} ${o.canteen_name} — Token #${o.token_number}`).join(' · ');
+      S.txns.unshift({ type: 'debit', icon: '🍽️', name: `Order at ${splitOrders.map(o=>o.canteen_name).join(' & ')}`, details: txnDetails, date: 'Just now', amount: totalPaid });
+    }
 
     // ── Update success screen ─────────────────────────────────────────
     const firstOrder = splitOrders[0];
     const numCounters = splitOrders.length;
-    const iTotal = splitOrders.reduce((s, o) => s + (o.item_total || 0), 0);
+    const iTotal = S.cart.reduce((s,i) => s + (i.price||i.unit_price||0)*(i.qty||i.quantity||1), 0) || splitOrders.reduce((s, o) => s + (o.item_total || 0), 0);
     const gstAmount = splitOrders.reduce((s, o) => s + (o.gst_amount || 0), 0);
 
     setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & '));
@@ -2405,7 +2395,13 @@ async function renderWallet() {
   try {
     if (sb) {
       const {data} = await sb.from('wallet_transactions').select('*').eq('employee_id',S.user.id).order('created_at',{ascending:false}).limit(20);
-      if (data?.length) { txns = data.map(t => ({type:t.type==='credit'?'credit':'debit',icon:t.type==='credit'?'💰':'🍽️',name:t.description||'Transaction',date:fmtDate(t.created_at),amount:parseFloat(Math.abs(t.amount))||0})); } else { txns = [...S.txns]; }
+      if (data?.length) {
+        txns = data.map(t => {
+          const matchOrder = S.orders.find(o => t.description && t.description.includes('#' + o.token_number));
+          const details = matchOrder ? `${matchOrder.canteen_icon||'🍽️'} ${matchOrder.canteen_name} · Token #${matchOrder.token_number} · ${(matchOrder.items||[]).map(i=>i.item_name||i.name).slice(0,2).join(', ')}` : '';
+          return {type:t.type==='credit'?'credit':'debit',icon:t.type==='credit'?'💰':'🍽️',name:t.description||'Transaction',details,date:fmtDate(t.created_at),amount:parseFloat(Math.abs(t.amount))||0};
+        });
+      } else { txns = [...S.txns]; }
     }
   } catch(e) {}
   const monthSpend = txns.filter(t => t.type==='debit').reduce((s,t) => s+t.amount, 0);
@@ -2421,9 +2417,10 @@ async function renderWallet() {
       <div class="txn-icon ${t.type}">${t.icon}</div>
       <div class="txn-body">
         <div class="txn-name">${t.name}</div>
+        ${t.details ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${t.details}</div>` : ''}
         <div class="txn-date">${t.date}</div>
       </div>
-      <div class="txn-amount ${t.type}">${t.type==='credit'?'+':'−'}₹${t.amount}</div>
+      <div class="txn-amount ${t.type}">${t.type==='credit'?'+':'−'}₹${Math.round(t.amount)}</div>
     </div>`).join('');
 }
 
