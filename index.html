@@ -2109,6 +2109,7 @@ async function placeOrder() {
 
   const btn = document.getElementById('pay-btn');
   btn.classList.add('btn-loading'); btn.disabled = true;
+  let splitOrders = []; // declared outside try so catch block can access it
 
   try {
     // ── Group cart items by canteen ──────────────────────────────────────
@@ -2121,7 +2122,7 @@ async function placeOrder() {
     });
 
     const cartSnapshot = [...S.cart]; // save before clearing for receipt
-    const splitOrders = [];
+    splitOrders = []; // reset (declared above try block)
     let totalPaid = 0;
     let newBalance = S.user.wallet_balance;
     const failedCounters = [];
@@ -2262,17 +2263,24 @@ async function placeOrder() {
   setEl('h-orders-count', `📋 ${_todayOrders.length} orders today`);
     const badgeEl = document.getElementById('ord-badge');
     if (badgeEl) { badgeEl.textContent = S.orders.filter(o => o.status !== 'done').length; badgeEl.classList.remove('hidden'); }
-    generateQR(firstOrder.token_number, firstOrder.id);
-  // Simulate kitchen update after 2s
+    try { generateQR(firstOrder.token_number, firstOrder.id || 'order'); } catch(e) {}
   // No auto status changes — kitchen controls status manually
   S.cart = [];
   updateCartFloat();
   btn.classList.remove('btn-loading'); btn.disabled = false;
   goScreen('s-success');
   } catch(err) {
-    console.error('[placeOrder] Fatal error:', err);
+    console.error('[placeOrder] Fatal error:', err.message, err.stack);
+    logError('[placeOrder] Fatal: ' + err.message, { stack: err.stack, cart: S.cart?.length });
     btn.classList.remove('btn-loading'); btn.disabled = false;
-    toast('Something went wrong. Please try again.', 'error', '❌');
+    // Order may have gone through — check before showing error
+    if (splitOrders && splitOrders.length > 0) {
+      toast('Order placed but display error occurred. Check My Orders tab.', 'warn', '⚠️');
+      S.cart = []; updateCartFloat();
+      goScreen('s-home');
+    } else {
+      toast('Something went wrong. Please try again.', 'error', '❌');
+    }
   }
 }
 
