@@ -5986,12 +5986,17 @@ async function saveDailyMenu(cid) {
     const { error } = await sb.from('daily_menu').insert(selections);
     if (error) { toast('Failed: ' + error.message, 'error', '❌'); return; }
 
-    // Also update menu_items is_available
-    for (const sel of selections) {
-      const item = S.menu.find(m => m.id === sel.menu_item_id);
-      if (item) item.is_available = sel.is_available;
-      try { await sb.from('menu_items').update({ is_available: sel.is_available }).eq('id', sel.menu_item_id); } catch(e) {}
-    }
+    // Batch update menu_items is_available — single upsert instead of N sequential calls
+    const batchUpdates = selections.map(sel => ({ id: sel.menu_item_id, is_available: sel.is_available }));
+    // Update local state immediately
+    batchUpdates.forEach(u => { const item = S.menu.find(m => m.id === u.id); if (item) item.is_available = u.is_available; });
+    // Two batch calls: enable items, disable items
+    const toEnable = batchUpdates.filter(u => u.is_available).map(u => u.id);
+    const toDisable = batchUpdates.filter(u => !u.is_available).map(u => u.id);
+    const updates = [];
+    if (toEnable.length) updates.push(sb.from('menu_items').update({ is_available: true }).in('id', toEnable));
+    if (toDisable.length) updates.push(sb.from('menu_items').update({ is_available: false }).in('id', toDisable));
+    await Promise.all(updates);
 
     closeModal();
     const availCount = selections.filter(s => s.is_available).length;
