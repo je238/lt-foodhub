@@ -1804,7 +1804,7 @@ function renderHome() {
   setEl('h-subsidy', `🎯 Subsidy ₹${S.user.subsidy_per_meal||80}/meal`);
   setEl('h-pass', S.user.meal_pass_active ? '🎫 Meal Pass Active' : '🚫 No Meal Pass');
   const _todayStr = new Date().toISOString().slice(0,10);
-  const _todayOrders = S.orders.filter(o => o.created_at && o.created_at.slice(0,10) === _todayStr);
+  const _todayOrders = S.orders.filter(o => o.created_at && String(o.created_at).slice(0,10) === _todayStr);
   setEl('h-orders-count', `📋 ${_todayOrders.length} orders today`);
   renderCanteens();
   renderCats();
@@ -2166,7 +2166,7 @@ async function placeOrder() {
           amount_paid: parseFloat(result.amount_paid) || 0,
           subsidy_applied: 0,
           items: items.map(i => ({ ...i })),
-          created_at: new Date(),
+          created_at: new Date().toISOString(),
         };
 
         splitOrders.push(order);
@@ -2259,7 +2259,7 @@ async function placeOrder() {
         </div>`).join('');
     }
     const _todayStr = new Date().toISOString().slice(0,10);
-  const _todayOrders = S.orders.filter(o => o.created_at && o.created_at.slice(0,10) === _todayStr);
+  const _todayOrders = S.orders.filter(o => o.created_at && String(o.created_at).slice(0,10) === _todayStr);
   setEl('h-orders-count', `📋 ${_todayOrders.length} orders today`);
     const badgeEl = document.getElementById('ord-badge');
     if (badgeEl) { badgeEl.textContent = S.orders.filter(o => o.status !== 'done').length; badgeEl.classList.remove('hidden'); }
