@@ -1927,17 +1927,7 @@ function toggleVegFilter(el) {
 function addCart(id) {
   const totalQty = S.cart.reduce((s,i) => s+i.qty, 0);
   if (totalQty >= 5) { toast('Max 5 items per order', 'error', '🚫'); return; }
-  // Block cross-canteen ordering from search
-  const newItem = S.menu.find(m => m.id === id);
-  if (newItem && S.cart.length > 0) {
-    const cartCanteen = S.cart[0].canteen_id;
-    if (cartCanteen && newItem.canteen_id && cartCanteen !== newItem.canteen_id) {
-      const cartCanteenName = S.canteens.find(c=>c.id===cartCanteen)?.name || cartCanteen;
-      if (!confirm(`Your cart has items from ${cartCanteenName}. Clear cart and switch counters?`)) return;
-      S.cart = [];
-      updateCartFloat();
-    }
-  }
+  // Multi-counter ordering is supported — no canteen restriction
   const item = S.menu.find(m => m.id === id);
   if (!item) return;
   // If cart has items from a different canteen — warn
@@ -2198,7 +2188,7 @@ async function placeOrder() {
         S.orders.unshift(order);
         S.allOrders.unshift({ ...order });
         totalPaid += parseFloat(result.amount_paid) || 0;
-        newBalance = result.new_balance;
+        newBalance = parseFloat(result.new_balance) || S.user.wallet_balance;
       } catch(e) {
         failedCounters.push({ canteen: canteen.name, error: e.message });
       }
@@ -2217,8 +2207,8 @@ async function placeOrder() {
     }
 
     // ── Update local state with server-verified balance ──────────────
-    S.user.wallet_balance = newBalance;
-    setEl('nav-bal', '₹' + Math.round(newBalance));
+    S.user.wallet_balance = parseFloat(newBalance) || 0;
+    setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
 
     // ── Update inventory locally ──────────────────────────────────────
     S.cart.forEach(i => {
@@ -2409,13 +2399,13 @@ async function submitRating(orderId) {
 // ═════════════════════════════════════
 async function renderWallet() {
   if (!S.user) return;
-  setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
+  setEl('w-bal', '₹' + Math.round(parseFloat(S.user.wallet_balance) || 0));
   setEl('w-id', S.user.id);
   let txns = [...S.txns];
   try {
     if (sb) {
       const {data} = await sb.from('wallet_transactions').select('*').eq('employee_id',S.user.id).order('created_at',{ascending:false}).limit(20);
-      if (data?.length) txns = data.map(t => ({type:t.type==='credit'?'credit':'debit',icon:t.type==='credit'?'💰':'🍽️',name:t.description||'Transaction',date:fmtDate(t.created_at),amount:parseFloat(Math.abs(t.amount))||0}));
+      if (data?.length) { txns = data.map(t => ({type:t.type==='credit'?'credit':'debit',icon:t.type==='credit'?'💰':'🍽️',name:t.description||'Transaction',date:fmtDate(t.created_at),amount:parseFloat(Math.abs(t.amount))||0})); } else { txns = [...S.txns]; }
     }
   } catch(e) {}
   const monthSpend = txns.filter(t => t.type==='debit').reduce((s,t) => s+t.amount, 0);
@@ -6260,7 +6250,7 @@ async function refreshEmployee(btn) {
     if (!sb || !S.user) return;
     // Refresh wallet balance
     const {data: emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-    if (emp) { S.user.wallet_balance = emp.wallet_balance; setEl('nav-bal', '₹' + Math.round(emp.wallet_balance)); }
+    if (emp) { S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0; setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance)); }
     // Refresh canteens
     const {data: cans} = await sb.from('canteens').select('*').order('id');
     if (cans?.length) { S.canteens = cans; renderCanteens(); }
