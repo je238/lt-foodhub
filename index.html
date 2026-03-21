@@ -1825,14 +1825,7 @@ function selCanteen(id) {
   const newCanteen = S.canteens.find(c => c.id === id);
   if (!newCanteen) return;
   if (!newCanteen.is_open) { toast(`${newCanteen.name} is currently closed`, 'error', '🚫'); return; }
-  // If cart has items from a different canteen — ask user
-  if (S.cart.length > 0 && S.selCanteen?.id !== id) {
-    const cartCanteen = S.selCanteen?.name || 'current canteen';
-    if (!confirm(`Your cart has items from ${cartCanteen}.\n\nSwitch to ${newCanteen.name}?\n(Your cart will be cleared)`)) return;
-    S.cart = [];
-    updateCartFloat();
-    toast('Cart cleared — switched to ' + newCanteen.name, 'warn', '⚠️');
-  }
+  // Multi-counter: just switch view, keep cart items from all counters
   S.selCanteen = newCanteen;
   S.selCat = 'All';
   renderCanteens();
@@ -2124,6 +2117,7 @@ async function placeOrder() {
       byCanteen[cid].push(i);
     });
 
+    const cartSnapshot = [...S.cart]; // save before clearing for receipt
     const splitOrders = [];
     let totalPaid = 0;
     let newBalance = S.user.wallet_balance;
@@ -2209,7 +2203,8 @@ async function placeOrder() {
     // ── Update success screen ─────────────────────────────────────────
     const firstOrder = splitOrders[0];
     const numCounters = splitOrders.length;
-    const iTotal = S.cart.reduce((s,i) => s + (i.price||i.unit_price||0)*(i.qty||i.quantity||1), 0) || splitOrders.reduce((s, o) => s + (o.item_total || 0), 0);
+    // Cart is cleared after order — use cartSnapshot for receipt
+    const iTotal = cartSnapshot ? cartSnapshot.reduce((s,i) => s + (i.price||i.unit_price||0)*(i.qty||i.quantity||1), 0) : splitOrders.reduce((s, o) => s + (o.item_total || 0), 0);
     const gstAmount = splitOrders.reduce((s, o) => s + (o.gst_amount || 0), 0);
 
     setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & '));
