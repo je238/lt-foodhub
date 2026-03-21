@@ -1745,7 +1745,8 @@ async function doLogin() {
         S.role = 'admin';
         S.user = { id: authResult.id, name: authResult.name, initials: 'CA' };
         try {
-          const { data } = await sb.from('orders').select('*, order_items(*)').order('created_at', { ascending: false }).limit(100);
+          const todayStr = new Date().toISOString().slice(0,10);
+          const { data } = await sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr + 'T00:00:00').order('created_at', { ascending: false }).limit(200);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-admin');
@@ -2227,7 +2228,7 @@ async function placeOrder() {
     setEl('inv-slot', S.selSlot);
     // Fee breakdown
     const invFees = calcFees(iTotal);
-    const actualSubtotal = splitOrders.reduce((s,o) => s + (o.item_total || 0), 0);
+    const actualSubtotal = cartSnapshot ? cartSnapshot.reduce((s,i) => s + (i.price||0)*(i.qty||1), 0) : splitOrders.reduce((s,o) => s + (o.item_total || 0), 0);
     setEl('inv-subtotal', '₹' + Math.round(actualSubtotal));
     setEl('inv-gst', '₹' + invFees.foodGst.toFixed(2));
     setEl('inv-platform', '₹' + invFees.platformFee.toFixed(2));
@@ -3057,7 +3058,9 @@ async function renderAdminOverview(el) {
 }
 
 function renderAdminOrders(el) {
-  const orders = [...S.allOrders].slice(0,50);
+  const today = new Date().toISOString().slice(0,10);
+  const orders = S.allOrders.filter(o => o.created_at && (typeof o.created_at === 'string' ? o.created_at.slice(0,10) === today : new Date(o.created_at).toISOString().slice(0,10) === today)).slice(0,50);
+  const allOrderCount = S.allOrders.length;
   el.innerHTML = `
     <div class="chip-row">
       <div class="chip active" onclick="adminOrderFilter('all',this)">All</div>
