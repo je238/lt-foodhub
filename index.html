@@ -2217,70 +2217,58 @@ async function placeOrder() {
       : splitOrders.reduce((s,o) => s + (o.item_total||0), 0);
     const gstAmount = splitOrders.reduce((s, o) => s + (o.gst_amount || 0), 0);
 
-    // ── Render success screen — each step isolated so one failure doesn't kill the rest
-    try { setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & ')); } catch(e) {}
-    try { setEl('suc-can', numCounters > 1 ? `${numCounters} Counters` : (firstOrder.canteen_icon||'') + ' ' + firstOrder.canteen_name); } catch(e) {}
-    try { setEl('suc-time', '⏰ Ready by ' + S.selSlot); } catch(e) {}
-    try { setEl('suc-sub', 'Show this screen to kitchen staff'); } catch(e) {}
-    try { setEl('suc-canteen-token-label', numCounters > 1 ? 'Your Tokens' : firstOrder.canteen_name + ' · Token'); } catch(e) {}
+    setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & '));
+    setEl('suc-can', numCounters > 1 ? `${numCounters} Counters` : firstOrder.canteen_icon + ' ' + firstOrder.canteen_name);
+    setEl('suc-time', '⏰ Ready by ' + S.selSlot);
+    setEl('suc-sub', 'Show this screen to kitchen staff');
+    setEl('suc-canteen-token-label', numCounters > 1 ? 'Your Tokens' : firstOrder.canteen_name + ' · Token');
 
     if (numCounters > 1) {
-      try {
-        const breakdown = splitOrders.map(o => `${o.canteen_icon||''} ${o.canteen_name} → #${o.token_number}`).join('<br>');
-        const bd = document.getElementById('suc-counter-breakdown');
-        if (bd) { bd.innerHTML = breakdown; bd.style.display = ''; }
-      } catch(e) {}
+      const breakdown = splitOrders.map(o => `${o.canteen_icon} ${o.canteen_name} → #${o.token_number}`).join('<br>');
+      const bd = document.getElementById('suc-counter-breakdown');
+      if (bd) { bd.innerHTML = breakdown; bd.style.display = ''; }
     }
 
-    try {
-      const now = new Date();
-      setEl('inv-date', now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
-      setEl('inv-orderid', 'Order #' + splitOrders.map(o => o.token_number).join('/'));
-      setEl('inv-emp', S.user.name);
-      setEl('inv-empid', S.user.id + ' · ' + (S.user.department || 'L&T'));
-      setEl('inv-slot', S.selSlot);
-    } catch(e) {}
+    const now = new Date();
+    setEl('inv-date', now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
+    setEl('inv-orderid', 'Order #' + splitOrders.map(o => o.token_number).join('/'));
+    setEl('inv-emp', S.user.name);
+    setEl('inv-empid', S.user.id + ' · ' + (S.user.department || 'L&T'));
+    setEl('inv-slot', S.selSlot);
+    // Fee breakdown
+    const invFees = calcFees(iTotal);
+    // Use totalPaid to back-calculate subtotal (most reliable source)
+    const platFees = PLATFORM_FEE + Math.round(PLATFORM_FEE * PLATFORM_GST_RATE * 100) / 100;
+    const subtotalFromPaid = iTotal > 0 ? iTotal : Math.round((totalPaid - platFees) / (1 + FOOD_GST_RATE));
+    setEl('inv-subtotal', '₹' + Math.round(subtotalFromPaid));
+    setEl('inv-gst', '₹' + invFees.foodGst.toFixed(2));
+    setEl('inv-platform', '₹' + invFees.platformFee.toFixed(2));
+    setEl('inv-platform-gst', '₹' + invFees.platformGst.toFixed(2));
+    setEl('inv-total', '₹' + totalPaid);
 
-    try {
-      const invFees = calcFees(iTotal);
-      const platFees = PLATFORM_FEE + Math.round(PLATFORM_FEE * PLATFORM_GST_RATE * 100) / 100;
-      const subtotalFromPaid = iTotal > 0 ? iTotal : Math.round((totalPaid - platFees) / (1 + FOOD_GST_RATE));
-      setEl('inv-subtotal', '₹' + Math.round(subtotalFromPaid));
-      setEl('inv-gst', '₹' + invFees.foodGst.toFixed(2));
-      setEl('inv-platform', '₹' + invFees.platformFee.toFixed(2));
-      setEl('inv-platform-gst', '₹' + invFees.platformGst.toFixed(2));
-      setEl('inv-total', '₹' + totalPaid);
-    } catch(e) {}
-
-    try {
-      const invItemsEl = document.getElementById('inv-items');
-      if (invItemsEl) {
-        const allItems = splitOrders.flatMap(o => (o.items||[]).map(i => ({ ...i, counter: o.canteen_name, icon: o.canteen_icon })));
-        invItemsEl.innerHTML = allItems.map(i => `
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <div>
-              <div style="font-size:13px;font-weight:600;color:var(--dark)">${i.emoji||''} ${i.item_name||i.name||''}</div>
-              <div style="font-size:11px;color:var(--muted)">${i.counter} × ${i.quantity||i.qty||1}</div>
-            </div>
-            <div style="font-size:13px;font-weight:700;color:var(--dark)">₹${((parseFloat(i.price||i.unit_price)||0) * (i.quantity||i.qty||1)).toFixed(2)}</div>
-          </div>`).join('');
-      }
-    } catch(e) {}
-
-    try {
-      const _todayStr = new Date().toISOString().slice(0,10);
-      const _todayOrders = S.orders.filter(o => o.created_at && String(o.created_at).slice(0,10) === _todayStr);
-      setEl('h-orders-count', `📋 ${_todayOrders.length} orders today`);
-      const badgeEl = document.getElementById('ord-badge');
-      if (badgeEl) { badgeEl.textContent = S.orders.filter(o => o.status !== 'done').length; badgeEl.classList.remove('hidden'); }
-    } catch(e) {}
-
+    const invItemsEl = document.getElementById('inv-items');
+    if (invItemsEl) {
+      const allItems = splitOrders.flatMap(o => o.items.map(i => ({ ...i, counter: o.canteen_name, icon: o.canteen_icon })));
+      invItemsEl.innerHTML = allItems.map(i => `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--dark)">${i.emoji || ''} ${i.item_name || i.name}</div>
+            <div style="font-size:11px;color:var(--muted)">${i.counter} × ${i.quantity || i.qty}</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:var(--dark)">₹${(i.price || i.unit_price) * (i.quantity || i.qty)}</div>
+        </div>`).join('');
+    }
+    const _todayStr = new Date().toISOString().slice(0,10);
+  const _todayOrders = S.orders.filter(o => o.created_at && String(o.created_at).slice(0,10) === _todayStr);
+  setEl('h-orders-count', `📋 ${_todayOrders.length} orders today`);
+    const badgeEl = document.getElementById('ord-badge');
+    if (badgeEl) { badgeEl.textContent = S.orders.filter(o => o.status !== 'done').length; badgeEl.classList.remove('hidden'); }
     try { generateQR(firstOrder.token_number, firstOrder.id || 'order'); } catch(e) {}
-
-    S.cart = [];
-    updateCartFloat();
-    btn.classList.remove('btn-loading'); btn.disabled = false;
-    goScreen('s-success');
+  // No auto status changes — kitchen controls status manually
+  S.cart = [];
+  updateCartFloat();
+  btn.classList.remove('btn-loading'); btn.disabled = false;
+  goScreen('s-success');
   } catch(err) {
     console.error('[placeOrder] Fatal error:', err.message, err.stack);
     logError('[placeOrder] Fatal: ' + err.message, { stack: err.stack, cart: S.cart?.length });
@@ -5201,16 +5189,20 @@ renderMyOrders = async function(){
   }).join('');
 };
 
-// Consolidated placeOrder wrapper — rate limit + offline check + orders-paused
+// Consolidated placeOrder wrapper — rate limit + offline check + orders-paused + error handling + session save
 const _origPlaceOrder = placeOrder;
 placeOrder = async function(){
   if (!navigator.onLine) { toast('You are offline! Cannot place order.', 'error', '📡'); return; }
   if (S._ordersPaused) { toast('Ordering is temporarily paused. Please try again later.', 'warn', '⏸️'); return; }
   if (!rateCheck('placeOrder', 5)) return;
-  // Inner placeOrder handles all its own errors — no try/catch here to avoid double-catching
-  await _origPlaceOrder();
-  try { saveSession(); } catch(e) {}
-  try { checkLowBalance(); } catch(e) {}
+  try {
+    await _origPlaceOrder();
+    saveSession();
+    checkLowBalance();
+  } catch(e) {
+    logError('[placeOrder] Unhandled error: ' + (e.message || 'Unknown'), { cart: S.cart });
+    toast('Order failed: ' + (e.message || 'Unknown error. Please try again.'), 'error', '❌');
+  }
 };
 
 // Patch: renderVendor — add reject, print, sold-out, operating hours buttons
