@@ -4361,29 +4361,39 @@ function startRealtime() {
           const myOrd = S.orders.find(e => e.id === o.id);
           if (myOrd) {
             if (o.status === 'ready') {
-              addNotif(`🔔 Order #${myOrd.token_number} is READY for pickup!`, '🔔');
-              toast(`Order #${myOrd.token_number} is READY! Go collect your food 🍽️`, 'success', '🔔');
+              myOrd.status = 'ready';
+              addNotif(`Order #${myOrd.token_number} is READY for pickup!`, '🔔');
+              toast(`Order #${myOrd.token_number} is READY! Go collect your food`, 'success', '🔔');
               playNewOrderAlert();
               const badge = document.getElementById('ord-badge');
               if (badge) { badge.textContent = S.orders.filter(o2=>o2.status==='ready').length; badge.classList.remove('hidden'); }
+              renderMyOrders();
             }
             if (o.status === 'preparing') {
-              addNotif(`⏳ Order #${myOrd.token_number} is being prepared`, '⏳');
+              myOrd.status = 'preparing';
+              addNotif(`Order #${myOrd.token_number} is being prepared`, '⏳');
+              renderMyOrders();
             }
             if (o.status === 'done') {
-              // Kitchen confirmed OTP — auto update employee side
+              // Kitchen confirmed OTP — update local state immediately
+              myOrd.status = 'done';
               myOrd.pickup_confirmed_at = o.pickup_confirmed_at || new Date().toISOString();
-              addNotif(`✅ Order #${myOrd.token_number} collected!`, '✅');
+              addNotif(`Order #${myOrd.token_number} collected!`, '✅');
               toast(`Order #${myOrd.token_number} collected ✅`, 'success', '✅');
               const badge = document.getElementById('ord-badge');
-              if (badge) { 
+              if (badge) {
                 const readyCount = S.orders.filter(o2=>o2.status==='ready').length;
-                if (readyCount > 0) { badge.textContent = readyCount; } 
+                if (readyCount > 0) { badge.textContent = readyCount; }
                 else { badge.classList.add('hidden'); }
               }
-              // Refresh orders tab if open
-              const ordTab = document.getElementById('s-orders');
-              if (ordTab?.classList.contains('active')) renderMyOrders();
+              // Always re-render orders tab — not just when it's already open
+              renderMyOrders();
+            }
+            if (o.status === 'ready') {
+              myOrd.status = 'ready';
+            }
+            if (o.status === 'preparing') {
+              myOrd.status = 'preparing';
             }
           }
         }
