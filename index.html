@@ -2228,8 +2228,7 @@ async function placeOrder() {
     setEl('inv-slot', S.selSlot);
     // Fee breakdown
     const invFees = calcFees(iTotal);
-    const actualSubtotal = cartSnapshot ? cartSnapshot.reduce((s,i) => s + (i.price||0)*(i.qty||1), 0) : splitOrders.reduce((s,o) => s + (o.item_total || 0), 0);
-    setEl('inv-subtotal', '₹' + Math.round(actualSubtotal));
+    setEl('inv-subtotal', '₹' + Math.round(iTotal));
     setEl('inv-gst', '₹' + invFees.foodGst.toFixed(2));
     setEl('inv-platform', '₹' + invFees.platformFee.toFixed(2));
     setEl('inv-platform-gst', '₹' + invFees.platformGst.toFixed(2));
