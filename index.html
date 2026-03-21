@@ -2183,9 +2183,11 @@ async function placeOrder() {
       return;
     }
 
-    // If SOME counters failed, warn but show success for the ones that went through
+    // If SOME counters failed, show clear error with reason
     if (failedCounters.length > 0) {
-      toast(`⚠️ ${failedCounters.length} counter(s) failed: ${failedCounters.map(f=>f.canteen).join(', ')}. Partial order placed.`, 'warn', '⚠️');
+      const fcMsg = failedCounters.map(f => f.canteen + ': ' + f.error).join(' | ');
+      toast('Order partially failed — ' + failedCounters.map(f=>f.canteen).join(', ') + '. Check balance/availability.', 'warn', '!', 6000);
+      logError('[placeOrder] Partial failure: ' + fcMsg, { failedCounters });
     }
 
     // ── Update local state with server-verified balance ──────────────
@@ -2204,8 +2206,12 @@ async function placeOrder() {
     // ── Update success screen ─────────────────────────────────────────
     const firstOrder = splitOrders[0];
     const numCounters = splitOrders.length;
-    // Cart is cleared after order — use cartSnapshot for receipt
-    const iTotal = cartSnapshot ? cartSnapshot.reduce((s,i) => s + (i.price||i.unit_price||0)*(i.qty||i.quantity||1), 0) : splitOrders.reduce((s, o) => s + (o.item_total || 0), 0);
+    // Use only successfully placed items for receipt subtotal
+    const successItemIds = new Set(splitOrders.flatMap(o => o.items.map(i => i.id)));
+    const successItems = cartSnapshot ? cartSnapshot.filter(i => successItemIds.has(i.id)) : [];
+    const iTotal = successItems.length > 0
+      ? successItems.reduce((s,i) => s + (i.price||0)*(i.qty||1), 0)
+      : splitOrders.reduce((s,o) => s + (o.item_total||0), 0);
     const gstAmount = splitOrders.reduce((s, o) => s + (o.gst_amount || 0), 0);
 
     setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & '));
