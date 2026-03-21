@@ -2607,18 +2607,8 @@ function filterOrders(filter, el) {
   renderMyOrders();
 }
 
-async function markPickup(id) {
-  const o = S.orders.find(o => o.id === id);
-  const ao = S.allOrders.find(o => o.id === id);
-  if (o) o.status = 'done';
-  if (ao) ao.status = 'done';
-  try { if(sb) { const{error}=await sb.from('orders').update({status:'done'}).eq('id',id); if(error) toast('Update failed','warn','⚠️'); } } catch(e) { toast('Update failed','warn','⚠️'); }
-  renderMyOrders();
-  const badge = document.getElementById('ord-badge');
-  const readyCnt = S.orders.filter(o2 => o2.status === 'ready').length;
-  if (badge) { if(readyCnt>0){badge.textContent=readyCnt;badge.classList.remove('hidden')}else{badge.classList.add('hidden')} }
-  toast('Order marked as picked up! Enjoy your meal 🍽️', 'success', '✅');
-}
+// markPickup removed — employees cannot self-mark orders as collected.
+// Status is set to 'done' only when kitchen confirms pickup OTP.
 
 function rateOrderById(id) {
   const lastOrder = S.orders.find(o => o.id === id);
@@ -5171,17 +5161,20 @@ renderMyOrders = async function(){
   }).join('');
 };
 
-// Patch: placeOrder — add rate limit + spending limit + low balance check + session save
+// Consolidated placeOrder wrapper — rate limit + offline check + orders-paused + error handling + session save
 const _origPlaceOrder = placeOrder;
 placeOrder = async function(){
-  if(!rateCheck('placeOrder',5)) return;
-  const iTotal = S.cart.reduce((s,i)=>s+i.price*i.qty,0);
-  const subTotal = S.cart.reduce((s,i)=>s+Math.min(i.subsidy_amount||0,i.price)*i.qty,0);
-  const youPay = Math.max(0,iTotal-subTotal);
-  // spending limit removed
-  await _origPlaceOrder();
-  saveSession();
-  checkLowBalance();
+  if (!navigator.onLine) { toast('You are offline! Cannot place order.', 'error', '📡'); return; }
+  if (S._ordersPaused) { toast('Ordering is temporarily paused. Please try again later.', 'warn', '⏸️'); return; }
+  if (!rateCheck('placeOrder', 5)) return;
+  try {
+    await _origPlaceOrder();
+    saveSession();
+    checkLowBalance();
+  } catch(e) {
+    logError('[placeOrder] Unhandled error: ' + (e.message || 'Unknown'), { cart: S.cart });
+    toast('Order failed: ' + (e.message || 'Unknown error. Please try again.'), 'error', '❌');
+  }
 };
 
 // Patch: renderVendor — add reject, print, sold-out, operating hours buttons
@@ -6054,17 +6047,7 @@ async function loadAppSettings() {
   } catch(e) {}
 }
 
-// Wrap placeOrder to check if orders are paused
-const _origPlaceOrderV9 = placeOrder;
-placeOrder = async function() {
-  if (!navigator.onLine) { toast('You are offline! Cannot place order.', 'error', '📡'); return; }
-  if (S._ordersPaused) { toast('Ordering is temporarily paused. Please try again later.', 'warn', '⏸️'); return; }
-  try {
-    await _origPlaceOrderV9();
-  } catch(e) {
-    toast('Order failed: ' + (e.message || 'Unknown error. Please try again.'), 'error', '❌');
-  }
-};
+// placeOrder wrapper consolidated above — offline, paused, rate-limit, error handling all in one place.
 
 // Better error handling for DB operations
 const _origUpdateOrderStatus = updateOrderStatus;
