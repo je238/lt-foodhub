@@ -4159,12 +4159,11 @@ async function confirmCancelOrder(orderId){
   o.status = 'cancelled';
   const ao = S.allOrders.find(o2=>o2.id===orderId);
   if(ao) ao.status = 'cancelled';
-  // Cancel in DB first (employee_cancel_order RPC handles both cancel + refund atomically)
-  try{ if(sb) await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); }catch(e){ toast('Failed to cancel order','error','❌'); return; }
-  // Refund wallet via server-side function (if admin is logged in) or flag for admin refund
+  // Use employee_cancel_order RPC — handles cancel + refund atomically in one call
   if(o.amount_paid > 0){
     if(S._staffAuth){
-      // Admin/vendor initiated cancel — can refund directly
+      // Admin/vendor cancel — update status + refund separately
+      try{ if(sb) await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); }catch(e){ toast('Failed to cancel order','error','❌'); return; }
       try{
         const {data:result} = await sb.rpc('admin_wallet_credit',{
           p_admin_id: S._staffAuth.id, p_admin_password: S._staffAuth.pw,
@@ -4175,7 +4174,7 @@ async function confirmCancelOrder(orderId){
         if(result?.success){ S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + o.amount_paid); }
       }catch(e){}
     } else {
-      // Employee self-cancel — refund via server-side RPC
+      // Employee cancel — RPC does cancel + refund in one atomic operation
       try {
         const {data:result, error:rpcErr} = await sb.rpc('employee_cancel_order', {
           p_order_id: orderId,
@@ -4184,14 +4183,15 @@ async function confirmCancelOrder(orderId){
         if(result?.success){
           S.user.wallet_balance = parseFloat(result.new_balance) || 0;
         } else {
-          // RPC failed or returned error — fetch fresh balance from DB
+          // RPC failed — fall back to manual cancel + fetch balance
           if(typeof logError !== 'undefined') logError('Cancel refund RPC failed', {error: result?.error || rpcErr?.message});
+          await sb.from('orders').update({status:'cancelled'}).eq('id',orderId);
           const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
           if(emp) S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
         }
       } catch(e) {
         if(typeof logError !== 'undefined') logError('Employee cancel refund failed', {orderId, error: e.message});
-        // Fallback: fetch fresh balance from DB
+        await sb.from('orders').update({status:'cancelled'}).eq('id',orderId).catch(()=>{});
         const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
         if(emp) S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
       }
