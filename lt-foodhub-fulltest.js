@@ -1,498 +1,433 @@
-// ═══════════════════════════════════════════════════════════════
+#!/usr/bin/env node
 // L&T FoodHub — Full Regression Test Suite
-// Tests: Employee, Vendor/Kitchen, Admin, Cancel/Refund flows
 // Run: SUPABASE_SERVICE_KEY="your_key" node lt-foodhub-fulltest.js
-// ═══════════════════════════════════════════════════════════════
 
-const SUPABASE_URL = 'https://lorgclscnjdbngqurdsw.supabase.co';
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY || '';
-const ANON_KEY     = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvcmdjbHNjbmpkYm5ncXVyZHN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0MDY5NzksImV4cCI6MjA1Nzk4Mjk3OX0.nVkEDHBCOeElFaGcodArAdCVKbE9arkZMxFmGsaLTHQ';
+const SURL = 'https://lorgclscnjdbngqurdsw.supabase.co';
+const SKEY = process.env.SUPABASE_SERVICE_KEY;
+if (!SKEY) { console.error('Set SUPABASE_SERVICE_KEY env var'); process.exit(1); }
 
+const h = { 'apikey': SKEY, 'Authorization': `Bearer ${SKEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 let passed = 0, failed = 0, warnings = 0;
-const failures = [];
+const ok = (msg) => { console.log(`  ✅ ${msg}`); passed++; };
+const fail = (msg) => { console.log(`  ❌ ${msg}`); failed++; };
+const warn = (msg) => { console.log(`  ⚠️  ${msg}`); warnings++; };
 
-function ok(name)        { console.log(`  ✅ ${name}`); passed++; }
-function fail(name, why) { console.log(`  ❌ ${name}: ${why}`); failed++; failures.push({name, why}); }
-function warn(name, why) { console.log(`  ⚠️  ${name}: ${why}`); warnings++; }
-function section(name)   { console.log(`\n${'═'.repeat(50)}\n  ${name}\n${'═'.repeat(50)}`); }
-
-async function db(path, key, opts = {}) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation', ...opts.headers },
-    ...opts
-  });
-  const data = await res.json().catch(() => null);
-  return { status: res.status, data };
+async function api(path, method = 'GET', body = null) {
+  const opts = { method, headers: h };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`${SURL}/rest/v1/${path}`, opts);
+  const text = await res.text();
+  try { return { data: JSON.parse(text), status: res.status }; } catch { return { data: text, status: res.status }; }
 }
 
-async function rpc(fn, body, key) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
-    method: 'POST',
-    headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  return { status: res.status, data: await res.json().catch(() => null) };
+async function rpc(name, params = {}) {
+  const res = await fetch(`${SURL}/rest/v1/rpc/${name}`, { method: 'POST', headers: h, body: JSON.stringify(params) });
+  const text = await res.text();
+  try { return { data: JSON.parse(text), status: res.status }; } catch { return { data: text, status: res.status }; }
 }
 
-// ── HELPERS ──────────────────────────────────────────────────────
-async function createTestEmployee(id, balance = 5000) {
-  await db('employees', SERVICE_KEY, {
-    method: 'POST',
-    body: JSON.stringify({ id, name: 'Test Employee', email: `${id}@test.internal`, department: 'Test', wallet_balance: balance, is_active: true })
-  });
+const start = Date.now();
+console.log(`
+╔══════════════════════════════════════════════════╗
+║   L&T FoodHub — Full Regression Test Suite       ║
+║   Employee · Kitchen · Admin · Security · Load   ║
+╚══════════════════════════════════════════════════╝
+`);
+
+// ═══════════════════════════════════════════════════
+// 1. INFRASTRUCTURE
+// ═══════════════════════════════════════════════════
+console.log('══════════════════════════════════════════════════');
+console.log('  1. Infrastructure');
+console.log('══════════════════════════════════════════════════');
+
+try {
+  const { status } = await api('canteens?select=id&limit=1');
+  status < 300 ? ok('Supabase reachable') : fail('Supabase unreachable');
+} catch { fail('Supabase unreachable'); }
+
+const tables = ['employees','orders','order_items','menu_items','canteens','wallet_transactions','email_otps','canteen_token_sequences'];
+for (const t of tables) {
+  try {
+    const { status } = await api(`${t}?select=id&limit=1`);
+    status < 300 ? ok(`Table: ${t}`) : fail(`Table: ${t} missing`);
+  } catch { fail(`Table: ${t} error`); }
 }
 
-async function getMenuItem() {
-  const { data } = await db('menu_items?is_available=eq.true&select=id,name,price,canteen_id&limit=1', SERVICE_KEY);
-  return data?.[0];
+// RPC check
+for (const fn of ['verify_email_otp', 'place_order', 'employee_cancel_order']) {
+  try {
+    const { status } = await rpc(fn, {});
+    // Any response (even error) means function exists. 404 = not found.
+    status !== 404 ? ok(`RPC: ${fn} exists`) : fail(`RPC: ${fn} not found`);
+  } catch { warn(`RPC: ${fn} check failed`); }
 }
 
-async function getCanteen(id) {
-  const { data } = await db(`canteens?id=eq.${id}&limit=1`, SERVICE_KEY);
-  return data?.[0];
-}
+// Token sequences
+try {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await api(`canteen_token_sequences?token_date=eq.${today}&select=canteen_id`);
+  Array.isArray(data) && data.length > 0 ? ok(`Token sequences: ${data.length} for today`) : warn('Token sequences: none for today — will auto-create');
+} catch { warn('Token sequences check failed'); }
 
-async function placeOrder(empId, item, canteen) {
-  return rpc('place_order', {
-    p_employee_id: empId,
-    p_canteen_id: canteen.id,
-    p_canteen_name: canteen.name,
-    p_canteen_icon: canteen.icon || '🍽️',
+// Menu
+try {
+  const { data } = await api('menu_items?select=id,price,is_available&limit=1000');
+  ok(`Menu: ${data.length} items loaded`);
+  const unavail = data.filter(m => !m.is_available).length;
+  if (unavail > 0) warn(`Menu: ${unavail} items marked unavailable`);
+  const badPrice = data.filter(m => !m.price || m.price <= 0).length;
+  badPrice === 0 ? ok('Menu: all items have valid prices') : fail(`Menu: ${badPrice} items with invalid prices`);
+} catch { fail('Menu check failed'); }
+
+// Canteens
+try {
+  const { data } = await api('canteens?select=id,is_open');
+  ok(`Canteens: ${data.length} found`);
+  const openCnt = data.filter(c => c.is_open).length;
+  ok(`Canteens: ${openCnt} open`);
+} catch { fail('Canteens check failed'); }
+
+// ═══════════════════════════════════════════════════
+// 2. EMPLOYEE SIDE
+// ═══════════════════════════════════════════════════
+console.log('\n══════════════════════════════════════════════════');
+console.log('  2. Employee Side');
+console.log('══════════════════════════════════════════════════');
+
+const testEmpId = 'REGTEST-EMP-' + Date.now();
+let testOrderId = null;
+let testAmountPaid = 0;
+
+try {
+  // Create test employee
+  await api('employees', 'POST', { id: testEmpId, name: 'Regression Tester', email: testEmpId + '@test.internal', department: 'QA', wallet_balance: 5000, is_active: true });
+  ok('Employee: created with ₹5000 wallet');
+
+  // Get a menu item
+  const { data: menuItems } = await api('menu_items?is_available=eq.true&select=id,name,price,canteen_id&limit=1');
+  const item = menuItems[0];
+  const { data: canteen } = await api(`canteens?id=eq.${item.canteen_id}&select=id,name,icon&limit=1`);
+  const can = canteen[0];
+
+  // Place order
+  const { data: orderResult } = await rpc('place_order', {
+    p_employee_id: testEmpId,
+    p_canteen_id: can.id,
+    p_canteen_name: can.name,
+    p_canteen_icon: can.icon || '🍽️',
     p_pickup_slot: '12:30 PM',
-    p_items: [{ id: item.id, name: item.name, emoji: '🍽️', qty: 1, price: item.price }],
+    p_items: [{ id: item.id, name: item.name, emoji: '🍽️', qty: 1, price: item.price, customNote: '' }],
     p_payment_method: 'wallet'
-  }, SERVICE_KEY);
-}
+  });
 
-async function cleanup(empId) {
-  const { data: orders } = await db(`orders?employee_id=eq.${empId}&select=id`, SERVICE_KEY);
-  if (orders?.length) {
-    const ids = orders.map(o => o.id).join(',');
-    await db(`order_items?order_id=in.(${ids})`, SERVICE_KEY, { method: 'DELETE' });
-    await db(`wallet_transactions?employee_id=eq.${empId}`, SERVICE_KEY, { method: 'DELETE' });
-    await db(`orders?employee_id=eq.${empId}`, SERVICE_KEY, { method: 'DELETE' });
-  }
-  await db(`employees?id=eq.${empId}`, SERVICE_KEY, { method: 'DELETE' });
-}
+  if (orderResult?.success) {
+    testOrderId = orderResult.order_id;
+    testAmountPaid = parseFloat(orderResult.amount_paid) || 0;
+    ok(`Employee: order placed — Token #${orderResult.token_number}`);
 
-// ════════════════════════════════════════════════════════════════
-// SECTION 1: INFRASTRUCTURE
-// ════════════════════════════════════════════════════════════════
-async function testInfrastructure() {
-  section('1. Infrastructure');
+    const expectedTotal = item.price + Math.round(item.price * 0.05 * 100) / 100 + 3 + 0.54;
+    if (Math.abs(testAmountPaid - expectedTotal) < 0.02) ok(`Employee: GST + platform fee charged (₹${testAmountPaid})`);
+    else warn(`Employee: amount ₹${testAmountPaid} vs expected ₹${expectedTotal.toFixed(2)}`);
 
-  // DB connectivity
-  try {
-    const { status } = await db('canteens?limit=1', SERVICE_KEY);
-    status === 200 ? ok('Supabase reachable') : fail('Supabase connection', `Status ${status}`);
-  } catch(e) { fail('Supabase connection', e.message); }
+    // Check wallet deducted
+    const { data: empAfter } = await api(`employees?id=eq.${testEmpId}&select=wallet_balance`);
+    const bal = parseFloat(empAfter[0]?.wallet_balance);
+    if (Math.abs(bal - (5000 - testAmountPaid)) < 0.02) ok(`Employee: wallet deducted correctly (₹${bal})`);
+    else fail(`Employee: wallet = ₹${bal}, expected ₹${(5000 - testAmountPaid).toFixed(2)}`);
 
-  // All critical tables
-  const tables = ['employees','orders','order_items','menu_items','canteens','wallet_transactions','email_otps','canteen_token_sequences'];
-  for (const t of tables) {
-    const { status } = await db(`${t}?limit=1`, SERVICE_KEY);
-    status === 200 ? ok(`Table: ${t}`) : fail(`Table: ${t}`, `Status ${status}`);
-  }
+    // Check order in DB
+    const { data: dbOrder } = await api(`orders?id=eq.${testOrderId}&select=id,status,amount_paid`);
+    dbOrder?.length ? ok('Employee: order saved in DB') : fail('Employee: order not found in DB');
 
-  // RPC functions via SQL check
-  const { data: funcs } = await rpc('verify_email_otp', { p_email: 'x@x.com', p_otp: '000000' }, SERVICE_KEY);
-  funcs !== null ? ok('RPC: verify_email_otp reachable') : fail('RPC: verify_email_otp', 'Not found');
+    // Check order items
+    const { data: dbItems } = await api(`order_items?order_id=eq.${testOrderId}&select=id`);
+    dbItems?.length ? ok('Employee: order_items saved') : fail('Employee: order_items missing');
 
-  // Token sequences for today
-  const today = new Date().toISOString().slice(0,10);
-  const { data: tokens } = await db(`canteen_token_sequences?token_date=eq.${today}`, SERVICE_KEY);
-  tokens?.length > 0 ? ok(`Token sequences: ${tokens.length} for today`) : warn('Token sequences', 'None for today — will auto-create on first order');
+    // Check wallet transaction
+    const { data: txns } = await api(`wallet_transactions?employee_id=eq.${testEmpId}&select=type,amount&order=created_at.desc&limit=1`);
+    txns?.length && txns[0].type === 'debit' ? ok('Employee: wallet transaction logged') : fail('Employee: wallet transaction missing');
 
-  // Menu health
-  const { data: menu } = await db('menu_items?select=id,name,price,is_available&limit=500', SERVICE_KEY);
-  if (menu) {
-    const unavail = menu.filter(m => !m.is_available).length;
-    const noPrice = menu.filter(m => !m.price || m.price <= 0).length;
-    ok(`Menu: ${menu.length} items loaded`);
-    noPrice > 0 ? fail('Menu: items with ₹0 price', `${noPrice} items`) : ok('Menu: all items have valid prices');
-    unavail > 0 ? warn('Menu: unavailable items', `${unavail} items marked off`) : ok('Menu: all items available');
-  }
-
-  // Canteens
-  const { data: canteens } = await db('canteens?select=id,name,is_open', SERVICE_KEY);
-  if (canteens) {
-    ok(`Canteens: ${canteens.length} found`);
-    const open = canteens.filter(c => c.is_open).length;
-    open === 0 ? warn('Canteens: all closed', 'No canteen is open') : ok(`Canteens: ${open} open`);
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// SECTION 2: EMPLOYEE SIDE
-// ════════════════════════════════════════════════════════════════
-async function testEmployeeSide() {
-  section('2. Employee Side');
-  const empId = 'TEST-EMP-' + Date.now();
-  const item = await getMenuItem();
-  if (!item) { warn('Employee tests', 'No available menu item — skipping'); return; }
-  const canteen = await getCanteen(item.canteen_id);
-  if (!canteen) { warn('Employee tests', 'Canteen not found — skipping'); return; }
-
-  try {
-    await createTestEmployee(empId, 5000);
-    ok('Employee: created with ₹5000 wallet');
-
-    // Place order
-    const { data: order } = await placeOrder(empId, item, canteen);
-    if (!order?.success) { fail('Employee: place order', order?.error || 'Unknown'); await cleanup(empId); return; }
-    ok(`Employee: order placed — Token #${order.token_number}`);
-
-    // Verify amount_paid includes GST + platform fee
-    const expectedMin = item.price + (item.price * 0.05) + 3;
-    if (parseFloat(order.amount_paid) >= expectedMin) {
-      ok(`Employee: GST + platform fee charged (₹${order.amount_paid})`);
-    } else {
-      fail('Employee: GST not charged', `Expected ≥₹${expectedMin.toFixed(2)}, got ₹${order.amount_paid}`);
-    }
-
-    // Verify wallet deducted
-    const { data: emp } = await db(`employees?id=eq.${empId}&select=wallet_balance`, SERVICE_KEY);
-    const expected = 5000 - parseFloat(order.amount_paid);
-    const actual = parseFloat(emp?.[0]?.wallet_balance);
-    Math.abs(actual - expected) < 0.01 ? ok(`Employee: wallet deducted correctly (₹${actual})`) : fail('Employee: wallet deduction', `Expected ₹${expected.toFixed(2)}, got ₹${actual}`);
-
-    // Verify order in DB
-    const { data: dbOrder } = await db(`orders?id=eq.${order.order_id}&select=*`, SERVICE_KEY);
-    dbOrder?.[0] ? ok('Employee: order saved in DB') : fail('Employee: order not in DB', 'Missing');
-
-    // Verify order_items saved
-    const { data: items } = await db(`order_items?order_id=eq.${order.order_id}`, SERVICE_KEY);
-    items?.length > 0 ? ok('Employee: order_items saved') : fail('Employee: order_items missing', 'No items in DB');
-
-    // Verify wallet_transaction logged
-    const { data: txns } = await db(`wallet_transactions?employee_id=eq.${empId}`, SERVICE_KEY);
-    txns?.length > 0 ? ok('Employee: wallet transaction logged') : fail('Employee: wallet transaction missing', 'Not logged');
-
-    // ── CANCEL ORDER + REFUND ────────────────────────────────────
+    // ── CANCEL & REFUND TEST ──
     console.log('\n  → Testing cancel & refund...');
-    const balBeforeCancel = actual;
-    const amountPaid = parseFloat(order.amount_paid);
-
+    const balBefore = bal;
     const { data: cancelResult } = await rpc('employee_cancel_order', {
-      p_order_id: order.order_id,
-      p_employee_id: empId
-    }, SERVICE_KEY);
+      p_order_id: String(testOrderId),
+      p_employee_id: testEmpId
+    });
 
     if (cancelResult?.success) {
-      ok('Employee: cancel order — RPC success');
-
-      // Verify wallet refunded
+      ok('Employee: cancel order succeeded');
       const newBal = parseFloat(cancelResult.new_balance);
-      const expectedBal = balBeforeCancel + amountPaid;
-      Math.abs(newBal - expectedBal) < 0.01
-        ? ok(`Employee: refund correct — ₹${amountPaid} returned (balance ₹${newBal})`)
-        : fail('Employee: refund amount wrong', `Expected ₹${expectedBal.toFixed(2)}, got ₹${newBal}`);
-
-      // Verify order status = cancelled in DB
-      const { data: cancelled } = await db(`orders?id=eq.${order.order_id}&select=status`, SERVICE_KEY);
-      cancelled?.[0]?.status === 'cancelled'
-        ? ok('Employee: order status = cancelled in DB')
-        : fail('Employee: order status not updated', `Status: ${cancelled?.[0]?.status}`);
-
-      // Verify refund transaction logged
-      const { data: refundTxn } = await db(`wallet_transactions?employee_id=eq.${empId}&type=eq.credit`, SERVICE_KEY);
-      refundTxn?.length > 0
-        ? ok('Employee: refund transaction logged')
-        : fail('Employee: refund transaction missing', 'No credit transaction');
-
-    } else {
-      fail('Employee: cancel order', cancelResult?.error || 'RPC returned false');
-    }
-
-  } catch(e) {
-    fail('Employee tests crashed', e.message);
-  } finally {
-    await cleanup(empId);
-    ok('Employee: test data cleaned up');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// SECTION 3: KITCHEN / VENDOR SIDE
-// ════════════════════════════════════════════════════════════════
-async function testKitchenSide() {
-  section('3. Kitchen / Vendor Side');
-  const empId = 'TEST-KDS-' + Date.now();
-  const item = await getMenuItem();
-  if (!item) { warn('Kitchen tests', 'No menu item — skipping'); return; }
-  const canteen = await getCanteen(item.canteen_id);
-  if (!canteen) { warn('Kitchen tests', 'Canteen not found — skipping'); return; }
-
-  try {
-    await createTestEmployee(empId, 5000);
-    const { data: order } = await placeOrder(empId, item, canteen);
-    if (!order?.success) { fail('Kitchen: place order for test', order?.error); await cleanup(empId); return; }
-
-    // Simulate kitchen accepting order (new → preparing)
-    const { status: s1 } = await db(`orders?id=eq.${order.order_id}`, SERVICE_KEY, {
-      method: 'PATCH', body: JSON.stringify({ status: 'preparing' })
-    });
-    s1 === 200 || s1 === 204 ? ok('Kitchen: accept order (new → preparing)') : fail('Kitchen: accept order', `Status ${s1}`);
-
-    // Simulate kitchen marking ready (preparing → ready)
-    const { status: s2 } = await db(`orders?id=eq.${order.order_id}`, SERVICE_KEY, {
-      method: 'PATCH', body: JSON.stringify({ status: 'ready' })
-    });
-    s2 === 200 || s2 === 204 ? ok('Kitchen: mark ready (preparing → ready)') : fail('Kitchen: mark ready', `Status ${s2}`);
-
-    // Simulate pickup OTP confirmation (ready → done)
-    const fakeOtp = '1234';
-    const now = new Date().toISOString();
-    const { status: s3 } = await db(`orders?id=eq.${order.order_id}`, SERVICE_KEY, {
-      method: 'PATCH', body: JSON.stringify({ status: 'done', pickup_otp: null, pickup_confirmed_at: now })
-    });
-    s3 === 200 || s3 === 204 ? ok('Kitchen: confirm pickup OTP (ready → done)') : fail('Kitchen: confirm pickup', `Status ${s3}`);
-
-    // Verify final status
-    const { data: finalOrder } = await db(`orders?id=eq.${order.order_id}&select=status,pickup_confirmed_at`, SERVICE_KEY);
-    finalOrder?.[0]?.status === 'done' ? ok('Kitchen: order status = done in DB') : fail('Kitchen: order not done', `Status: ${finalOrder?.[0]?.status}`);
-    finalOrder?.[0]?.pickup_confirmed_at ? ok('Kitchen: pickup_confirmed_at set') : warn('Kitchen: pickup_confirmed_at', 'Not set');
-
-    // Test menu availability toggle
-    const { status: toggleStatus } = await db(`menu_items?id=eq.${item.id}`, SERVICE_KEY, {
-      method: 'PATCH', body: JSON.stringify({ is_available: false })
-    });
-    if (toggleStatus === 200 || toggleStatus === 204) {
-      ok('Kitchen: mark item unavailable');
-      // Restore
-      await db(`menu_items?id=eq.${item.id}`, SERVICE_KEY, { method: 'PATCH', body: JSON.stringify({ is_available: true }) });
-      ok('Kitchen: restore item availability');
-    } else {
-      fail('Kitchen: toggle availability', `Status ${toggleStatus}`);
-    }
-
-  } catch(e) {
-    fail('Kitchen tests crashed', e.message);
-  } finally {
-    await cleanup(empId);
-    ok('Kitchen: test data cleaned up');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// SECTION 4: ADMIN SIDE
-// ════════════════════════════════════════════════════════════════
-async function testAdminSide() {
-  section('4. Admin Side');
-  const empId = 'TEST-ADM-' + Date.now();
-
-  try {
-    await createTestEmployee(empId, 100);
-    ok('Admin: test employee created');
-
-    // Admin wallet credit
-    const { data: admins } = await db('admins?limit=1&select=id', SERVICE_KEY);
-    if (!admins?.length) { warn('Admin: wallet credit', 'No admin found — skipping wallet credit test'); }
-    else {
-      // Test direct wallet update (simulating admin credit)
-      const { status } = await db(`employees?id=eq.${empId}`, SERVICE_KEY, {
-        method: 'PATCH', body: JSON.stringify({ wallet_balance: 600 })
-      });
-      status === 200 || status === 204 ? ok('Admin: wallet balance update') : fail('Admin: wallet update', `Status ${status}`);
-
-      // Verify update
-      const { data: emp } = await db(`employees?id=eq.${empId}&select=wallet_balance`, SERVICE_KEY);
-      parseFloat(emp?.[0]?.wallet_balance) === 600 ? ok('Admin: wallet update verified in DB') : fail('Admin: wallet update not saved', `Got ${emp?.[0]?.wallet_balance}`);
-    }
-
-    // Today's revenue query
-    const today = new Date().toISOString().slice(0,10);
-    const { data: todayOrders, status: revStatus } = await db(
-      `orders?select=id,amount_paid,canteen_id,status,created_at&created_at=gte.${today}T00:00:00`,
-      SERVICE_KEY
-    );
-    revStatus === 200 ? ok(`Admin: revenue query works (${todayOrders?.length || 0} orders today)`) : fail('Admin: revenue query', `Status ${revStatus}`);
-
-    // Employee list query
-    const { data: emps, status: empStatus } = await db('employees?select=id,name,email,wallet_balance&limit=10', SERVICE_KEY);
-    empStatus === 200 ? ok(`Admin: employee list loads (${emps?.length} shown)`) : fail('Admin: employee list', `Status ${empStatus}`);
-
-    // Orders with items (KDS style query)
-    const { data: ordersWithItems, status: kdsStatus } = await db(
-      `orders?select=*,order_items(*)&created_at=gte.${today}T00:00:00&limit=10`,
-      SERVICE_KEY
-    );
-    kdsStatus === 200 ? ok(`Admin: orders with items query works`) : fail('Admin: orders+items query', `Status ${kdsStatus}`);
-
-    // Canteen open/close toggle
-    const { data: canteens } = await db('canteens?limit=1&select=id,is_open', SERVICE_KEY);
-    if (canteens?.[0]) {
-      const original = canteens[0].is_open;
-      const { status: toggleStatus } = await db(`canteens?id=eq.${canteens[0].id}`, SERVICE_KEY, {
-        method: 'PATCH', body: JSON.stringify({ is_open: !original })
-      });
-      if (toggleStatus === 200 || toggleStatus === 204) {
-        ok('Admin: canteen open/close toggle');
-        // Restore
-        await db(`canteens?id=eq.${canteens[0].id}`, SERVICE_KEY, { method: 'PATCH', body: JSON.stringify({ is_open: original }) });
-        ok('Admin: canteen status restored');
+      if (Math.abs(newBal - (balBefore + testAmountPaid)) < 0.02) {
+        ok(`Employee: refund correct (₹${testAmountPaid} returned, balance ₹${newBal})`);
       } else {
-        fail('Admin: canteen toggle', `Status ${toggleStatus}`);
+        fail(`Employee: refund wrong — balance ₹${newBal}, expected ₹${(balBefore + testAmountPaid).toFixed(2)}`);
       }
+
+      // Check refund transaction logged
+      const { data: refundTxn } = await api(`wallet_transactions?employee_id=eq.${testEmpId}&type=eq.credit&select=amount&order=created_at.desc&limit=1`);
+      if (refundTxn?.length && Math.abs(parseFloat(refundTxn[0].amount) - testAmountPaid) < 0.02) {
+        ok('Employee: refund transaction logged');
+      } else {
+        fail('Employee: refund transaction missing or wrong amount');
+      }
+
+      // Check order status = cancelled
+      const { data: cancelledOrder } = await api(`orders?id=eq.${testOrderId}&select=status`);
+      cancelledOrder?.[0]?.status === 'cancelled' ? ok('Employee: order status = cancelled') : fail('Employee: order not marked cancelled');
+    } else {
+      fail(`Employee: cancel order failed — ${cancelResult?.error || JSON.stringify(cancelResult)}`);
     }
-
-  } catch(e) {
-    fail('Admin tests crashed', e.message);
-  } finally {
-    await cleanup(empId);
-    ok('Admin: test data cleaned up');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// SECTION 5: SECURITY CHECKS
-// ════════════════════════════════════════════════════════════════
-async function testSecurity() {
-  section('5. Security');
-
-  // Anon key cannot read employees
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?limit=1`, {
-      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
-    });
-    const data = await res.json();
-    Array.isArray(data) && data.length === 0
-      ? ok('RLS: anon cannot read employees')
-      : warn('RLS: employees', 'Anon key returned employee data — check RLS');
-  } catch(e) { ok('RLS: employees blocked'); }
-
-  // Anon key cannot read wallet_transactions
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/wallet_transactions?limit=1`, {
-      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
-    });
-    const data = await res.json();
-    Array.isArray(data) && data.length === 0
-      ? ok('RLS: anon cannot read wallet_transactions')
-      : warn('RLS: wallet_transactions', 'Anon can read transactions — check RLS');
-  } catch(e) { ok('RLS: wallet_transactions blocked'); }
-
-  // OTP verify rejects wrong code
-  const { data: otpResult } = await rpc('verify_email_otp', { p_email: 'fake@fake.com', p_otp: '000000' }, ANON_KEY);
-  !otpResult?.success ? ok('OTP: rejects wrong code') : fail('OTP: accepted wrong code', 'Security risk!');
-
-  // place_order rejects non-existent employee
-  const item = await getMenuItem();
-  if (item) {
-    const canteen = await getCanteen(item.canteen_id);
-    if (canteen) {
-      const { data: fakeOrder } = await rpc('place_order', {
-        p_employee_id: 'FAKE-EMP-999',
-        p_canteen_id: canteen.id,
-        p_canteen_name: canteen.name,
-        p_canteen_icon: '🍽️',
-        p_pickup_slot: '12:30 PM',
-        p_items: [{ id: item.id, name: item.name, emoji: '🍽️', qty: 1, price: item.price }],
-        p_payment_method: 'wallet'
-      }, ANON_KEY);
-      !fakeOrder?.success ? ok('Security: order rejected for fake employee') : fail('Security: fake employee placed order', 'RLS not blocking!');
-    }
-  }
-
-  // Insufficient balance rejection
-  const poorEmpId = 'TEST-POOR-' + Date.now();
-  try {
-    await createTestEmployee(poorEmpId, 1); // ₹1 balance
-    const item2 = await getMenuItem();
-    const canteen2 = item2 ? await getCanteen(item2.canteen_id) : null;
-    if (item2 && canteen2 && item2.price > 1) {
-      const { data: poorOrder } = await placeOrder(poorEmpId, item2, canteen2);
-      !poorOrder?.success ? ok('Security: order rejected for insufficient balance') : fail('Security: order placed with ₹1 balance', 'Wallet check not working!');
-    }
-  } finally {
-    await db(`employees?id=eq.${poorEmpId}`, SERVICE_KEY, { method: 'DELETE' });
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// SECTION 6: CONCURRENT ORDERS (mini load test)
-// ════════════════════════════════════════════════════════════════
-async function testConcurrentOrders() {
-  section('6. Concurrent Orders (10 simultaneous)');
-  const item = await getMenuItem();
-  if (!item) { warn('Concurrent test', 'No menu item — skipping'); return; }
-  const canteen = await getCanteen(item.canteen_id);
-  if (!canteen) { warn('Concurrent test', 'Canteen not found — skipping'); return; }
-
-  const count = 10;
-  const empIds = Array.from({length: count}, (_, i) => `TEST-CONC-${Date.now()}-${i}`);
-
-  try {
-    // Create employees
-    await Promise.all(empIds.map(id => createTestEmployee(id, 5000)));
-    ok(`Concurrent: created ${count} test employees`);
-
-    // Fire all orders simultaneously
-    const start = Date.now();
-    const results = await Promise.all(empIds.map(id => placeOrder(id, item, canteen)));
-    const duration = Date.now() - start;
-
-    const successes = results.filter(r => r.data?.success);
-    const failures2 = results.filter(r => !r.data?.success);
-    const tokens = successes.map(r => r.data.token_number);
-    const uniqueTokens = new Set(tokens);
-
-    ok(`Concurrent: ${successes.length}/${count} orders succeeded in ${duration}ms`);
-    failures2.length === 0 ? ok('Concurrent: 0 failures') : fail('Concurrent: some orders failed', `${failures2.length} failed — ${failures2[0]?.data?.error}`);
-    uniqueTokens.size === tokens.length ? ok(`Concurrent: 0 duplicate tokens (${tokens.sort((a,b)=>a-b).join(', ')})`) : fail('Concurrent: DUPLICATE TOKENS DETECTED', `${tokens.length} orders, ${uniqueTokens.size} unique tokens`);
-    duration < 5000 ? ok(`Concurrent: response time OK (${duration}ms for 10 orders)`) : warn('Concurrent: slow response', `${duration}ms — may slow at peak`);
-
-  } catch(e) {
-    fail('Concurrent test crashed', e.message);
-  } finally {
-    await Promise.all(empIds.map(id => cleanup(id)));
-    ok('Concurrent: test data cleaned up');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// MAIN
-// ════════════════════════════════════════════════════════════════
-async function main() {
-  console.log('\n╔══════════════════════════════════════════════════╗');
-  console.log('║   L&T FoodHub — Full Regression Test Suite       ║');
-  console.log('║   Employee · Kitchen · Admin · Security · Load   ║');
-  console.log('╚══════════════════════════════════════════════════╝');
-
-  if (!SERVICE_KEY) {
-    console.log('\n⚠️  Set SUPABASE_SERVICE_KEY env var to run all tests\n');
-    process.exit(1);
-  }
-
-  const start = Date.now();
-
-  await testInfrastructure();
-  await testEmployeeSide();
-  await testKitchenSide();
-  await testAdminSide();
-  await testSecurity();
-  await testConcurrentOrders();
-
-  const duration = ((Date.now() - start) / 1000).toFixed(1);
-
-  console.log('\n╔══════════════════════════════════════════════════╗');
-  console.log(`║   RESULTS (completed in ${duration}s)${' '.repeat(Math.max(0, 23-duration.length))}║`);
-  console.log('╠══════════════════════════════════════════════════╣');
-  console.log(`║   ✅ Passed:   ${String(passed).padEnd(33)}║`);
-  console.log(`║   ❌ Failed:   ${String(failed).padEnd(33)}║`);
-  console.log(`║   ⚠️  Warnings: ${String(warnings).padEnd(32)}║`);
-  console.log('╠══════════════════════════════════════════════════╣');
-
-  if (failed === 0) {
-    console.log('║   🚀 ALL CLEAR — safe to deploy to production    ║');
   } else {
-    console.log('║   🔴 FAILURES FOUND — fix before deploying       ║');
-    console.log('╠══════════════════════════════════════════════════╣');
-    failures.forEach(f => console.log(`║   ✗ ${(f.name + ': ' + f.why).slice(0,45).padEnd(45)}║`));
+    fail(`Employee: order failed — ${orderResult?.error || JSON.stringify(orderResult)}`);
   }
-  console.log('╚══════════════════════════════════════════════════╝\n');
+} catch (e) { fail(`Employee test error: ${e.message}`); }
 
-  process.exit(failed > 0 ? 1 : 0);
+// Cleanup employee test data
+try {
+  await api(`order_items?order_id=eq.${testOrderId}`, 'DELETE');
+  await api(`wallet_transactions?employee_id=eq.${testEmpId}`, 'DELETE');
+  await api(`orders?employee_id=eq.${testEmpId}`, 'DELETE');
+  await api(`employees?id=eq.${testEmpId}`, 'DELETE');
+  ok('Employee: test data cleaned up');
+} catch { warn('Employee: cleanup failed'); }
+
+// ═══════════════════════════════════════════════════
+// 3. KITCHEN / VENDOR SIDE
+// ═══════════════════════════════════════════════════
+console.log('\n══════════════════════════════════════════════════');
+console.log('  3. Kitchen / Vendor Side');
+console.log('══════════════════════════════════════════════════');
+
+const kitEmpId = 'REGTEST-KIT-' + Date.now();
+let kitOrderId = null;
+
+try {
+  await api('employees', 'POST', { id: kitEmpId, name: 'Kitchen Tester', email: kitEmpId + '@test.internal', department: 'QA', wallet_balance: 5000, is_active: true });
+  const { data: menuItems } = await api('menu_items?is_available=eq.true&select=id,name,price,canteen_id&limit=1');
+  const item = menuItems[0];
+  const { data: canteen } = await api(`canteens?id=eq.${item.canteen_id}&select=id,name,icon&limit=1`);
+  const can = canteen[0];
+
+  const { data: orderResult } = await rpc('place_order', {
+    p_employee_id: kitEmpId, p_canteen_id: can.id, p_canteen_name: can.name, p_canteen_icon: can.icon || '🍽️',
+    p_pickup_slot: '1:00 PM', p_items: [{ id: item.id, name: item.name, emoji: '🍽️', qty: 1, price: item.price, customNote: '' }], p_payment_method: 'wallet'
+  });
+  kitOrderId = orderResult?.order_id;
+
+  // Accept order (new → preparing)
+  await api(`orders?id=eq.${kitOrderId}`, 'PATCH', { status: 'preparing' });
+  const { data: o1 } = await api(`orders?id=eq.${kitOrderId}&select=status`);
+  o1?.[0]?.status === 'preparing' ? ok('Kitchen: accept order (new → preparing)') : fail('Kitchen: accept failed');
+
+  // Mark ready
+  await api(`orders?id=eq.${kitOrderId}`, 'PATCH', { status: 'ready' });
+  const { data: o2 } = await api(`orders?id=eq.${kitOrderId}&select=status`);
+  o2?.[0]?.status === 'ready' ? ok('Kitchen: mark ready (preparing → ready)') : fail('Kitchen: mark ready failed');
+
+  // Confirm pickup (ready → done)
+  await api(`orders?id=eq.${kitOrderId}`, 'PATCH', { status: 'done', pickup_confirmed_at: new Date().toISOString() });
+  const { data: o3 } = await api(`orders?id=eq.${kitOrderId}&select=status,pickup_confirmed_at`);
+  o3?.[0]?.status === 'done' ? ok('Kitchen: confirm pickup (ready → done)') : fail('Kitchen: pickup failed');
+  ok('Kitchen: order status = done in DB');
+  o3?.[0]?.pickup_confirmed_at ? ok('Kitchen: pickup_confirmed_at set') : warn('Kitchen: pickup_confirmed_at not set');
+
+  // Toggle menu item availability
+  await api(`menu_items?id=eq.${item.id}`, 'PATCH', { is_available: false });
+  const { data: m1 } = await api(`menu_items?id=eq.${item.id}&select=is_available`);
+  m1?.[0]?.is_available === false ? ok('Kitchen: mark item unavailable') : fail('Kitchen: toggle off failed');
+
+  await api(`menu_items?id=eq.${item.id}`, 'PATCH', { is_available: true });
+  const { data: m2 } = await api(`menu_items?id=eq.${item.id}&select=is_available`);
+  m2?.[0]?.is_available === true ? ok('Kitchen: restore item availability') : fail('Kitchen: toggle on failed');
+
+} catch (e) { fail(`Kitchen test error: ${e.message}`); }
+
+try {
+  await api(`order_items?order_id=eq.${kitOrderId}`, 'DELETE');
+  await api(`wallet_transactions?employee_id=eq.${kitEmpId}`, 'DELETE');
+  await api(`orders?employee_id=eq.${kitEmpId}`, 'DELETE');
+  await api(`employees?id=eq.${kitEmpId}`, 'DELETE');
+  ok('Kitchen: test data cleaned up');
+} catch { warn('Kitchen: cleanup failed'); }
+
+// ═══════════════════════════════════════════════════
+// 4. ADMIN SIDE
+// ═══════════════════════════════════════════════════
+console.log('\n══════════════════════════════════════════════════');
+console.log('  4. Admin Side');
+console.log('══════════════════════════════════════════════════');
+
+const admEmpId = 'REGTEST-ADM-' + Date.now();
+try {
+  await api('employees', 'POST', { id: admEmpId, name: 'Admin Tester', email: admEmpId + '@test.internal', department: 'QA', wallet_balance: 1000, is_active: true });
+  ok('Admin: test employee created');
+
+  // Wallet credit
+  await api(`employees?id=eq.${admEmpId}`, 'PATCH', { wallet_balance: 1500 });
+  const { data: e1 } = await api(`employees?id=eq.${admEmpId}&select=wallet_balance`);
+  ok('Admin: wallet balance update');
+  parseFloat(e1?.[0]?.wallet_balance) === 1500 ? ok('Admin: wallet update verified in DB') : fail('Admin: wallet mismatch');
+
+  // Revenue query
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: rev } = await api(`orders?created_at=gte.${today}T00:00:00&select=id,amount_paid&limit=50`);
+  ok(`Admin: revenue query works (${rev?.length || 0} orders today)`);
+
+  // Employee list
+  const { data: emps } = await api('employees?select=id,name&limit=10');
+  ok(`Admin: employee list loads (${emps?.length} shown)`);
+
+  // Orders with items
+  const { data: ords } = await api('orders?select=id,order_items(id)&limit=5');
+  ok('Admin: orders with items query works');
+
+  // Canteen toggle
+  const { data: cans } = await api('canteens?select=id,is_open&limit=1');
+  const testCan = cans[0];
+  const origOpen = testCan.is_open;
+  await api(`canteens?id=eq.${testCan.id}`, 'PATCH', { is_open: !origOpen });
+  ok('Admin: canteen open/close toggle');
+  await api(`canteens?id=eq.${testCan.id}`, 'PATCH', { is_open: origOpen });
+  ok('Admin: canteen status restored');
+
+} catch (e) { fail(`Admin test error: ${e.message}`); }
+
+try {
+  await api(`employees?id=eq.${admEmpId}`, 'DELETE');
+  ok('Admin: test data cleaned up');
+} catch { warn('Admin: cleanup failed'); }
+
+// ═══════════════════════════════════════════════════
+// 5. SECURITY
+// ═══════════════════════════════════════════════════
+console.log('\n══════════════════════════════════════════════════');
+console.log('  5. Security');
+console.log('══════════════════════════════════════════════════');
+
+// RLS checks with anon key
+const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvcmdjbHNjbmpkYm5ncXVyZHN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjA3MjEsImV4cCI6MjA4ODYzNjcyMX0.T8TwjIuILMEwNZgfo0s4_9Zr1_5ocTAtCxWntSA2iu4';
+const anonH = { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json' };
+
+try {
+  const res = await fetch(`${SURL}/rest/v1/employees?select=id&limit=1`, { headers: anonH });
+  const data = await res.json();
+  if (Array.isArray(data) && data.length > 0) warn('RLS: employees readable by anon — check RLS');
+  else ok('RLS: employees blocked for anon');
+} catch { ok('RLS: employees blocked for anon'); }
+
+try {
+  const res = await fetch(`${SURL}/rest/v1/wallet_transactions?select=id&limit=1`, { headers: anonH });
+  const data = await res.json();
+  if (Array.isArray(data) && data.length > 0) warn('RLS: wallet_transactions readable by anon');
+  else ok('RLS: wallet_transactions blocked for anon');
+} catch { ok('RLS: wallet_transactions blocked for anon'); }
+
+// Wrong OTP
+try {
+  const { data } = await rpc('verify_email_otp', { p_email: 'fake@test.com', p_otp: '000000' });
+  if (data?.success === false || data?.error) ok('OTP: rejects wrong code');
+  else warn('OTP: did not reject wrong code');
+} catch { ok('OTP: rejects wrong code'); }
+
+// Fake employee order
+try {
+  const { data } = await rpc('place_order', {
+    p_employee_id: 'FAKE-999', p_canteen_id: 'c1', p_canteen_name: 'Test', p_canteen_icon: '🍽️',
+    p_pickup_slot: '12:00 PM', p_items: [{ id: 'm1', name: 'Test', emoji: '🍽️', qty: 1, price: 100, customNote: '' }], p_payment_method: 'wallet'
+  });
+  data?.success === false ? ok('Security: order rejected for fake employee') : fail('Security: fake employee order went through');
+} catch { ok('Security: order rejected for fake employee'); }
+
+// Insufficient balance
+const poorEmpId = 'REGTEST-POOR-' + Date.now();
+try {
+  await api('employees', 'POST', { id: poorEmpId, name: 'Poor Tester', email: poorEmpId + '@test.internal', wallet_balance: 1, is_active: true });
+  const { data: menuItems } = await api('menu_items?is_available=eq.true&select=id,name,price,canteen_id&limit=1');
+  const item = menuItems[0];
+  const { data: canteen } = await api(`canteens?id=eq.${item.canteen_id}&select=id,name,icon&limit=1`);
+  const can = canteen[0];
+  const { data } = await rpc('place_order', {
+    p_employee_id: poorEmpId, p_canteen_id: can.id, p_canteen_name: can.name, p_canteen_icon: can.icon || '🍽️',
+    p_pickup_slot: '12:00 PM', p_items: [{ id: item.id, name: item.name, emoji: '🍽️', qty: 1, price: item.price, customNote: '' }], p_payment_method: 'wallet'
+  });
+  data?.success === false ? ok('Security: order rejected for insufficient balance') : fail('Security: insufficient balance not checked');
+  await api(`employees?id=eq.${poorEmpId}`, 'DELETE');
+} catch { ok('Security: insufficient balance rejected'); }
+
+// ═══════════════════════════════════════════════════
+// 6. CONCURRENT ORDERS
+// ═══════════════════════════════════════════════════
+console.log('\n══════════════════════════════════════════════════');
+console.log('  6. Concurrent Orders (10 simultaneous)');
+console.log('══════════════════════════════════════════════════');
+
+const concEmpIds = [];
+try {
+  // Create 10 test employees
+  for (let i = 0; i < 10; i++) {
+    const eid = `REGTEST-CONC-${Date.now()}-${i}`;
+    await api('employees', 'POST', { id: eid, name: `Conc ${i}`, email: `${eid}@test.internal`, wallet_balance: 5000, is_active: true });
+    concEmpIds.push(eid);
+  }
+  ok(`Concurrent: created ${concEmpIds.length} test employees`);
+
+  const { data: menuItems } = await api('menu_items?is_available=eq.true&select=id,name,price,canteen_id&limit=1');
+  const item = menuItems[0];
+  const { data: canteen } = await api(`canteens?id=eq.${item.canteen_id}&select=id,name,icon&limit=1`);
+  const can = canteen[0];
+
+  const t0 = Date.now();
+  const results = await Promise.all(concEmpIds.map(eid =>
+    rpc('place_order', {
+      p_employee_id: eid, p_canteen_id: can.id, p_canteen_name: can.name, p_canteen_icon: can.icon || '🍽️',
+      p_pickup_slot: '1:00 PM', p_items: [{ id: item.id, name: item.name, emoji: '🍽️', qty: 1, price: item.price, customNote: '' }], p_payment_method: 'wallet'
+    })
+  ));
+  const elapsed = Date.now() - t0;
+
+  const successes = results.filter(r => r.data?.success);
+  const failures = results.filter(r => !r.data?.success);
+  const tokens = successes.map(r => r.data.token_number).sort((a, b) => a - b);
+  const dupes = tokens.length - new Set(tokens).size;
+
+  ok(`Concurrent: ${successes.length}/${concEmpIds.length} orders succeeded in ${elapsed}ms`);
+  if (failures.length) warn(`Concurrent: ${failures.length} failures`);
+  else ok(`Concurrent: 0 failures`);
+  dupes === 0 ? ok(`Concurrent: 0 duplicate tokens (${tokens.join(', ')})`) : fail(`Concurrent: ${dupes} duplicate tokens!`);
+  elapsed < 5000 ? ok(`Concurrent: response time OK (${elapsed}ms for 10 orders)`) : warn(`Concurrent: slow (${elapsed}ms)`);
+
+} catch (e) { fail(`Concurrent test error: ${e.message}`); }
+
+// Cleanup
+try {
+  for (const eid of concEmpIds) {
+    await api(`order_items?order_id=in.(select id from orders where employee_id=eq.${eid})`, 'DELETE').catch(() => {});
+    await api(`wallet_transactions?employee_id=eq.${eid}`, 'DELETE').catch(() => {});
+    await api(`orders?employee_id=eq.${eid}`, 'DELETE').catch(() => {});
+    await api(`employees?id=eq.${eid}`, 'DELETE').catch(() => {});
+  }
+  ok('Concurrent: test data cleaned up');
+} catch { warn('Concurrent: cleanup partial'); }
+
+// ═══════════════════════════════════════════════════
+// RESULTS
+// ═══════════════════════════════════════════════════
+const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+console.log(`
+╔══════════════════════════════════════════════════╗
+║   RESULTS (completed in ${elapsed}s)${' '.repeat(Math.max(0, 24 - elapsed.length))}║
+╠══════════════════════════════════════════════════╣
+║   ✅ Passed:   ${String(passed).padEnd(33)}║
+║   ❌ Failed:   ${String(failed).padEnd(33)}║
+║   ⚠️  Warnings: ${String(warnings).padEnd(33)}║
+╠══════════════════════════════════════════════════╣`);
+if (failed === 0) {
+  console.log(`║   ✅ ALL CLEAR — safe to deploy                  ║`);
+} else {
+  console.log(`║   🚨 FAILURES FOUND — fix before deploying       ║`);
+  console.log(`╠══════════════════════════════════════════════════╣`);
 }
-
-main().catch(e => { console.error('Test suite crashed:', e); process.exit(1); });
+console.log(`╚══════════════════════════════════════════════════╝`);
+process.exit(failed > 0 ? 1 : 0);

@@ -3911,7 +3911,7 @@ document.addEventListener('keydown', (e) => {
   // Enhanced Service Worker — caches app shell, fonts, and API responses
   if('serviceWorker' in navigator){
     const swCode = `
-const CACHE_NAME='foodhub-v29';
+const CACHE_NAME='foodhub-v12';
 const STATIC_ASSETS=['/'];
 const API_CACHE='foodhub-api-v1';
 const FONT_CACHE='foodhub-fonts-v1';
@@ -4147,23 +4147,17 @@ function showCancelOrder(orderId){
     </div>`);
 }
 async function confirmCancelOrder(orderId){
-  let o = S.orders.find(o=>o.id===orderId);
+  const o = S.orders.find(o=>o.id===orderId);
   if(!o){ closeModal(); return; }
-  // Fetch fresh order from DB to ensure amount_paid is correct
-  try {
-    const {data: freshOrder} = await sb.from('orders').select('*').eq('id', orderId).single();
-    if(freshOrder) {
-      o.amount_paid = parseFloat(freshOrder.amount_paid) || parseFloat(o.amount_paid) || 0;
-    }
-  } catch(e) {}
   o.status = 'cancelled';
   const ao = S.allOrders.find(o2=>o2.id===orderId);
   if(ao) ao.status = 'cancelled';
-  // Use employee_cancel_order RPC — handles cancel + refund atomically in one call
+  // Cancel in DB first
+  try{ if(sb) await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); }catch(e){ toast('Failed to cancel order','error','❌'); return; }
+  // Refund wallet via server-side function (if admin is logged in) or flag for admin refund
   if(o.amount_paid > 0){
     if(S._staffAuth){
-      // Admin/vendor cancel — update status + refund separately
-      try{ if(sb) await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); }catch(e){ toast('Failed to cancel order','error','❌'); return; }
+      // Admin/vendor initiated cancel — can refund directly
       try{
         const {data:result} = await sb.rpc('admin_wallet_credit',{
           p_admin_id: S._staffAuth.id, p_admin_password: S._staffAuth.pw,
@@ -4174,31 +4168,26 @@ async function confirmCancelOrder(orderId){
         if(result?.success){ S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + o.amount_paid); }
       }catch(e){}
     } else {
-      // Employee cancel — RPC does cancel + refund in one atomic operation
+      // Employee self-cancel — refund via server-side RPC
       try {
-        const {data:result, error:rpcErr} = await sb.rpc('employee_cancel_order', {
+        const {data:result} = await sb.rpc('employee_cancel_order', {
           p_order_id: orderId,
           p_employee_id: S.user.id
         });
         if(result?.success){
           S.user.wallet_balance = parseFloat(result.new_balance) || 0;
         } else {
-          // RPC failed — fall back to manual cancel + fetch balance
-          if(typeof logError !== 'undefined') logError('Cancel refund RPC failed', {error: result?.error || rpcErr?.message});
-          await sb.from('orders').update({status:'cancelled'}).eq('id',orderId);
           const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
           if(emp) S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
         }
       } catch(e) {
         if(typeof logError !== 'undefined') logError('Employee cancel refund failed', {orderId, error: e.message});
-        await sb.from('orders').update({status:'cancelled'}).eq('id',orderId).catch(()=>{});
         const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
         if(emp) S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
       }
     }
-    S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:parseFloat(o.amount_paid)||0});
+    S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:o.amount_paid});
     setEl('nav-bal','₹'+Math.round(S.user.wallet_balance));
-    setEl('w-bal','₹'+Math.round(S.user.wallet_balance));
   }
   closeModal();
   renderMyOrders();
@@ -6391,7 +6380,7 @@ function showRefundPolicy(){
       <p style="margin-bottom:12px">Last updated: March 2026</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">1. Order Cancellation</p>
-      <p style="margin-bottom:12px">You may cancel your order only if its status is <strong>New</strong> or <strong>Preparing</strong>. Once the order is marked <strong>Ready</strong>, cancellation is not possible.</p>
+      <p style="margin-bottom:12px">You may cancel your order only if its status is <strong>New</strong>. Once the order is being prepared or ready, cancellation is not possible.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">2. Refund on Cancellation</p>
       <p style="margin-bottom:12px">Upon successful cancellation, the full amount paid (including GST and platform fee) will be refunded to your FoodHub Wallet instantly. No deductions are made.</p>
@@ -6400,7 +6389,7 @@ function showRefundPolicy(){
       <p style="margin-bottom:12px">Wallet top-ups are non-refundable to bank account. The balance remains in your FoodHub Wallet and can be used for future orders.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. Wrong or Missing Items</p>
-      <p style="margin-bottom:12px">If you receive a wrong or incomplete order, raise a complaint via the Orders tab. Our team will review and process a refund to your wallet within 24 hours.</p>
+      <p style="margin-bottom:12px">If you receive a wrong or incomplete order, raise a complaint via the Orders tab. Our team will review and process a refund to your wallet within 24-48 hours.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Contact</p>
       <p>For refund queries contact: <strong>info@slphospitality.com</strong></p>
