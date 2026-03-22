@@ -2993,16 +2993,16 @@ async function renderAdminOverview(el) {
     if (sb) {
       const [empRes, ordRes] = await Promise.all([
         sb.from('employees').select('id', {count:'exact', head:true}),
-        sb.from('orders').select('id, item_total, subsidy_applied, gst_amount, canteen_id, status, created_at').gte('created_at', today + 'T00:00:00')
+        sb.from('orders').select('id, item_total, subsidy_applied, gst_amount, amount_paid, canteen_id, status, created_at').gte('created_at', today + 'T00:00:00')
       ]);
       totalEmployees = empRes.count || 0;
       const todayOrders = ordRes.data || [];
       todayOrderCount = todayOrders.length;
-      todayRevenue = todayOrders.reduce((s,o) => s + (o.item_total||0) + (o.gst_amount||0), 0);
+      todayRevenue = todayOrders.reduce((s,o) => s + (parseFloat(o.amount_paid)||0), 0);
       todaySubsidy = todayOrders.reduce((s,o) => s + (o.subsidy_applied||0), 0);
       // Canteen-wise revenue
       var canteenRevMap = {};
-      todayOrders.forEach(o => { canteenRevMap[o.canteen_id] = (canteenRevMap[o.canteen_id]||0) + (o.item_total||0); });
+      todayOrders.forEach(o => { canteenRevMap[o.canteen_id] = (canteenRevMap[o.canteen_id]||0) + (parseFloat(o.amount_paid)||0); });
       // Hourly distribution
       var hourMap = {};
       todayOrders.forEach(o => {
