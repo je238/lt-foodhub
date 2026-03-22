@@ -854,15 +854,22 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <!-- Top Up Section -->
     <div class="card" style="margin-bottom:16px">
       <div class="card-title">💳 Add Money to Wallet</div>
-      <div style="background:linear-gradient(135deg,var(--blue) 0%,var(--blue2) 100%);border-radius:14px;padding:20px;text-align:center;margin-bottom:4px">
-        <div style="font-size:28px;margin-bottom:8px">🏦</div>
-        <div style="font-family:var(--fh);font-size:16px;font-weight:700;color:#fff;margin-bottom:4px">Online Top-up Coming Soon</div>
-        <div style="font-size:12px;color:rgba(255,255,255,.6);margin-bottom:12px">ICICI Bank payment gateway being activated</div>
-        <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:10px 14px;font-size:12px;color:rgba(255,255,255,.8)">
-          💡 To add money now — contact your HR or canteen manager
-        </div>
+      <div class="topup-grid">
+        <button class="topup-btn" onclick="topUp(100)">₹100</button>
+        <button class="topup-btn" onclick="topUp(200)">₹200</button>
+        <button class="topup-btn" onclick="topUp(500)">₹500</button>
+        <button class="topup-btn" onclick="topUp(1000)">₹1,000</button>
+        <button class="topup-btn" onclick="topUp(2000)">₹2,000</button>
+        <button class="topup-btn" onclick="topUp(3000)">₹3,000</button>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:10px;text-align:center">Payment will be powered by ICICI Bank · Secure UPI / Net Banking / Card</div>
+      <div style="display:flex;gap:8px;margin-bottom:4px">
+        <input type="number" id="custom-topup-amt" placeholder="Custom amount" min="100" max="10000"
+          style="flex:1;padding:12px;border:2px solid var(--border);border-radius:12px;font-size:15px;font-weight:700;font-family:var(--fh);outline:none"
+          oninput="this.style.borderColor=this.value>=100?'var(--brand)':'var(--border)'">
+        <button class="btn btn-primary" style="padding:12px 16px;border-radius:12px;font-weight:800"
+          onclick="topUp(parseInt(document.getElementById('custom-topup-amt').value)||0)">Add</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;text-align:center">Payment powered by ICICI Bank · Secure UPI / Net Banking / Card</div>
     </div>
     <div class="section-header">
       <div class="section-title">Transactions</div>
