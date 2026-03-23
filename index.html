@@ -2571,77 +2571,37 @@ async function processTopUp(amount) {
 // ICICI PAYMENT CALLBACK — runs on app load after redirect
 // ══════════════════════════════════════════════════════
 async function checkPendingPayment() {
-  // Check URL params from ICICI redirect
   const urlParams = new URLSearchParams(window.location.search);
   const paymentStatus = urlParams.get('payment');
-  const txnNoFromUrl = urlParams.get('txnNo');
+  const amt = urlParams.get('amt');
   
-  // Clean URL params
-  if (paymentStatus) {
-    window.history.replaceState({}, '', window.location.pathname);
-  }
-
-  const pending = localStorage.getItem('fh-pending-topup');
-  if (!pending) {
-    if (paymentStatus === 'success') toast('Payment received! Verifying...', 'info', '🔄');
-    if (paymentStatus === 'failed') toast('Payment failed or cancelled', 'error', '❌');
-    return;
-  }
+  if (!paymentStatus) return;
   
-  try {
-    const { amount, employeeId, merchantTxnNo, ts } = JSON.parse(pending);
-    
-    // Ignore if older than 30 minutes
-    if (Date.now() - ts > 30 * 60 * 1000) {
-      localStorage.removeItem('fh-pending-topup');
-      return;
-    }
-
-    if (!merchantTxnNo || !employeeId) {
-      localStorage.removeItem('fh-pending-topup');
-      return;
-    }
-
-    // Show verification toast
-    toast('Verifying payment with ICICI...', 'info', '🔄');
-
-    // Verify payment status with ICICI via our Edge Function
-    const res = await fetch(SURL + '/functions/v1/icici-payment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
-      body: JSON.stringify({
-        action: 'verify',
-        merchantTxnNo: merchantTxnNo,
-        employeeId: employeeId,
-        amount: amount
-      })
-    });
-
-    const data = await res.json();
-    
-    if (data.success) {
-      S.user.wallet_balance = parseFloat(data.newBalance) || 0;
-      setEl('nav-bal', '₹' + Math.round(data.newBalance));
-      setEl('w-bal', '₹' + Math.round(data.newBalance));
-      S.txns.unshift({ type: 'credit', icon: '🏦', name: 'ICICI Wallet Top-up ₹' + amount, date: 'Just now', amount: parseFloat(amount) });
-      toast('₹' + amount + ' added to wallet via ICICI! 🎉', 'success', '🏦');
-      renderWallet();
-      const balEl = document.getElementById('w-bal');
-      if (balEl) { balEl.style.color = 'var(--green)'; balEl.style.transform = 'scale(1.1)'; setTimeout(() => { balEl.style.color = ''; balEl.style.transform = ''; }, 1500); }
-    } else {
-      // Payment not yet confirmed — might still be processing
-      if (paymentStatus === 'success') {
-        toast('Payment received but verification pending. Balance will update shortly.', 'warn', '⏳');
-      } else {
-        toast('Payment not confirmed: ' + (data.error || 'Please contact support'), 'warn', '⚠️');
-      }
-    }
-  } catch(e) {
-    console.warn('Payment verification error:', e);
-    if (paymentStatus === 'success') toast('Payment received. Balance will update in a few minutes.', 'info', '⏳');
-  }
-  
+  // Clean URL
+  window.history.replaceState({}, '', window.location.pathname);
   localStorage.removeItem('fh-pending-topup');
+
+  if (paymentStatus === 'success') {
+    toast('Payment successful! Updating wallet...', 'success', '🏦');
+    
+    // Refresh wallet balance from DB (Edge Function already credited it)
+    if (S.user && sb) {
+      try {
+        const {data: emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+        if (emp) {
+          S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
+          setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
+          setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
+          const topAmt = parseFloat(amt) || 0;
+          if (topAmt > 0) S.txns.unshift({ type: 'credit', icon: '🏦', name: 'ICICI Wallet Top-up ₹' + topAmt, date: 'Just now', amount: topAmt });
+          toast('₹' + (topAmt || '') + ' added to wallet! 🎉', 'success', '🏦');
+          renderWallet();
+        }
+      } catch(e) { console.warn('Balance refresh error:', e); }
+    }
+  } else {
+    toast('Payment failed or cancelled', 'error', '❌');
+  }
 }
 
 // ═════════════════════════════════════
