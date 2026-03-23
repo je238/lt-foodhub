@@ -2716,7 +2716,7 @@ function renderVendor() {
   const todayRev = myOrders.reduce((s,o) => s+(o.item_total||0), 0);
   setEl('v-new', newCnt);
   setEl('v-prep', prepCnt);
-  setEl('v-sales', '₹'+todayRev.toLocaleString('en-IN'));
+  setEl('v-sales', '₹'+Math.round(todayRev).toLocaleString('en-IN'));
   const el = document.getElementById('vendor-body');
   if (!el) return;
   // Build new HTML
@@ -2999,6 +2999,7 @@ async function renderAdminOverview(el) {
       const todayOrders = ordRes.data || [];
       todayOrderCount = todayOrders.length;
       todayRevenue = todayOrders.reduce((s,o) => s + (parseFloat(o.amount_paid)||0), 0);
+      todayRevenue = Math.round(todayRevenue * 100) / 100;
       todaySubsidy = todayOrders.reduce((s,o) => s + (o.subsidy_applied||0), 0);
       // Canteen-wise revenue
       var canteenRevMap = {};
@@ -3031,7 +3032,7 @@ async function renderAdminOverview(el) {
         <div style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;margin-bottom:5px">
             <span style="font-size:13px;font-weight:700">${c.icon} ${c.name}</span>
-            <span style="font-size:13px;font-weight:800;color:var(--brand)">₹${rev.toLocaleString('en-IN')}</span>
+            <span style="font-size:13px;font-weight:800;color:var(--brand)">₹${(Math.round(rev*100)/100).toLocaleString('en-IN')}</span>
           </div>
           <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
           <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px">
@@ -3498,7 +3499,7 @@ function renderAdminCanteens(el) {
         </div>
         <div class="canteen-mgmt-stats">
           <div class="cms-item"><div class="cms-val">${orders}</div><div class="cms-lbl">Orders</div></div>
-          <div class="cms-item"><div class="cms-val">₹${rev>999?(rev/1000).toFixed(1)+'K':rev}</div><div class="cms-lbl">Revenue</div></div>
+          <div class="cms-item"><div class="cms-val">₹${rev>999?(rev/1000).toFixed(1)+'K':(Math.round(rev*100)/100)}</div><div class="cms-lbl">Revenue</div></div>
           <div class="cms-item"><div class="cms-val">${S.menu.filter(m=>m.canteen_id===c.id&&m.is_available!==false).length}</div><div class="cms-lbl">Active Items</div></div>
         </div>
       </div>`;
@@ -3703,10 +3704,10 @@ async function renderAdminRevenue(el) {
     <div class="card">
       <div class="card-title">💰 Daily Revenue — Last 7 Days</div>
       <div class="bar-chart">
-        ${days.map(d => `<div class="bar-row"><div class="bar-label">${d.label}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(d.rev/maxRev*100)}%"></div></div><div class="bar-val">₹${d.rev>999?(d.rev/1000).toFixed(1)+'K':d.rev}</div></div>`).join('')}
+        ${days.map(d => `<div class="bar-row"><div class="bar-label">${d.label}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(d.rev/maxRev*100)}%"></div></div><div class="bar-val">₹${d.rev>999?(d.rev/1000).toFixed(1)+'K':Math.round(d.rev)}</div></div>`).join('')}
       </div>
       <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)">
-        <div style="text-align:center"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Week Total</div><div style="font-family:var(--fh);font-size:22px;font-weight:700">₹${totalWeekRev>999?(totalWeekRev/1000).toFixed(1)+'K':totalWeekRev}</div></div>
+        <div style="text-align:center"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Week Total</div><div style="font-family:var(--fh);font-size:22px;font-weight:700">₹${totalWeekRev>999?(totalWeekRev/1000).toFixed(1)+'K':Math.round(totalWeekRev)}</div></div>
         <div style="text-align:center"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Orders</div><div style="font-family:var(--fh);font-size:22px;font-weight:700">${totalWeekOrders}</div></div>
         <div style="text-align:center"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Best Day</div><div style="font-family:var(--fh);font-size:22px;font-weight:700">${bestDay.label}</div></div>
       </div>
@@ -3720,7 +3721,7 @@ async function renderAdminRevenue(el) {
         <div style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;margin-bottom:5px">
             <span style="font-size:13px;font-weight:700">${c.icon} ${c.name}</span>
-            <span style="font-family:var(--fh);font-weight:700;font-size:14px;color:var(--brand)">₹${rev>999?(rev/1000).toFixed(1)+'K':rev}</span>
+            <span style="font-family:var(--fh);font-weight:700;font-size:14px;color:var(--brand)">₹${rev>999?(rev/1000).toFixed(1)+'K':(Math.round(rev*100)/100)}</span>
           </div>
           <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>`;
