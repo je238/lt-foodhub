@@ -2512,62 +2512,118 @@ function selectTopUpMethod(method, el) {
 
 async function processTopUp(amount) {
   if (!S.user || !sb) return;
+  if (amount < 1 || amount > 10000) { toast('Amount must be ₹1 — ₹10,000', 'error', '⚠️'); return; }
+  
   const btn = document.getElementById('topup-pay-btn');
   btn.classList.add('btn-loading'); btn.disabled = true;
-  btn.innerHTML = '<span>Processing payment...</span>';
+  btn.innerHTML = '<span>Connecting to ICICI...</span>';
 
   try {
-    // ══════════════════════════════════════════
-    // ICICI PAYMENT GATEWAY INTEGRATION POINT
-    // Tomorrow: Replace this block with ICICI API call
-    // The flow will be:
-    //   1. Call ICICI create-order API with amount
-    //   2. Redirect to ICICI payment page (or open SDK)
-    //   3. On success callback, ICICI sends payment_id
-    //   4. Verify payment server-side
-    //   5. Credit wallet via admin_wallet_credit
-    // For now: Direct credit for testing
-    // ══════════════════════════════════════════
+    // Save pending topup info for when ICICI redirects back
+    localStorage.setItem('fh-pending-topup', JSON.stringify({
+      amount, employeeId: S.user.id, ts: Date.now()
+    }));
 
-    // Simulate payment processing delay
-    await new Promise(r => setTimeout(r, 1500));
-
-    // Credit wallet via server-side function
-    // Using a special "system" admin for auto top-ups
-    const { data: result, error } = await sb.rpc('admin_wallet_credit', {
-      p_admin_id: 'admin-001',
-      p_admin_password: 'password123', // TODO: Replace with ICICI webhook verification
-      p_employee_id: S.user.id,
-      p_amount: amount,
-      p_reason: 'Wallet top-up via ' + _topUpMethod.toUpperCase() + ' — ₹' + amount
+    // Call our Edge Function to initiate ICICI payment
+    const res = await fetch(SURL + '/functions/v1/icici-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
+      body: JSON.stringify({
+        action: 'initiate',
+        amount: amount,
+        employeeId: S.user.id,
+        employeeName: S.user.name || 'Employee',
+        employeeEmail: S.user.email || 'noreply@slpnexus.com',
+        employeePhone: S.user.phone || '9999999999',
+        returnUrl: window.location.origin + window.location.pathname
+      })
     });
 
-    if (error || !result?.success) {
-      toast(result?.error || error?.message || 'Payment failed', 'error', '❌');
+    const data = await res.json();
+    
+    if (data.success && data.redirectUrl) {
+      // Store merchantTxnNo for verification after redirect
+      localStorage.setItem('fh-pending-topup', JSON.stringify({
+        amount, employeeId: S.user.id, merchantTxnNo: data.merchantTxnNo, ts: Date.now()
+      }));
+
+      toast('Redirecting to ICICI payment page...', 'info', '🏦');
+      
+      // Redirect to ICICI payment page
+      setTimeout(() => {
+        window.location.href = data.redirectUrl;
+      }, 500);
+    } else {
+      toast('Payment initiation failed: ' + (data.error || 'Unknown error'), 'error', '❌');
       btn.classList.remove('btn-loading'); btn.disabled = false;
       btn.innerHTML = `Pay ₹${amount.toLocaleString('en-IN')} →`;
-      return;
+      localStorage.removeItem('fh-pending-topup');
     }
-
-    // Update local state
-    S.user.wallet_balance = parseFloat(result.new_balance) || 0;
-    setEl('nav-bal', '₹' + Math.round(result.new_balance));
-    setEl('w-bal', '₹' + Math.round(result.new_balance));
-    S.txns.unshift({ type: 'credit', icon: '💳', name: 'Wallet Top-up via ' + _topUpMethod.toUpperCase(), date: 'Just now', amount });
-
-    closeModal();
-    toast(`₹${amount.toLocaleString('en-IN')} added to wallet! 🎉`, 'success', '💳');
-    renderWallet();
-
-    // Animate balance
-    const balEl = document.getElementById('w-bal');
-    if (balEl) { balEl.style.color = 'var(--green)'; balEl.style.transform = 'scale(1.1)'; setTimeout(() => { balEl.style.color = ''; balEl.style.transform = ''; }, 1000); }
-
   } catch(e) {
     toast('Payment error: ' + e.message, 'error', '❌');
     btn.classList.remove('btn-loading'); btn.disabled = false;
     btn.innerHTML = `Pay ₹${amount.toLocaleString('en-IN')} →`;
+    localStorage.removeItem('fh-pending-topup');
   }
+}
+
+// ══════════════════════════════════════════════════════
+// ICICI PAYMENT CALLBACK — runs on app load after redirect
+// ══════════════════════════════════════════════════════
+async function checkPendingPayment() {
+  const pending = localStorage.getItem('fh-pending-topup');
+  if (!pending) return;
+  
+  try {
+    const { amount, employeeId, merchantTxnNo, ts } = JSON.parse(pending);
+    
+    // Ignore if older than 30 minutes
+    if (Date.now() - ts > 30 * 60 * 1000) {
+      localStorage.removeItem('fh-pending-topup');
+      return;
+    }
+
+    if (!merchantTxnNo || !employeeId) {
+      localStorage.removeItem('fh-pending-topup');
+      return;
+    }
+
+    // Show verification toast
+    toast('Verifying payment...', 'info', '🔄');
+
+    // Verify payment status with ICICI via our Edge Function
+    const res = await fetch(SURL + '/functions/v1/icici-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
+      body: JSON.stringify({
+        action: 'verify',
+        merchantTxnNo: merchantTxnNo,
+        employeeId: employeeId,
+        amount: amount
+      })
+    });
+
+    const data = await res.json();
+    
+    if (data.success) {
+      // Payment verified — update wallet
+      S.user.wallet_balance = parseFloat(data.newBalance) || 0;
+      setEl('nav-bal', '₹' + Math.round(data.newBalance));
+      S.txns.unshift({ type: 'credit', icon: '🏦', name: 'ICICI Wallet Top-up', date: 'Just now', amount: parseFloat(amount) });
+      toast(`₹${amount} added to wallet via ICICI! 🎉`, 'success', '🏦');
+      renderWallet();
+      
+      // Animate balance
+      const balEl = document.getElementById('w-bal');
+      if (balEl) { balEl.style.color = 'var(--green)'; balEl.style.transform = 'scale(1.1)'; setTimeout(() => { balEl.style.color = ''; balEl.style.transform = ''; }, 1500); }
+    } else {
+      toast('Payment not confirmed: ' + (data.error || 'Please contact support'), 'warn', '⚠️');
+    }
+  } catch(e) {
+    console.warn('Payment verification error:', e);
+  }
+  
+  localStorage.removeItem('fh-pending-topup');
 }
 
 // ═════════════════════════════════════
@@ -5494,6 +5550,8 @@ init = async function(){
           renderHome(); goScreen('s-home');
           toast('Welcome back, '+(emp.name||'').split(' ')[0]+'!','success','👋');
           setTimeout(addARIA,500);
+          // Check if returning from ICICI payment redirect
+          setTimeout(checkPendingPayment, 1000);
           return;
         }
       } catch(e){}
@@ -5503,6 +5561,7 @@ init = async function(){
   }
   await _origInit();
   setTimeout(addARIA,500);
+  setTimeout(checkPendingPayment, 1500);
 };
 
 // Patch: logout — clear session
