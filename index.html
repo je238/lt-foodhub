@@ -4149,15 +4149,15 @@ function showCancelOrder(orderId){
 async function confirmCancelOrder(orderId){
   const o = S.orders.find(o=>o.id===orderId);
   if(!o){ closeModal(); return; }
-  o.status = 'cancelled';
-  const ao = S.allOrders.find(o2=>o2.id===orderId);
-  if(ao) ao.status = 'cancelled';
-  // Cancel in DB first
-  try{ if(sb) await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); }catch(e){ toast('Failed to cancel order','error','❌'); return; }
-  // Refund wallet via server-side function (if admin is logged in) or flag for admin refund
-  if(o.amount_paid > 0){
+
+  // Refund wallet via server-side function
+  if(o.amount_paid > 0 || true){
     if(S._staffAuth){
-      // Admin/vendor initiated cancel — can refund directly
+      // Admin/vendor cancel — update status + refund separately
+      o.status = 'cancelled';
+      const ao = S.allOrders.find(o2=>o2.id===orderId);
+      if(ao) ao.status = 'cancelled';
+      try{ if(sb) await sb.from('orders').update({status:'cancelled'}).eq('id',orderId); }catch(e){ toast('Failed to cancel order','error','❌'); return; }
       try{
         const {data:result} = await sb.rpc('admin_wallet_credit',{
           p_admin_id: S._staffAuth.id, p_admin_password: S._staffAuth.pw,
@@ -4168,26 +4168,33 @@ async function confirmCancelOrder(orderId){
         if(result?.success){ S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + o.amount_paid); }
       }catch(e){}
     } else {
-      // Employee self-cancel — refund via server-side RPC
+      // Employee self-cancel — RPC does cancel + refund in ONE atomic call
+      // Do NOT update order status before RPC — it will fail if already cancelled
       try {
-        const {data:result} = await sb.rpc('employee_cancel_order', {
-          p_order_id: orderId,
+        const {data:result, error:rpcErr} = await sb.rpc('employee_cancel_order', {
+          p_order_id: String(orderId),
           p_employee_id: S.user.id
         });
         if(result?.success){
           S.user.wallet_balance = parseFloat(result.new_balance) || 0;
+          o.status = 'cancelled';
+          const ao = S.allOrders.find(o2=>o2.id===orderId);
+          if(ao) ao.status = 'cancelled';
         } else {
-          const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-          if(emp) S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
+          toast('Cancel failed: ' + (result?.error || rpcErr?.message || 'Unknown error'), 'error', '❌');
+          closeModal();
+          return;
         }
       } catch(e) {
         if(typeof logError !== 'undefined') logError('Employee cancel refund failed', {orderId, error: e.message});
-        const {data:emp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-        if(emp) S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
+        toast('Cancel failed: ' + e.message, 'error', '❌');
+        closeModal();
+        return;
       }
     }
-    S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:o.amount_paid});
+    S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:parseFloat(o.amount_paid)||0});
     setEl('nav-bal','₹'+Math.round(S.user.wallet_balance));
+    setEl('w-bal','₹'+Math.round(S.user.wallet_balance));
   }
   closeModal();
   renderMyOrders();
