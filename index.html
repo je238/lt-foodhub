@@ -3030,12 +3030,13 @@ async function renderAdminOverview(el) {
         sb.from('orders').select('id, item_total, subsidy_applied, gst_amount, amount_paid, canteen_id, status, created_at').gte('created_at', today + 'T00:00:00')
       ]);
       totalEmployees = empRes.count || 0;
-      const todayOrders = ordRes.data || [];
+      const todayOrders = (ordRes.data || []).filter(o => o.status !== 'cancelled');
+      const allTodayOrders = ordRes.data || [];
       todayOrderCount = todayOrders.length;
       todayRevenue = todayOrders.reduce((s,o) => s + (parseFloat(o.amount_paid)||0), 0);
       todayRevenue = Math.round(todayRevenue * 100) / 100;
       todaySubsidy = todayOrders.reduce((s,o) => s + (o.subsidy_applied||0), 0);
-      // Canteen-wise revenue
+      // Canteen-wise revenue (exclude cancelled)
       var canteenRevMap = {};
       todayOrders.forEach(o => { canteenRevMap[o.canteen_id] = (canteenRevMap[o.canteen_id]||0) + (parseFloat(o.amount_paid)||0); });
       // Hourly distribution
@@ -3707,7 +3708,7 @@ async function renderAdminRevenue(el) {
     if (!sb) { el.innerHTML = '<div class="empty"><div class="empty-title">Database not connected</div></div>'; return; }
     // Fetch last 7 days of orders
     const weekAgo = new Date(Date.now() - 7*86400000).toISOString();
-    const {data: weekOrders} = await sb.from('orders').select('item_total, gst_amount, subsidy_applied, canteen_id, created_at').gte('created_at', weekAgo);
+    const {data: weekOrders} = await sb.from('orders').select('item_total, gst_amount, amount_paid, subsidy_applied, canteen_id, created_at, status').gte('created_at', weekAgo).neq('status', 'cancelled');
     const orders = weekOrders || [];
     // Group by day
     const dayMap = {};
@@ -3719,7 +3720,7 @@ async function renderAdminRevenue(el) {
     }
     orders.forEach(o => {
       const key = o.created_at?.slice(0,10);
-      if (dayMap[key]) { dayMap[key].rev += (o.item_total||0)+(o.gst_amount||0); dayMap[key].orders++; dayMap[key].subsidy += (o.subsidy_applied||0); }
+      if (dayMap[key]) { dayMap[key].rev += (parseFloat(o.amount_paid)||0); dayMap[key].orders++; dayMap[key].subsidy += (o.subsidy_applied||0); }
     });
     const days = Object.values(dayMap);
     const maxRev = Math.max(1, ...days.map(d=>d.rev));
@@ -3728,10 +3729,10 @@ async function renderAdminRevenue(el) {
     const bestDay = days.reduce((best,d) => d.rev > best.rev ? d : best, days[0]);
     // Group by canteen (this month)
     const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-    const {data: monthOrders} = await sb.from('orders').select('item_total, gst_amount, subsidy_applied, canteen_id').gte('created_at', monthStart.toISOString());
+    const {data: monthOrders} = await sb.from('orders').select('item_total, gst_amount, amount_paid, subsidy_applied, canteen_id, status').gte('created_at', monthStart.toISOString()).neq('status', 'cancelled');
     const canRevMap = {};
     let monthSubsidy = 0;
-    (monthOrders||[]).forEach(o => { canRevMap[o.canteen_id] = (canRevMap[o.canteen_id]||0) + (o.item_total||0); monthSubsidy += (o.subsidy_applied||0); });
+    (monthOrders||[]).forEach(o => { canRevMap[o.canteen_id] = (canRevMap[o.canteen_id]||0) + (parseFloat(o.amount_paid)||0); monthSubsidy += (o.subsidy_applied||0); });
     const maxCanRev = Math.max(1, ...Object.values(canRevMap));
 
     el.innerHTML = `
@@ -5511,20 +5512,21 @@ init = async function(){
             if (freshCans?.length) S.canteens = freshCans;
             S.selCanteen = S.canteens.find(c => c.is_open) || S.canteens[0];
           } catch(e) {}
-          // Restore orders + transactions from DB so home shows correct counts after refresh
+          // Restore orders + transactions from DB so history survives refresh
           try {
-            const today = new Date().toISOString().slice(0, 10);
             const [{data: ordData}, {data: txnData}] = await Promise.all([
-              sb.from('orders').select('*, order_items(*)').eq('employee_id', emp.id).gte('created_at', today + 'T00:00:00').order('created_at', {ascending: false}).limit(50),
-              sb.from('wallet_transactions').select('*').eq('employee_id', emp.id).order('created_at', {ascending: false}).limit(20)
+              sb.from('orders').select('*, order_items(*)').eq('employee_id', emp.id).order('created_at', {ascending: false}).limit(50),
+              sb.from('wallet_transactions').select('*').eq('employee_id', emp.id).order('created_at', {ascending: false}).limit(30)
             ]);
             if (ordData?.length) S.orders = ordData.map(o => ({...o, items: o.order_items || []}));
+            else S.orders = [];
             if (txnData?.length) S.txns = txnData.map(t => ({
               type: t.type, icon: t.type === 'credit' ? '💳' : '🍽️',
               name: t.description || (t.type === 'credit' ? 'Wallet Top-up' : 'Order'),
               date: t.created_at, amount: parseFloat(t.amount) || 0
             }));
-          } catch(e) {}
+            else S.txns = [];
+          } catch(e) { console.warn('Session restore fetch error:', e); }
           renderHome(); goScreen('s-home');
           toast('Welcome back, '+(emp.name||'').split(' ')[0]+'!','success','👋');
           setTimeout(addARIA,500);
