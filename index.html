@@ -290,7 +290,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 /* ─── STATS GRID ─── */
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
 .stat-card{background:var(--white);border-radius:var(--rl);padding:18px;border:1px solid rgba(226,232,240,.6);box-shadow:var(--sh);transition:all .3s var(--ease);position:relative;overflow:hidden}
-.stat-card::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand),var(--blue-a));opacity:0;transition:opacity .3s var(--ease)}
+.stat-card::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand),var(--blue-a));opacity:0;transition:opacity .3s var(--ease);pointer-events:none}
 .stat-card:hover{box-shadow:var(--shm);transform:translateY(-2px)}
 .stat-card:hover::after{opacity:1}
 .stat-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px}
@@ -332,8 +332,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* Hero Banner */
 .hero{background:linear-gradient(135deg,#0F172A 0%,#1E3A5F 50%,#172554 100%);border-radius:var(--rxxl);padding:24px 20px;color:#fff;margin-bottom:18px;position:relative;overflow:hidden;box-shadow:0 8px 32px rgba(15,23,42,.25)}
-.hero::before{content:'';position:absolute;width:260px;height:260px;background:radial-gradient(circle,rgba(232,56,13,.3) 0%,transparent 70%);right:-60px;top:-60px}
-.hero::after{content:'';position:absolute;width:160px;height:160px;background:radial-gradient(circle,rgba(37,99,235,.15) 0%,transparent 70%);left:-30px;bottom:-40px}
+.hero::before{content:'';position:absolute;width:260px;height:260px;background:radial-gradient(circle,rgba(232,56,13,.3) 0%,transparent 70%);right:-60px;top:-60px;pointer-events:none}
+.hero::after{content:'';position:absolute;width:160px;height:160px;background:radial-gradient(circle,rgba(37,99,235,.15) 0%,transparent 70%);left:-30px;bottom:-40px;pointer-events:none}
 .hero-greet{font-size:12px;opacity:.6;margin-bottom:2px;font-weight:500;letter-spacing:.3px}
 .hero-name{font-family:var(--fh);font-size:24px;font-weight:700;margin-bottom:14px}
 .hero-chips{display:flex;gap:8px;flex-wrap:wrap}
@@ -425,8 +425,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .success-title{font-family:var(--fh);font-size:26px;font-weight:700;margin-bottom:5px}
 .success-sub{font-size:13px;color:var(--muted);margin-bottom:28px}
 .token-card{background:linear-gradient(135deg,#0F172A 0%,#1E3A5F 50%,var(--blue2) 100%);border-radius:var(--rxxl);padding:28px 24px;color:#fff;margin-bottom:20px;position:relative;overflow:hidden;box-shadow:0 12px 40px rgba(15,23,42,.3)}
-.token-card::before{content:'';position:absolute;width:200px;height:200px;background:rgba(255,255,255,.04);border-radius:50%;top:-70px;right:-50px}
-.token-card::after{content:'';position:absolute;width:100px;height:100px;background:radial-gradient(circle,rgba(232,56,13,.15) 0%,transparent 70%);bottom:-20px;left:20px}
+.token-card::before{content:'';position:absolute;width:200px;height:200px;background:rgba(255,255,255,.04);border-radius:50%;top:-70px;right:-50px;pointer-events:none}
+.token-card::after{content:'';position:absolute;width:100px;height:100px;background:radial-gradient(circle,rgba(232,56,13,.15) 0%,transparent 70%);bottom:-20px;left:20px;pointer-events:none}
 .token-label{font-size:10px;opacity:.55;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px}
 .token-num{font-family:var(--fh);font-size:80px;font-weight:700;line-height:.9;margin-bottom:14px;color:var(--brand)}
 .token-info{font-size:12px;opacity:.7;margin-bottom:3px}
@@ -439,8 +439,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* Wallet Screen */
 .wallet-hero{background:linear-gradient(135deg,#0F172A 0%,#1E3A5F 50%,#172554 100%);border-radius:var(--rxxl);padding:28px 22px;color:#fff;margin-bottom:18px;position:relative;overflow:hidden;box-shadow:0 8px 32px rgba(15,23,42,.25)}
-.wallet-hero::before{content:'';position:absolute;width:300px;height:300px;background:rgba(255,255,255,.03);border-radius:50%;top:-140px;right:-80px}
-.wallet-hero::after{content:'';position:absolute;width:120px;height:120px;background:radial-gradient(circle,rgba(232,56,13,.2) 0%,transparent 70%);bottom:-20px;left:20px}
+.wallet-hero::before{content:'';position:absolute;width:300px;height:300px;background:rgba(255,255,255,.03);border-radius:50%;top:-140px;right:-80px;pointer-events:none}
+.wallet-hero::after{content:'';position:absolute;width:120px;height:120px;background:radial-gradient(circle,rgba(232,56,13,.2) 0%,transparent 70%);bottom:-20px;left:20px;pointer-events:none}
 .wallet-hero-label{font-size:10px;opacity:.5;margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase;font-weight:600}
 .wallet-hero-amount{font-family:var(--fh);font-size:44px;font-weight:700;margin-bottom:4px;line-height:1}
 .wallet-hero-id{font-size:11px;opacity:.45;margin-bottom:16px}
@@ -489,7 +489,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* Profile */
 .profile-hero{background:linear-gradient(135deg,var(--brand) 0%,#B02A08 50%,var(--brand2) 100%);border-radius:var(--rxxl);padding:24px;color:#fff;display:flex;align-items:center;gap:16px;margin-bottom:16px;box-shadow:0 8px 24px rgba(232,56,13,.25);position:relative;overflow:hidden}
-.profile-hero::before{content:'';position:absolute;width:160px;height:160px;background:rgba(255,255,255,.06);border-radius:50%;top:-50px;right:-30px}
+.profile-hero::before{content:'';position:absolute;width:160px;height:160px;background:rgba(255,255,255,.06);border-radius:50%;top:-50px;right:-30px;pointer-events:none}
 .profile-avatar{width:66px;height:66px;background:rgba(255,255,255,.2);backdrop-filter:blur(8px);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;font-family:var(--fh);flex-shrink:0;border:2px solid rgba(255,255,255,.3)}
 .profile-name{font-family:var(--fh);font-size:19px;font-weight:700;margin-bottom:2px}
 .profile-id{font-size:11px;opacity:.65}
@@ -509,8 +509,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 /* ═══════════════════════════════
    VENDOR / KITCHEN
 ═══════════════════════════════ */
-.vendor-header{background:linear-gradient(135deg,#0F172A 0%,#1a2540 50%,#0F172A 100%);padding:20px 16px;color:#fff;position:relative;overflow:hidden}
-.vendor-header::before{content:'';position:absolute;width:200px;height:200px;background:radial-gradient(circle,rgba(232,56,13,.12) 0%,transparent 70%);top:-80px;right:-40px}
+.vendor-header{background:linear-gradient(135deg,#0F172A 0%,#1a2540 50%,#0F172A 100%);padding:20px 16px;color:#fff;position:relative}
+.vendor-header::before{content:'';position:absolute;width:200px;height:200px;background:radial-gradient(circle,rgba(232,56,13,.12) 0%,transparent 70%);top:-80px;right:-40px;pointer-events:none;z-index:0}
 .vendor-title{font-family:var(--fh);font-size:22px;font-weight:700;margin-bottom:2px}
 .vendor-sub{font-size:11px;opacity:.45;margin-bottom:16px}
 .vendor-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -548,8 +548,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 /* ═══════════════════════════════
    ADMIN DASHBOARD
 ═══════════════════════════════ */
-.admin-header{background:linear-gradient(135deg,#0F172A 0%,#1a0a2e 50%,#0F172A 100%);padding:22px 18px;color:#fff;position:relative;overflow:hidden}
-.admin-header::before{content:'';position:absolute;width:180px;height:180px;background:radial-gradient(circle,rgba(124,58,237,.15) 0%,transparent 70%);top:-60px;right:-30px}
+.admin-header{background:linear-gradient(135deg,#0F172A 0%,#1a0a2e 50%,#0F172A 100%);padding:22px 18px;color:#fff;position:relative}
+.admin-header::before{content:'';position:absolute;width:180px;height:180px;background:radial-gradient(circle,rgba(124,58,237,.15) 0%,transparent 70%);top:-60px;right:-30px;pointer-events:none;z-index:0}
 .admin-title{font-family:var(--fh);font-size:24px;font-weight:700;margin-bottom:3px}
 .admin-sub{font-size:11px;opacity:.45}
 .admin-nav{display:flex;gap:2px;overflow-x:auto;padding:0 14px;background:var(--white);border-bottom:1px solid var(--border);scrollbar-width:none;flex-shrink:0;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
@@ -2558,7 +2558,15 @@ async function processTopUp(amount) {
       })
     });
 
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { 
+      toast('ICICI payment server is temporarily unavailable. Please try again in a few minutes.', 'error', '🏦');
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      btn.innerHTML = `Pay ₹${amount.toLocaleString('en-IN')} →`;
+      localStorage.removeItem('fh-pending-topup');
+      return;
+    }
     
     if (data.success && data.redirectUrl) {
       // Store merchantTxnNo for verification after redirect
