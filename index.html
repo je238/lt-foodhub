@@ -167,7 +167,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .splash-title{font-family:var(--fh);font-size:32px;font-weight:700;color:#fff;margin-bottom:6px}
 .splash-sub{font-size:13px;color:rgba(255,255,255,.4);margin-bottom:40px}
 .splash-bar{width:180px;height:3px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin:0 auto}
-.splash-fill{height:100%;background:var(--brand);border-radius:4px;animation:loadBar 1.8s ease forwards}
+.splash-fill{height:100%;background:var(--brand);border-radius:4px;animation:loadBar 1s ease forwards}
 @keyframes loadBar{0%{width:0}60%{width:70%}100%{width:100%}}
 
 /* ─── LOGIN ─── */
@@ -862,8 +862,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
   <!-- HOME TAB -->
   <div class="page scroll" id="tab-home">
     <div class="hero">
-      <div class="hero-greet" id="h-greet">Good afternoon,</div>
-      <div class="hero-name" id="h-name">Rajesh Kumar 👋</div>
+      <div class="hero-name" id="h-name">Employee 👋</div>
       <div class="hero-chips">
 
         <span class="hero-chip" id="h-orders-count">📋 0 orders today</span>
@@ -947,7 +946,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-val" id="st-orders">0</div><div class="stat-sub stat-up">This month</div></div>
-      <div class="stat-card"><div class="stat-label">Total Spent</div><div class="stat-val" id="st-saved" style="font-size:18px">₹0</div><div class="stat-sub">This month</div></div>
+      <div class="stat-card"><div class="stat-label">Wallet Balance</div><div class="stat-val" id="st-saved" style="font-size:18px">₹0</div><div class="stat-sub">Current</div></div>
     </div>
     <div class="card">
       <div class="card-title">⚙️ Preferences</div>
@@ -1085,14 +1084,6 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div style="display:flex;justify-content:space-between;margin-bottom:6px">
         <div style="font-size:13px;color:var(--mid)">GST (5%)</div>
         <div style="font-size:13px;font-weight:600" id="inv-gst">₹0</div>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <div style="font-size:12px;color:var(--muted)">Platform fee</div>
-        <div style="font-size:12px;font-weight:600" id="inv-platform">₹0</div>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-        <div style="font-size:11px;color:var(--muted)">GST on platform fee (18%)</div>
-        <div style="font-size:11px;font-weight:500;color:var(--muted)" id="inv-platform-gst">₹0</div>
       </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:13px;color:var(--mid)">Payment</div>
@@ -1312,7 +1303,7 @@ const FALLBACK_EMPLOYEES = {};
 // ═════════════════════════════════════
 async function init() {
   await loadData();
-  await new Promise(r => setTimeout(r, 1800));
+  await new Promise(r => setTimeout(r, 400));
   document.getElementById('s-loading')?.classList.remove('active');
   goScreen('s-login');
 }
@@ -1678,6 +1669,19 @@ async function verifyEmailOTP() {
       if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
       const {data: freshCans} = await sb.from('canteens').select('*').order('id');
       if (freshCans?.length) S.canteens = freshCans;
+      // Load orders + transactions so history is available immediately
+      try {
+        const [{data: ordData}, {data: txnData}] = await Promise.all([
+          sb.from('orders').select('*, order_items(*)').eq('employee_id', S.user.id).order('created_at', {ascending: false}).limit(50),
+          sb.from('wallet_transactions').select('*').eq('employee_id', S.user.id).order('created_at', {ascending: false}).limit(30)
+        ]);
+        if (ordData?.length) S.orders = ordData.map(o => ({...o, items: o.order_items || []}));
+        if (txnData?.length) S.txns = txnData.map(t => ({
+          type: t.type, icon: t.type === 'credit' ? '💳' : '🍽️',
+          name: t.description || (t.type === 'credit' ? 'Wallet Top-up' : 'Order'),
+          date: t.created_at, amount: parseFloat(t.amount) || 0
+        }));
+      } catch(e) {}
     }
 
     renderHome();
@@ -1833,6 +1837,19 @@ async function doLogin() {
         if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
         const { data: freshCans } = await sb.from('canteens').select('*').order('id');
         if (freshCans?.length) S.canteens = freshCans;
+        // Load orders + transactions
+        try {
+          const [{data: ordData}, {data: txnData}] = await Promise.all([
+            sb.from('orders').select('*, order_items(*)').eq('employee_id', emp.id).order('created_at', {ascending: false}).limit(50),
+            sb.from('wallet_transactions').select('*').eq('employee_id', emp.id).order('created_at', {ascending: false}).limit(30)
+          ]);
+          if (ordData?.length) S.orders = ordData.map(o => ({...o, items: o.order_items || []}));
+          if (txnData?.length) S.txns = txnData.map(t => ({
+            type: t.type, icon: t.type === 'credit' ? '💳' : '🍽️',
+            name: t.description || (t.type === 'credit' ? 'Wallet Top-up' : 'Order'),
+            date: t.created_at, amount: parseFloat(t.amount) || 0
+          }));
+        } catch(e) {}
       }
       renderHome();
       goScreen('s-home');
@@ -1861,8 +1878,6 @@ function logout() {
 function renderHome() {
   if (!S.user) return;
   const hr = new Date().getHours();
-  const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
-  setEl('h-greet', greet + ',');
   setEl('h-name', S.user.name + ' 👋');
   setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
   setEl('nav-av', S.user.initials || initials(S.user.name));
@@ -2045,13 +2060,10 @@ function toggleVegFilter(el) {
 // CART
 // ═════════════════════════════════════
 function addCart(id) {
-  const totalQty = S.cart.reduce((s,i) => s+i.qty, 0);
-  if (totalQty >= 5) { toast('Max 5 items per order', 'error', '🚫'); return; }
-  // Multi-counter ordering is supported — no canteen restriction
   const item = S.menu.find(m => m.id === id);
   if (!item) return;
-  // Multi-counter allowed — just add to cart from any counter
   const ex = S.cart.find(c => c.id === id);
+  if (ex && ex.qty >= 5) { toast('Max 5 of same item allowed', 'warn', '⚠️'); return; }
   if (ex) ex.qty++;
   else S.cart.push({...item, qty:1});
   updateCartFloat();
@@ -2061,7 +2073,9 @@ function addCart(id) {
 function chgQty(id, d) {
   const i = S.cart.findIndex(c => c.id === id);
   if (i === -1) return;
-  S.cart[i].qty += d;
+  const newQty = S.cart[i].qty + d;
+  if (newQty > 5) { toast('Max 5 of same item allowed', 'warn', '⚠️'); return; }
+  S.cart[i].qty = newQty;
   if (S.cart[i].qty <= 0) S.cart.splice(i, 1);
   updateCartFloat();
   renderMenuItemCtrl(id);
@@ -2091,26 +2105,23 @@ function clearCart() {
 function updateCartFloat() {
   const tot = S.cart.reduce((s,i) => s+i.qty, 0);
   const price = S.cart.reduce((s,i) => s + i.price*i.qty, 0);
+  const fees = calcFees(price);
   const cf = document.getElementById('cart-float');
   if (!cf) return;
   if (tot === 0) { cf.classList.add('gone'); return; }
   cf.classList.remove('gone');
   setEl('cf-count', tot);
   setEl('cf-sub', tot + ' item' + (tot!==1?'s':''));
-  setEl('cf-price', '₹'+price);
+  setEl('cf-price', '₹'+Math.round(fees.grandTotal));
 }
 
-// Fee calculation constants
-const PLATFORM_FEE = 3;       // ₹3 flat platform fee
-const FOOD_GST_RATE = 0.05;   // 5% GST on food
-const PLATFORM_GST_RATE = 0.18; // 18% GST on platform fee
+// Fee calculation — food cost + 5% GST only
+const FOOD_GST_RATE = 0.05;
 
 function calcFees(itemTotal) {
   const foodGst = Math.round(itemTotal * FOOD_GST_RATE * 100) / 100;
-  const platformFee = PLATFORM_FEE;
-  const platformGst = Math.round(platformFee * PLATFORM_GST_RATE * 100) / 100;
-  const grandTotal = Math.round((itemTotal + foodGst + platformFee + platformGst) * 100) / 100;
-  return { itemTotal, foodGst, platformFee, platformGst, grandTotal };
+  const grandTotal = Math.round((itemTotal + foodGst) * 100) / 100;
+  return { itemTotal, foodGst, grandTotal };
 }
 
 function renderCart() {
@@ -2141,8 +2152,6 @@ function renderCart() {
   if(sumEl) sumEl.innerHTML = `
     <div class="summary-row"><span>Items (${S.cart.reduce((s,i)=>s+i.qty,0)})</span><span>₹${iTotal}</span></div>
     <div class="summary-row"><span>GST (5%)</span><span>₹${fees.foodGst.toFixed(2)}</span></div>
-    <div class="summary-row" style="font-size:12px"><span>Platform fee</span><span>₹${fees.platformFee.toFixed(2)}</span></div>
-    <div class="summary-row" style="font-size:11px;color:var(--muted)"><span>GST on platform fee (18%)</span><span>₹${fees.platformGst.toFixed(2)}</span></div>
     <div class="summary-row total"><span>To Pay</span><span>₹${fees.grandTotal.toFixed(2)}</span></div>`;
 }
 
@@ -2367,12 +2376,9 @@ async function placeOrder() {
 
     try {
       const invFees = calcFees(iTotal);
-      const platFees = PLATFORM_FEE + Math.round(PLATFORM_FEE * PLATFORM_GST_RATE * 100) / 100;
-      const subtotalFromPaid = iTotal > 0 ? iTotal : Math.round((totalPaid - platFees) / (1 + FOOD_GST_RATE));
+      const subtotalFromPaid = iTotal > 0 ? iTotal : Math.round(totalPaid / (1 + FOOD_GST_RATE));
       setEl('inv-subtotal', '₹' + Math.round(subtotalFromPaid));
       setEl('inv-gst', '₹' + invFees.foodGst.toFixed(2));
-      setEl('inv-platform', '₹' + invFees.platformFee.toFixed(2));
-      setEl('inv-platform-gst', '₹' + invFees.platformGst.toFixed(2));
       setEl('inv-total', '₹' + totalPaid);
     } catch(e) {}
 
@@ -5619,7 +5625,7 @@ init = async function(){
   // Try to restore session — loadSession() now only sets S._pendingSession
   if(loadSession() && S._pendingSession){
     await loadData();
-    await new Promise(r=>setTimeout(r,1800));
+    await new Promise(r=>setTimeout(r,300));
     document.getElementById('s-loading')?.classList.remove('active');
     const sess = S._pendingSession;
     S._pendingSession = null;
@@ -5780,10 +5786,8 @@ function showPOS() {
           <span>GST (5%)</span><span id="pos-gst">₹0</span>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">
-          <span>Platform fee</span><span id="pos-pfee">₹0</span>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">
-          <span>GST on platform (18%)</span><span id="pos-pgst">₹0</span>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;color:var(--brand);margin-bottom:12px">
           <span>Total</span><span id="pos-total">₹0</span>
@@ -5829,8 +5833,6 @@ function renderPOSCart() {
   setEl('pos-cart-count', `(${posCart.reduce((s,i)=>s+i.qty,0)} items)`);
   setEl('pos-subtotal', '₹' + subtotal);
   setEl('pos-gst', '₹' + fees.foodGst.toFixed(2));
-  setEl('pos-pfee', '₹' + fees.platformFee.toFixed(2));
-  setEl('pos-pgst', '₹' + fees.platformGst.toFixed(2));
   setEl('pos-total', '₹' + fees.grandTotal.toFixed(2));
   const el = document.getElementById('pos-cart-list');
   if (!el) return;
@@ -5928,8 +5930,6 @@ function printPOSReceipt(token, customer, method, subtotal, fees, items) {
     <div class="divider"></div>
     <div class="row"><span>Subtotal</span><span>₹${subtotal}</span></div>
     <div class="row"><span>GST 5%</span><span>₹${fees.foodGst.toFixed(2)}</span></div>
-    <div class="row sm"><span>Platform fee</span><span>₹${fees.platformFee.toFixed(2)}</span></div>
-    <div class="row sm"><span>GST on platform 18%</span><span>₹${fees.platformGst.toFixed(2)}</span></div>
     <div class="divider"></div>
     <div class="row"><strong>TOTAL</strong><strong>₹${fees.grandTotal.toFixed(2)}</strong></div>
     <div class="divider"></div>
@@ -6555,7 +6555,7 @@ function showRefundPolicy(){
       <p style="margin-bottom:12px">You may cancel your order only if its status is <strong>New</strong>. Once the order is being prepared or ready, cancellation is not possible.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">2. Refund on Cancellation</p>
-      <p style="margin-bottom:12px">Upon successful cancellation, the full amount paid (including GST and platform fee) will be refunded to your FoodHub Wallet instantly. No deductions are made.</p>
+      <p style="margin-bottom:12px">Upon successful cancellation, the full amount paid (including GST) will be refunded to your FoodHub Wallet instantly. No deductions are made.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">3. Wallet Top-up Refunds</p>
       <p style="margin-bottom:12px">Wallet top-ups are non-refundable to bank account. The balance remains in your FoodHub Wallet and can be used for future orders.</p>
