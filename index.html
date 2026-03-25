@@ -99,6 +99,12 @@ html, body {
 
 /* RESET & BASE */
 body{font-family:var(--f);background:var(--light);color:var(--dark);min-height:100vh;overflow-x:hidden;font-size:14px;line-height:1.5}
+/* Subtle background pattern */
+.page{padding:14px 14px 90px;max-width:520px;width:100%;margin:0 auto;position:relative}
+
+/* Hero entrance */
+.hero{animation:slideUp .5s var(--ease)}
+.search-bar{animation:slideUp .5s var(--ease) .1s backwards}
 h1,h2,h3,h4,h5{font-family:var(--fh)}
 button{cursor:pointer;font-family:var(--f);border:none;background:none;outline:none}
 input,select,textarea{font-family:var(--f);outline:none}
@@ -218,7 +224,6 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .bni-badge{position:absolute;top:2px;right:calc(50% - 16px);background:var(--brand);color:#fff;font-size:9px;font-weight:800;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;line-height:14px;border:1.5px solid #fff}
 
 /* ─── PAGE ─── */
-.page{padding:14px 14px 90px;max-width:520px;width:100%;margin:0 auto}
 .page-wide{padding:0 0 90px}
 /* Vendor / Kitchen / Admin scroll areas */
 #vendor-body,#kds-body,#admin-body{padding-bottom:60px}
@@ -354,27 +359,49 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .canteen-card.active .canteen-name{color:var(--brand)}
 
 /* Menu Items */
-.menu-item{background:var(--white);border-radius:var(--rl);padding:14px;display:flex;align-items:center;gap:12px;box-shadow:var(--sh);border:1px solid rgba(226,232,240,.6);margin-bottom:10px;transition:all .25s var(--ease);position:relative}
-.menu-item:hover{box-shadow:var(--shm);transform:translateY(-2px);border-color:rgba(232,56,13,.15)}
-.menu-item.unavailable{opacity:.5}
-.menu-emoji{width:68px;height:68px;border-radius:14px;background:linear-gradient(145deg,var(--light2),var(--light));display:flex;align-items:center;justify-content:center;font-size:34px;flex-shrink:0;position:relative}
-.unavail-badge{position:absolute;inset:0;background:rgba(0,0,0,.5);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;letter-spacing:.3px}
-.menu-body{flex:1;min-width:0}
-.menu-name{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;margin-bottom:3px}
-.menu-desc{font-size:11px;color:var(--muted);margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.menu-footer{display:flex;align-items:center;justify-content:space-between}
-.menu-price{font-weight:800;font-size:15px;color:var(--dark);font-family:var(--fh)}
+/* ─── FOOD IMAGES & ZOMATO-STYLE MENU ─── */
+.menu-item{background:var(--white);border-radius:16px;padding:0;display:flex;align-items:stretch;gap:0;box-shadow:var(--sh);border:1px solid rgba(226,232,240,.5);margin-bottom:12px;transition:all .3s var(--ease);position:relative;overflow:hidden}
+.menu-item:hover{box-shadow:var(--shm);transform:translateY(-2px)}
+.menu-item:active{transform:scale(.98)}
+.menu-item.unavailable{opacity:.45}
+.menu-img-wrap{width:110px;min-height:110px;flex-shrink:0;position:relative;overflow:hidden;background:linear-gradient(145deg,#f1f5f9,#e2e8f0)}
+.menu-img-wrap img{width:100%;height:100%;object-fit:cover;transition:transform .4s var(--ease)}
+.menu-item:hover .menu-img-wrap img{transform:scale(1.08)}
+.menu-img-emoji{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px;background:linear-gradient(145deg,var(--light2),var(--light))}
+.menu-body{flex:1;padding:12px 14px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+.menu-name{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:6px;margin-bottom:4px;line-height:1.3}
+.menu-desc{font-size:11px;color:var(--muted);margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4}
+.menu-footer{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.menu-price{font-weight:800;font-size:16px;color:var(--dark);font-family:var(--fh)}
 .menu-subsidy{font-size:10px;color:var(--green2);font-weight:600;margin-top:1px}
 .menu-rating{font-size:10px;color:var(--amber);font-weight:600}
-.add-btn{background:var(--brand);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;transition:all .25s var(--ease);font-family:var(--f);box-shadow:0 2px 8px rgba(232,56,13,.2)}
-.add-btn:hover{background:var(--brand2);transform:scale(1.05);box-shadow:0 4px 14px rgba(232,56,13,.3)}
-.add-btn:active{transform:scale(.97)}
-.qty-ctrl{display:flex;align-items:center;gap:8px}
-.qty-btn{width:30px;height:30px;border-radius:9px;border:none;background:var(--brand-l);color:var(--brand);font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s}
+.unavail-badge{position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;letter-spacing:.5px;text-transform:uppercase;backdrop-filter:blur(2px)}
+.bestseller-tag{position:absolute;top:8px;left:8px;background:linear-gradient(135deg,#E8380D,#FF6B3D);color:#fff;font-size:9px;font-weight:700;padding:3px 8px;border-radius:6px;letter-spacing:.3px;z-index:2;box-shadow:0 2px 6px rgba(232,56,13,.3)}
+.new-tag{position:absolute;top:8px;left:8px;background:linear-gradient(135deg,var(--blue-a),#3B82F6);color:#fff;font-size:9px;font-weight:700;padding:3px 8px;border-radius:6px;z-index:2}
+
+/* Stagger animation for menu items */
+@keyframes menuFadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.menu-item{animation:menuFadeIn .4s var(--ease) backwards}
+.menu-item:nth-child(1){animation-delay:0s}
+.menu-item:nth-child(2){animation-delay:.05s}
+.menu-item:nth-child(3){animation-delay:.1s}
+.menu-item:nth-child(4){animation-delay:.15s}
+.menu-item:nth-child(5){animation-delay:.2s}
+.menu-item:nth-child(6){animation-delay:.25s}
+.menu-item:nth-child(7){animation-delay:.3s}
+.menu-item:nth-child(8){animation-delay:.35s}
+
+/* Remove old emoji-only styles */
+.menu-emoji{display:none}
+
+/* Add to cart button */
+.add-btn{background:var(--brand);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s var(--ease);font-family:var(--f);box-shadow:0 2px 8px rgba(232,56,13,.2)}
+.add-btn:hover{background:var(--brand2)}
+.add-btn:active{transform:scale(.95)}
+.qty-ctrl{display:flex;align-items:center;gap:6px}
+.qty-btn{width:28px;height:28px;border-radius:8px;border:none;background:var(--brand-l);color:var(--brand);font-size:15px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s}
 .qty-btn:hover{background:var(--brand);color:#fff}
-.qty-num{font-weight:800;font-size:14px;min-width:22px;text-align:center;color:var(--dark)}
-.bestseller-tag{position:absolute;top:10px;right:10px;background:var(--amber);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:6px;letter-spacing:.3px}
-.new-tag{position:absolute;top:10px;right:10px;background:var(--blue-a);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:6px}
+.qty-num{font-weight:800;font-size:13px;min-width:20px;text-align:center;color:var(--dark)}
 
 /* Floating Cart */
 .cart-float{position:fixed;bottom:74px;left:14px;right:14px;max-width:492px;margin:0 auto;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#0F172A 0%,#1E293B 100%);color:#fff;border-radius:18px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 12px 40px rgba(15,23,42,.4);cursor:pointer;animation:slideUp .35s var(--ease-bounce);z-index:50;width:calc(100% - 28px);border:1px solid rgba(255,255,255,.08)}
@@ -638,16 +665,28 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .notif-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
 
 /* ─── SEARCH ─── */
-.search-bar{display:flex;align-items:center;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:10px 13px;gap:9px;margin-bottom:14px;transition:.2s}
-.search-bar:focus-within{border-color:var(--brand);background:var(--brand-l)}
-.search-bar input{flex:1;font-size:14px;color:var(--dark);background:none;border:none}
+.search-bar{display:flex;align-items:center;background:var(--white);border:2px solid var(--border);border-radius:14px;padding:12px 15px;gap:10px;margin-bottom:16px;transition:all .3s var(--ease);box-shadow:var(--sh)}
+.search-bar:focus-within{border-color:var(--brand);background:var(--brand-l);box-shadow:0 0 0 3px rgba(232,56,13,.1)}
+.search-bar input{flex:1;font-size:15px;color:var(--dark);background:none;border:none}
 .search-bar input::placeholder{color:var(--muted)}
-.search-icon{font-size:16px;color:var(--muted);flex-shrink:0}
+.search-icon{font-size:18px;color:var(--muted);flex-shrink:0}
 
 /* ─── MISC ─── */
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.section-title{font-family:var(--fh);font-weight:700;font-size:16px}
-.section-action{font-size:12px;color:var(--brand);font-weight:700;cursor:pointer}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-family:var(--fh);font-weight:700;font-size:18px}
+.section-action{font-size:12px;color:var(--brand);font-weight:700;cursor:pointer;transition:color .2s}
+.section-action:hover{color:var(--brand2)}
+
+/* Canteen card entrance */
+@keyframes canteenPop{from{opacity:0;transform:scale(.9) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.canteen-card{animation:canteenPop .4s var(--ease-bounce) backwards}
+.canteen-card:nth-child(1){animation-delay:0s}
+.canteen-card:nth-child(2){animation-delay:.06s}
+.canteen-card:nth-child(3){animation-delay:.12s}
+.canteen-card:nth-child(4){animation-delay:.18s}
+.canteen-card:nth-child(5){animation-delay:.24s}
+.canteen-card:nth-child(6){animation-delay:.3s}
+.canteen-card:nth-child(7){animation-delay:.36s}
 .divider-text{display:flex;align-items:center;gap:12px;margin:14px 0;color:var(--muted);font-size:12px}
 .divider-text::before,.divider-text::after{content:'';flex:1;height:1px;background:var(--border)}
 .color-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
@@ -1875,6 +1914,64 @@ function selCat(cat) {
   renderMenu();
 }
 
+// ═══════════════════════════════════════════
+// FOOD IMAGE MAPPING — Zomato-style dish photos
+// ═══════════════════════════════════════════
+const _FOOD_IMG_MAP = {
+  'biryani':'photo-1563379091339-03b21ab4a4f8','pulao':'photo-1645177628172-a94c1f96e6db',
+  'fried rice':'photo-1603133872878-684f208fb84b','rice':'photo-1516684732162-798a0062be99',
+  'paneer':'photo-1631452180519-c014fe946bc7','butter':'photo-1603894584373-5ac82b2ae398',
+  'dal':'photo-1546833999-b9f581a1996d','lentil':'photo-1546833999-b9f581a1996d',
+  'naan':'photo-1565557623262-b51c2513a641','roti':'photo-1565557623262-b51c2513a641','chapati':'photo-1565557623262-b51c2513a641',
+  'dosa':'photo-1630383249896-424e482df921','idli':'photo-1589301760014-d929f3979dbc',
+  'vada':'photo-1626132647523-66f5bf380027','sambar':'photo-1610192244261-3f33de3f55e4',
+  'samosa':'photo-1601050690117-94f5f6fa8bd7','pakora':'photo-1626082927389-6cd097cdc6ec',
+  'chaat':'photo-1606491956689-2ea866880049','pani puri':'photo-1625398407796-82650a8c135f',
+  'chole':'photo-1585937421612-70a008356fbe','rajma':'photo-1585937421612-70a008356fbe',
+  'curry':'photo-1455619452474-d2be8b1e70cd','masala':'photo-1455619452474-d2be8b1e70cd',
+  'tikka':'photo-1599487488170-d11ec9c172f0','tandoori':'photo-1599487488170-d11ec9c172f0',
+  'kebab':'photo-1603360946369-dc9bb6258143','korma':'photo-1574484284002-952d92456975',
+  'noodle':'photo-1569718212165-3a8278d5f624','chow':'photo-1569718212165-3a8278d5f624',
+  'pasta':'photo-1621996346565-e3dbc646d9a9','spaghetti':'photo-1621996346565-e3dbc646d9a9',
+  'pizza':'photo-1565299624946-b28f40a0ae38','burger':'photo-1568901346375-23c9450c58cd',
+  'sandwich':'photo-1528735602780-2552fd46c7af','wrap':'photo-1626700051175-6818013e1d4f',
+  'soup':'photo-1547592166-23ac45744acd','salad':'photo-1512621776951-a57141f2eefd',
+  'momos':'photo-1625220194771-7ebdea0b70b9','thali':'photo-1596797038530-2c107229654b',
+  'uttapam':'photo-1630383249896-424e482df921','upma':'photo-1630383249896-424e482df921',
+  'poha':'photo-1613292443284-8d10ef9383fe','paratha':'photo-1626132647523-66f5bf380027',
+  'bhaji':'photo-1606491956689-2ea866880049','pav':'photo-1606491956689-2ea866880049',
+  'coffee':'photo-1509042239860-f550ce710b93','tea':'photo-1571934811356-5cc061b6821f',
+  'chai':'photo-1571934811356-5cc061b6821f','lassi':'photo-1626203395776-ffd2e0700643',
+  'juice':'photo-1534353473418-4cfa6c56fd38','smoothie':'photo-1505252585461-04db1eb84625',
+  'milkshake':'photo-1572490122747-3968b75cc699','cold coffee':'photo-1461023058943-07fcbe16d735',
+  'ice cream':'photo-1488900128323-21503983a07e','kulfi':'photo-1488900128323-21503983a07e',
+  'gulab jamun':'photo-1666190053192-8c2cae4d3379','sweet':'photo-1666190053192-8c2cae4d3379',
+  'raita':'photo-1601050690117-94f5f6fa8bd7','curd':'photo-1601050690117-94f5f6fa8bd7',
+  'khichdi':'photo-1645177628172-a94c1f96e6db','puliyogare':'photo-1645177628172-a94c1f96e6db',
+  'bisibele':'photo-1645177628172-a94c1f96e6db','lemon':'photo-1534353473418-4cfa6c56fd38',
+  'manchurian':'photo-1569718212165-3a8278d5f624','gobi':'photo-1631452180519-c014fe946bc7',
+  'aloo':'photo-1585937421612-70a008356fbe','bhath':'photo-1645177628172-a94c1f96e6db',
+  'papad':'photo-1601050690117-94f5f6fa8bd7','pickle':'photo-1601050690117-94f5f6fa8bd7',
+  'chatni':'photo-1601050690117-94f5f6fa8bd7','chutney':'photo-1601050690117-94f5f6fa8bd7',
+  'rasgulla':'photo-1666190053192-8c2cae4d3379','jalebi':'photo-1666190053192-8c2cae4d3379',
+  'puri':'photo-1565557623262-b51c2513a641','bhatura':'photo-1565557623262-b51c2513a641',
+  'fish':'photo-1580476262798-bddd9f4b7369','chicken':'photo-1603133872878-684f208fb84b',
+  'mutton':'photo-1545247181-516773cae754','egg':'photo-1482049016688-2d3e1b311543',
+  'omelette':'photo-1482049016688-2d3e1b311543','panini':'photo-1528735602780-2552fd46c7af',
+  'fries':'photo-1573080496219-bb080dd4f877','chips':'photo-1573080496219-bb080dd4f877',
+  'water':'photo-1548839140-29a749e1cf4d','soda':'photo-1534353473418-4cfa6c56fd38',
+  'cake':'photo-1578985545062-69928b1d9587','brownie':'photo-1578985545062-69928b1d9587',
+  'cookie':'photo-1499636136210-6f4ee915583e','bread':'photo-1565557623262-b51c2513a641'
+};
+function _getFoodImg(name, emoji) {
+  if (!name) return '';
+  const n = name.toLowerCase();
+  for (const [key, photoId] of Object.entries(_FOOD_IMG_MAP)) {
+    if (n.includes(key)) return `https://images.unsplash.com/${photoId}?w=220&h=220&fit=crop&q=75`;
+  }
+  return '';
+}
+
 function renderMenu(searchQuery) {
   // // removed debug log
   let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
@@ -1900,13 +1997,14 @@ function renderMenu(searchQuery) {
     const youPay = Math.max(0, m.price - sub);
     const stock = S.inventory[m.id] ?? m.stock ?? 99;
     const avail = m.is_available !== false && stock > 0;
+    const imgUrl = _getFoodImg(m.name, m.emoji);
     return `
     <div class="menu-item${!avail?' unavailable':''}">
       ${m.is_bestseller ? '<div class="bestseller-tag">🔥 BESTSELLER</div>' : ''}
-      <div class="menu-emoji">
-        ${m.emoji||'🍽️'}
-        ${!avail ? '<div class="unavail-badge">UNAVAILABLE</div>' : ''}
-        ${stock > 0 && stock <= 5 ? `<div style="position:absolute;bottom:-4px;right:-4px;background:var(--amber);color:#fff;font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px">${stock} left</div>` : ''}
+      <div class="menu-img-wrap">
+        ${imgUrl ? `<img src="${imgUrl}" alt="${m.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${m.emoji||'🍽️'}</div>'">` : `<div class="menu-img-emoji">${m.emoji||'🍽️'}</div>`}
+        ${!avail ? '<div class="unavail-badge">SOLD OUT</div>' : ''}
+        ${stock > 0 && stock <= 5 ? `<div style="position:absolute;bottom:6px;left:6px;background:var(--amber);color:#fff;font-size:8px;font-weight:700;padding:2px 6px;border-radius:4px;z-index:2">${stock} left</div>` : ''}
       </div>
       <div class="menu-body">
         <div class="menu-name">
@@ -1920,8 +2018,8 @@ function renderMenu(searchQuery) {
             ${m.rating ? `<div class="menu-rating">⭐ ${m.rating} (${m.orders_count||0})</div>` : ''}
           </div>
           <div id="mc-${m.id}">
-            ${!avail ? '<div style="font-size:11px;color:var(--muted);font-weight:600">Unavailable</div>' :
-              qty === 0 ? `<button class="add-btn" onclick="addCart('${m.id}')">+ Add</button>`
+            ${!avail ? '<div style="font-size:11px;color:var(--muted);font-weight:600">Sold out</div>' :
+              qty === 0 ? `<button class="add-btn" onclick="addCart('${m.id}')">+ ADD</button>`
               : `<div class="qty-ctrl"><button class="qty-btn" onclick="chgQty('${m.id}',-1)">−</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="chgQty('${m.id}',1)">+</button></div>`}
           </div>
         </div>
