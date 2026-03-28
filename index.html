@@ -733,25 +733,25 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="login-brand"><h2>FoodHub</h2><p>Larsen &amp; Toubro — Campus Canteen</p></div>
     </div>
     <div style="font-size:11px;color:rgba(255,255,255,.4);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Select Role</div>
-    <div class="role-tabs" id="role-tabs">
+    <div class="role-tabs" id="role-tabs" style="display:none">
       <div class="role-tab active" onclick="selRole('employee',this)">👤 Employee</div>
       <div class="role-tab" onclick="selRole('vendor',this)">🍳 Vendor</div>
       <div class="role-tab" onclick="selRole('kitchen',this)">📺 Kitchen</div>
       <div class="role-tab" onclick="selRole('admin',this)">⚙️ Admin</div>
     </div>
 
-    <!-- EMPLOYEE LOGIN AREA -->
+    <!-- UNIFIED LOGIN -->
     <div id="emp-login-area">
 
-      <!-- DEFAULT: Email + Password Login -->
+      <!-- DEFAULT: Unified Login -->
       <div id="emp-main-login">
         <h2 class="login-title" style="margin-top:0">Welcome 👋</h2>
-        <p class="login-sub">Sign in with your L&T email &amp; password</p>
-        <input class="linp" type="email" id="emp-login-email" placeholder="name@larsentoubro.com" autocomplete="email" style="margin-bottom:10px"
+        <p class="login-sub">Enter your ID or email and password</p>
+        <input class="linp" type="text" id="emp-login-email" placeholder="Email or Staff ID (e.g. admin1, counter-c1)" autocomplete="username" style="margin-bottom:10px"
           onkeydown="if(event.key==='Enter')document.getElementById('emp-login-pw').focus()">
         <input class="linp" type="password" id="emp-login-pw" placeholder="Password" autocomplete="current-password" style="margin-bottom:10px"
-          onkeydown="if(event.key==='Enter')empLogin()">
-        <button class="login-btn" id="emp-login-btn" onclick="empLogin()"><span>Sign In →</span></button>
+          onkeydown="if(event.key==='Enter')unifiedLogin()">
+        <button class="login-btn" id="emp-login-btn" onclick="unifiedLogin()"><span>Sign In →</span></button>
         <div class="login-err" id="emp-login-err" style="margin-top:8px"></div>
         <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);text-align:center">
           <span style="font-size:12px;color:rgba(255,255,255,.4)">New employee? </span>
@@ -818,12 +818,10 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
     </div>
 
-    <!-- STAFF LOGIN -->
+    <!-- STAFF LOGIN (hidden — used internally by unifiedLogin) -->
     <div id="staff-login-area" style="display:none">
-      <h2 class="login-title" style="margin-top:0">Staff Login</h2>
-      <input class="linp" type="text" id="l-id" placeholder="Counter ID (e.g. counter-c1)">
-      <input class="linp" type="password" id="l-pw" placeholder="Password">
-      <button class="login-btn" onclick="doLogin()" id="login-btn"><span>Sign In →</span></button>
+      <input type="hidden" id="l-id">
+      <input type="hidden" id="l-pw">
       <div class="login-err" id="staff-login-err"></div>
     </div>
 
@@ -1776,21 +1774,12 @@ async function setNewPassword() {
       p_password: pw1
     });
     if (pwErr) {
-      // RPC failed — save plain text directly as fallback
-      const { error: directErr } = await sb.from('employees')
-        .update({ password_hash: pw1 })
-        .eq('id', _pendingEmpData.id);
-      if (directErr) {
-        err.textContent = 'Could not save password. Try again.';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
+      const { error: directErr } = await sb.from('employees').update({ password_hash: pw1 }).eq('id', _pendingEmpData.id);
+      if (directErr) { err.textContent = 'Could not save password. Try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
     } else if (pwRes && !pwRes.success) {
       err.textContent = pwRes.error || 'Could not save password.';
-      btn.classList.remove('btn-loading'); btn.disabled = false;
-      return;
+      btn.classList.remove('btn-loading'); btn.disabled = false; return;
     }
-    // Re-fetch fresh employee record
     const { data: freshEmp } = await sb.from('employees').select('*').eq('id', _pendingEmpData.id).single();
     const empToLogin = freshEmp || _pendingEmpData;
     toast('Password saved! Logging you in... 🔐', 'success', '✅');
@@ -1823,22 +1812,11 @@ async function registerEmployeeEmail() {
   btn.classList.add('btn-loading'); btn.disabled = true;
   try {
     if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-    // Check if employee already exists
     const { data: existing } = await sb.from('employees').select('id,password_hash').eq('email', email).maybeSingle();
     if (existing) {
-      if (existing.password_hash) {
-        err.textContent = 'Account exists. Please login instead.';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      } else {
-        // Exists but no password — send OTP to set password
-        _pendingEmpData = existing;
-        toast('Account found! Sending OTP to set your password... 📧', 'success', '✅');
-        _otpEmail = email;
-        await sendEmailOTP();
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
+      if (existing.password_hash) { err.textContent = 'Account exists. Please login.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+      _pendingEmpData = existing; toast('Account found! Sending OTP... 📧','success','✅');
+      _otpEmail = email; await sendEmailOTP(); btn.classList.remove('btn-loading'); btn.disabled = false; return;
     }
     const { data: result, error: rpcErr } = await sb.rpc('register_employee', {
       p_name: name, p_email: email, p_phone: phone || null
@@ -3568,7 +3546,7 @@ function renderAdminMenuItem(m) {
       <div style="position:relative;flex-shrink:0;cursor:pointer;width:52px;height:52px" onclick="showImageUploadModal('${m.id}')" title="Click to upload image">
         ${imgSrc
           ? `<img src="${imgSrc}" style="width:52px;height:52px;border-radius:10px;object-fit:cover;display:block">`
-          : `<div style="width:52px;height:52px;border-radius:10px;background:var(--light2,#F1F5F9);display:flex;align-items:center;justify-content:center;font-size:22px">${m.emoji||'🍽️'}</div>`
+          : `<div style="width:52px;height:52px;border-radius:10px;background:#F1F5F9;display:flex;align-items:center;justify-content:center;font-size:22px">${m.emoji||'🍽️'}</div>`
         }
         <div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.5);border-radius:3px;padding:1px 3px;font-size:9px;color:#fff">📷</div>
       </div>
@@ -3598,6 +3576,88 @@ function filterAdminCat(cat, el) {
   el.classList.add('active');
   const items = cat === 'All' ? S.menu : S.menu.filter(m => m.category === cat);
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
+}
+
+function showImageUploadModal(itemId) {
+  const item = S.menu.find(m => m.id === itemId);
+  if (!item) return;
+  showModal(`
+    <div class="modal-head">
+      <span class="modal-title">📷 ${item.name}</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:150px;object-fit:cover;border-radius:12px;margin-bottom:12px">` : ''}
+      <div id="img-preview-wrap" style="margin-bottom:10px"></div>
+      <div class="form-group">
+        <label class="form-label">Upload from device</label>
+        <input type="file" id="img-file-input" accept="image/jpeg,image/png,image/webp" class="form-input" onchange="previewUploadedImage(this)">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Or paste image URL</label>
+        <input type="url" id="img-url-input" class="form-input" placeholder="https://..." value="${item.image_url||''}" oninput="previewImageUrl(this.value)">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-primary btn-full" onclick="saveItemImage('${itemId}')">💾 Save</button>
+        ${item.image_url ? `<button class="btn btn-danger" onclick="removeItemImage('${itemId}')">🗑️</button>` : ''}
+      </div>
+      <div id="img-save-err" style="font-size:12px;color:var(--red,#DC2626);margin-top:8px;text-align:center"></div>
+    </div>`);
+}
+function previewUploadedImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2*1024*1024) { toast('Image must be under 2MB','warn','⚠️'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const w = document.getElementById('img-preview-wrap');
+    if (w) w.innerHTML = `<img src="${e.target.result}" style="width:100%;height:150px;object-fit:cover;border-radius:12px">`;
+    const u = document.getElementById('img-url-input'); if (u) u.value = '';
+  };
+  reader.readAsDataURL(file);
+}
+function previewImageUrl(url) {
+  if (!url) return;
+  const w = document.getElementById('img-preview-wrap');
+  if (w) w.innerHTML = `<img src="${url}" style="width:100%;height:150px;object-fit:cover;border-radius:12px" onerror="this.style.display='none'">`;
+}
+async function saveItemImage(itemId) {
+  const item = S.menu.find(m => m.id === itemId);
+  if (!item || !sb) return;
+  const err = document.getElementById('img-save-err');
+  if (err) err.textContent = '';
+  const fileInput = document.getElementById('img-file-input');
+  const urlInput = document.getElementById('img-url-input');
+  let imageUrl = '';
+  if (fileInput?.files?.length) {
+    const file = fileInput.files[0];
+    const ext = file.name.split('.').pop();
+    const path = `${itemId}-${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('menu-images').upload(path, file, { upsert: true });
+    if (upErr) { if (err) err.textContent = 'Upload failed: ' + upErr.message; return; }
+    const { data: pub } = sb.storage.from('menu-images').getPublicUrl(path);
+    imageUrl = pub?.publicUrl || '';
+  } else if (urlInput?.value?.trim()) {
+    imageUrl = urlInput.value.trim();
+  } else {
+    if (err) err.textContent = 'Select an image or paste a URL.';
+    return;
+  }
+  const { error: saveErr } = await sb.from('menu_items').update({ image_url: imageUrl }).eq('id', itemId);
+  if (saveErr) { if (err) err.textContent = 'Save failed: ' + saveErr.message; return; }
+  item.image_url = imageUrl;
+  toast('Image saved!', 'success', '✅');
+  closeModal();
+  renderAdminMenu();
+}
+async function removeItemImage(itemId) {
+  const item = S.menu.find(m => m.id === itemId);
+  if (!item || !sb) return;
+  await sb.from('menu_items').update({ image_url: null }).eq('id', itemId);
+  item.image_url = null;
+  toast('Image removed','success','🗑️');
+  closeModal();
+  renderAdminMenu();
 }
 
 async function toggleMenuItem(id, toggleEl) {
