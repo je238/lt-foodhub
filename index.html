@@ -732,7 +732,6 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="login-icon">L&T</div>
       <div class="login-brand"><h2>FoodHub</h2><p>Larsen &amp; Toubro — Campus Canteen</p></div>
     </div>
-    <div style="font-size:11px;color:rgba(255,255,255,.4);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Select Role</div>
     <div class="role-tabs" id="role-tabs" style="display:none">
       <div class="role-tab active" onclick="selRole('employee',this)">👤 Employee</div>
       <div class="role-tab" onclick="selRole('vendor',this)">🍳 Vendor</div>
@@ -1604,14 +1603,18 @@ function otpNext(el, nextId) {
 // Stores verified OTP employee data until password is set
 let _pendingEmpData = null;
 
-async function empLogin() {
-  const email = (document.getElementById('emp-login-email')?.value || '').trim();
+// ══════════════════════════════════════════════════
+// UNIFIED LOGIN — single Sign In for all roles
+// Auto-detects: email → employee, ID → staff/admin
+// ══════════════════════════════════════════════════
+async function unifiedLogin() {
+  const input = (document.getElementById('emp-login-email')?.value || '').trim();
   const pw    = (document.getElementById('emp-login-pw')?.value   || '').trim();
   const err   = document.getElementById('emp-login-err');
   const btn   = document.getElementById('emp-login-btn');
   err.textContent = '';
 
-  if (!email) { err.textContent = 'Enter your email address.'; return; }
+  if (!input) { err.textContent = 'Enter your email or staff ID.'; return; }
   if (!pw)    { err.textContent = 'Enter your password.'; return; }
 
   btn.classList.add('btn-loading'); btn.disabled = true;
@@ -1619,44 +1622,113 @@ async function empLogin() {
   try {
     if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
 
-    // Look up employee by email
-    const { data: emp, error: empErr } = await sb
-      .from('employees')
-      .select('*')
-      .eq('email', email)
-      .single();
+    // ── Detect role from input ──────────────────────────────────
+    const isEmail = input.includes('@');
+    const inputLower = input.toLowerCase();
 
-    if (empErr || !emp) {
-      err.textContent = 'Email not found. Please register first.';
-      btn.classList.remove('btn-loading'); btn.disabled = false;
-      return;
-    }
+    // Admin: admin1, admin2, admin-001 etc.
+    const isAdmin = inputLower.startsWith('admin');
+    // Kitchen: kitchen1..kitchen7
+    const isKitchen = inputLower.startsWith('kitchen');
+    // Vendor: counter-c1..counter-c7, vendor1..vendor7
+    const isVendor = inputLower.startsWith('counter') || inputLower.startsWith('vendor');
 
-    // Check password — try RPC first (bcrypt), fall back to plain text check
-    if (!emp.password_hash) {
-      err.textContent = 'No password set. Please register to set one.';
-      btn.classList.remove('btn-loading'); btn.disabled = false;
-      return;
-    }
+    if (!isEmail && (isAdmin || isKitchen || isVendor)) {
+      // ── Staff login via verify_staff_login RPC ──
+      const role = isAdmin ? 'admin' : isKitchen ? 'kitchen' : 'vendor';
+      loginRole = role;
 
-    // Try RPC (bcrypt) first
-    const { data: authRes, error: authErr } = await sb.rpc('verify_employee_login', {
-      p_email: email,
-      p_password: pw
-    });
+      // Map kitchen/vendor short IDs to counter IDs
+      let staffId = input;
+      if (isVendor && inputLower.startsWith('vendor')) {
+        const num = inputLower.replace('vendor','');
+        staffId = 'counter-c' + num;
+      }
+      if (isKitchen && inputLower.startsWith('kitchen')) {
+        const num = inputLower.replace('kitchen','');
+        staffId = 'counter-c' + num;
+      }
 
-    if (!authErr && authRes?.success) {
-      // RPC succeeded (bcrypt match)
-      await _finishEmpLogin(authRes.employee || emp);
-    } else if (emp.password_hash === pw) {
-      // Plain text fallback (pgcrypto not yet enabled)
-      await _finishEmpLogin(emp);
+      const { data: authResult, error: authErr } = await sb.rpc('verify_staff_login', {
+        p_id: staffId,
+        p_password: pw,
+        p_role: role
+      });
+
+      if (authErr || !authResult?.success) {
+        err.textContent = authResult?.error || authErr?.message || 'Invalid ID or password.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
+
+      S._staffAuth = { id: staffId, pw };
+
+      const counter = COUNTER_MAP[staffId] || (authResult.canteen_id ? {
+        id: authResult.canteen_id,
+        name: authResult.name,
+        icon: S.canteens.find(c => c.id === authResult.canteen_id)?.icon || '🍽️'
+      } : null);
+
+      if (role === 'vendor') {
+        if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        S.role = 'vendor';
+        S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
+        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        goScreen('s-vendor'); setEl('vendor-title', counter.icon + ' ' + counter.name);
+        toast(counter.icon + ' ' + counter.name + ' loaded', 'success', '✅');
+
+      } else if (role === 'kitchen') {
+        if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        S.role = 'kitchen';
+        S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
+        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        goScreen('s-kitchen'); setEl('kds-title', '📺 ' + counter.name + ' Kitchen');
+        toast(counter.icon + ' ' + counter.name + ' Kitchen active', 'success', '📺');
+
+      } else {
+        // Admin
+        S.role = 'admin';
+        S.user = { id: authResult.id || staffId, name: authResult.name, initials: 'CA' };
+        try { const todayStr = new Date().toISOString().slice(0,10); const { data } = await sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        goScreen('s-admin');
+        toast('Admin dashboard loaded', 'success', '⚙️');
+      }
+
+    } else if (isEmail) {
+      // ── Employee login via email + password ──
+      loginRole = 'employee';
+      const { data: emp, error: empErr } = await sb.from('employees').select('*').eq('email', input).single();
+      if (empErr || !emp) { err.textContent = 'Email not found. Please register first.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+      if (!emp.password_hash) { err.textContent = 'No password set. Click "Register here" to set your password.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+
+      // Try bcrypt RPC first, fall back to plain text
+      const { data: authRes, error: authErr } = await sb.rpc('verify_employee_login', { p_email: input, p_password: pw });
+      if (!authErr && authRes?.success) {
+        await _finishEmpLogin(authRes.employee || emp);
+      } else if (emp.password_hash === pw) {
+        // Plain text fallback (pgcrypto not yet enabled or password stored as plain)
+        await _finishEmpLogin(emp);
+      } else {
+        err.textContent = 'Incorrect password. Try again.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
+
     } else {
-      err.textContent = 'Incorrect password. Try again.';
-      btn.classList.remove('btn-loading'); btn.disabled = false;
-      return;
+      // Unknown input format — try as employee ID (backward compat)
+      loginRole = 'employee';
+      const { data: emp } = await sb.from('employees').select('*').eq('id', input).maybeSingle();
+      if (emp) {
+        if (!emp.password_hash) { err.textContent = 'No password set. Register to set one.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        const { data: authRes } = await sb.rpc('verify_employee_login', { p_email: emp.email, p_password: pw });
+        if ((!authRes?.success) && emp.password_hash !== pw) { err.textContent = 'Incorrect password.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        await _finishEmpLogin(authRes?.employee || emp);
+      } else {
+        err.textContent = 'ID not recognised. Use your email (employees) or staff ID (admin1, counter-c1 etc.)';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
     }
-
   } catch(e) {
     err.textContent = 'Login error: ' + (e.message || 'Please try again.');
   }
