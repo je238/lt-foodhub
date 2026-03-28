@@ -1634,20 +1634,30 @@ async function empLogin() {
       return;
     }
 
-    // Check password via RPC (bcrypt server-side)
+    // Check password — try RPC first (bcrypt), fall back to plain text check
+    if (!emp.password_hash) {
+      err.textContent = 'No password set. Please register to set one.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
+
+    // Try RPC (bcrypt) first
     const { data: authRes, error: authErr } = await sb.rpc('verify_employee_login', {
       p_email: email,
       p_password: pw
     });
 
-    if (authErr || !authRes?.success) {
-      err.textContent = authRes?.error || 'Incorrect password. Try again.';
+    if (!authErr && authRes?.success) {
+      // RPC succeeded (bcrypt match)
+      await _finishEmpLogin(authRes.employee || emp);
+    } else if (emp.password_hash === pw) {
+      // Plain text fallback (pgcrypto not yet enabled)
+      await _finishEmpLogin(emp);
+    } else {
+      err.textContent = 'Incorrect password. Try again.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
-
-    // ── Login success ──
-    await _finishEmpLogin(authRes.employee || emp);
 
   } catch(e) {
     err.textContent = 'Login error: ' + (e.message || 'Please try again.');
@@ -1760,28 +1770,17 @@ async function setNewPassword() {
   btn.classList.add('btn-loading'); btn.disabled = true;
   try {
     if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-    // Save password via RPC (bcrypt server-side)
+    // Save password via RPC — this is BLOCKING, not optional
     const { data: pwRes, error: pwErr } = await sb.rpc('set_employee_password', {
       p_employee_id: _pendingEmpData.id,
       p_password: pw1
     });
     if (pwErr) {
-      // RPC failed (pgcrypto may not be enabled) — save plain password as fallback
-      // Admin must enable pgcrypto later for proper bcrypt
-      const { error: directErr } = await sb.from('employees')
-        .update({ password_hash: pw1 })
-        .eq('id', _pendingEmpData.id);
-      if (directErr) {
-        err.textContent = 'Could not save password. Please try again.';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
-    } else if (pwRes && !pwRes.success) {
-      err.textContent = pwRes.error || 'Could not save password.';
+      err.textContent = 'Could not save password: ' + (pwErr.message || 'Try again.');
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
-    // Re-fetch fresh employee record
+    // Re-fetch fresh employee record so password_hash is confirmed present
     const { data: freshEmp } = await sb.from('employees').select('*').eq('id', _pendingEmpData.id).single();
     const empToLogin = freshEmp || _pendingEmpData;
     toast('Password saved! Logging you in... 🔐', 'success', '✅');
@@ -1814,24 +1813,6 @@ async function registerEmployeeEmail() {
   btn.classList.add('btn-loading'); btn.disabled = true;
   try {
     if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-    // Check if employee already exists
-    const { data: existing } = await sb.from('employees').select('id, password_hash').eq('email', email).maybeSingle();
-    if (existing) {
-      if (existing.password_hash) {
-        err.textContent = 'Account already exists. Please login instead.';
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      } else {
-        // Exists but no password — allow OTP to set password
-        _pendingEmpData = existing;
-        toast('Account found! Sending OTP to set your password... 📧', 'success', '✅');
-        _otpEmail = email;
-        await sendEmailOTP();
-        btn.classList.remove('btn-loading'); btn.disabled = false;
-        return;
-      }
-    }
-    // New employee — register
     const { data: result, error: rpcErr } = await sb.rpc('register_employee', {
       p_name: name, p_email: email, p_phone: phone || null
     });
@@ -3554,16 +3535,9 @@ function filterAdminCanteen(cid, el) {
 function renderAdminMenuItem(m) {
   const stock = S.inventory[m.id] ?? m.stock ?? 99;
   const avail = m.is_available !== false;
-  const imgSrc = m.image_url || '';
   return `
     <div class="menu-mgmt-item" id="mmi-${m.id}">
-      <div style="position:relative;flex-shrink:0;cursor:pointer" onclick="showImageUploadModal('${m.id}')" title="Upload image">
-        ${imgSrc
-          ? `<img src="${imgSrc}" style="width:52px;height:52px;border-radius:10px;object-fit:cover;display:block">`
-          : `<div style="width:52px;height:52px;border-radius:10px;background:var(--light2);display:flex;align-items:center;justify-content:center;font-size:24px">${m.emoji||'🍽️'}</div>`
-        }
-        <div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.55);border-radius:4px;padding:1px 3px;font-size:10px;color:#fff">📷</div>
-      </div>
+      <div class="mgmt-emoji">${m.emoji||'🍽️'}</div>
       <div class="mgmt-body">
         <div class="mgmt-name">${m.name}</div>
         <div class="mgmt-meta">${m.category} · ${m.is_veg?'🟢 Veg':'🔴 Non-Veg'} · ${S.canteens.find(c=>c.id===m.canteen_id)?.name||'All'}</div>
@@ -3576,100 +3550,6 @@ function renderAdminMenuItem(m) {
         <div class="action-btn danger" onclick="deleteMenuItem('${m.id}')" title="Delete">🗑️</div>
       </div>
     </div>`;
-}
-
-// Image upload modal for admin menu items
-function showImageUploadModal(itemId) {
-  const item = S.menu.find(m => m.id === itemId);
-  if (!item) return;
-  showModal(`
-    <div class="modal-head">
-      <span class="modal-title">📷 Upload Image — ${item.name}</span>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:160px;object-fit:cover;border-radius:12px;margin-bottom:14px">` : ''}
-      <div id="img-preview-wrap" style="margin-bottom:12px"></div>
-      <div class="form-group">
-        <label class="form-label">Upload from device</label>
-        <input type="file" id="img-file-input" accept="image/jpeg,image/png,image/webp" class="form-input"
-          onchange="previewUploadedImage(this)">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Or paste image URL</label>
-        <input type="url" id="img-url-input" class="form-input" placeholder="https://..." value="${item.image_url||''}"
-          oninput="previewImageUrl(this.value)">
-      </div>
-      <div style="display:flex;gap:8px;margin-top:4px">
-        <button class="btn btn-primary btn-full" onclick="saveItemImage('${itemId}')">💾 Save Image</button>
-        ${item.image_url ? `<button class="btn btn-danger" onclick="removeItemImage('${itemId}')">🗑️</button>` : ''}
-      </div>
-      <div id="img-save-err" style="font-size:12px;color:var(--red);margin-top:8px;text-align:center"></div>
-    </div>`);
-}
-
-function previewUploadedImage(input) {
-  const file = input.files[0];
-  if (!file) return;
-  if (file.size > 2 * 1024 * 1024) { toast('Image must be under 2MB', 'warn', '⚠️'); return; }
-  const reader = new FileReader();
-  reader.onload = e => {
-    const wrap = document.getElementById('img-preview-wrap');
-    if (wrap) wrap.innerHTML = `<img src="${e.target.result}" style="width:100%;height:160px;object-fit:cover;border-radius:12px">`;
-    document.getElementById('img-url-input').value = '';
-  };
-  reader.readAsDataURL(file);
-}
-
-function previewImageUrl(url) {
-  if (!url) return;
-  const wrap = document.getElementById('img-preview-wrap');
-  if (wrap) wrap.innerHTML = `<img src="${url}" style="width:100%;height:160px;object-fit:cover;border-radius:12px" onerror="this.style.display='none'">`;
-}
-
-async function saveItemImage(itemId) {
-  const item = S.menu.find(m => m.id === itemId);
-  if (!item || !sb) return;
-  const err = document.getElementById('img-save-err');
-  if (err) err.textContent = '';
-
-  const fileInput = document.getElementById('img-file-input');
-  const urlInput = document.getElementById('img-url-input');
-
-  let imageUrl = '';
-
-  if (fileInput?.files?.length) {
-    // Upload file to Supabase Storage
-    const file = fileInput.files[0];
-    const ext = file.name.split('.').pop();
-    const path = `${itemId}-${Date.now()}.${ext}`;
-    const { data: uploaded, error: upErr } = await sb.storage.from('menu-images').upload(path, file, { upsert: true });
-    if (upErr) { if (err) err.textContent = 'Upload failed: ' + upErr.message; return; }
-    const { data: pub } = sb.storage.from('menu-images').getPublicUrl(path);
-    imageUrl = pub?.publicUrl || '';
-  } else if (urlInput?.value?.trim()) {
-    imageUrl = urlInput.value.trim();
-  } else {
-    if (err) err.textContent = 'Please select an image or paste a URL.';
-    return;
-  }
-
-  const { error: saveErr } = await sb.from('menu_items').update({ image_url: imageUrl }).eq('id', itemId);
-  if (saveErr) { if (err) err.textContent = 'Save failed: ' + saveErr.message; return; }
-  item.image_url = imageUrl;
-  toast(`Image saved for ${item.name}!`, 'success', '✅');
-  closeModal();
-  renderAdminMenu();
-}
-
-async function removeItemImage(itemId) {
-  const item = S.menu.find(m => m.id === itemId);
-  if (!item || !sb) return;
-  await sb.from('menu_items').update({ image_url: null }).eq('id', itemId);
-  item.image_url = null;
-  toast('Image removed', 'success', '🗑️');
-  closeModal();
-  renderAdminMenu();
 }
 
 function filterAdminMenu(q) {
