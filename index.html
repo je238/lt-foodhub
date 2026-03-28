@@ -2209,7 +2209,7 @@ function renderMenu(searchQuery) {
     const youPay = Math.max(0, m.price - sub);
     const stock = S.inventory[m.id] ?? m.stock ?? 99;
     const avail = m.is_available !== false && stock > 0;
-    const imgUrl = _getFoodImg(m.name, m.emoji);
+    const imgUrl = m.image_url || _getFoodImg(m.name, m.emoji);
     return `
     <div class="menu-item${!avail?' unavailable':''}">
       ${m.is_bestseller ? '<div class="bestseller-tag">🔥 Bestseller</div>' : ''}
