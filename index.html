@@ -964,7 +964,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-val" id="st-orders">0</div><div class="stat-sub stat-up">This month</div></div>
-      <div class="stat-card"><div class="stat-label">Wallet Balance</div><div class="stat-val" id="st-saved" style="font-size:18px">₹0</div><div class="stat-sub">Current</div></div>
+      <div class="stat-card"><div class="stat-label">Amount Saved</div><div class="stat-val" id="st-saved" style="font-size:18px">₹0</div><div class="stat-sub">Via subsidy</div></div>
     </div>
     <div class="card">
       <div class="card-title">⚙️ Preferences</div>
@@ -1149,7 +1149,6 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div class="vendor-stats">
       <div class="vendor-stat"><div class="vendor-stat-val" id="v-new">0</div><div class="vendor-stat-lbl">New</div></div>
       <div class="vendor-stat"><div class="vendor-stat-val" id="v-prep" style="color:var(--amber)">0</div><div class="vendor-stat-lbl">Preparing</div></div>
-      <div class="vendor-stat"><div class="vendor-stat-val" id="v-sales" style="color:var(--green)">₹0</div><div class="vendor-stat-lbl">Today's Sales</div></div>
     </div>
   </div>
   <!-- Filter bar -->
@@ -1649,11 +1648,26 @@ async function unifiedLogin() {
         staffId = 'counter-c' + num;
       }
 
-      const { data: authResult, error: authErr } = await sb.rpc('verify_staff_login', {
+      let authResult = null, authErr = null;
+      ({ data: authResult, error: authErr } = await sb.rpc('verify_staff_login', {
         p_id: staffId,
         p_password: pw,
         p_role: role
-      });
+      }));
+
+      // Admin fallback: if RPC fails, try direct admins table query
+      if ((authErr || !authResult?.success) && role === 'admin') {
+        try {
+          const { data: adminRow } = await sb.from('admins')
+            .select('*')
+            .or(`staff_id.eq.${staffId},id.eq.${staffId}`)
+            .maybeSingle();
+          if (adminRow && (adminRow.password === pw || adminRow.password_hash === pw)) {
+            authResult = { success: true, name: adminRow.name || adminRow.staff_id || staffId, id: adminRow.id || staffId };
+            authErr = null;
+          }
+        } catch(e) {}
+      }
 
       if (authErr || !authResult?.success) {
         err.textContent = authResult?.error || authErr?.message || 'Invalid ID or password.';
@@ -1761,6 +1775,7 @@ async function _finishEmpLogin(emp) {
   renderHome();
   goScreen('s-home');
   toast(`Welcome, ${(S.user.name||'').split(' ')[0]}! 👋`, 'success', '✅');
+  try { saveSession(); } catch(e) {}
 }
 
 // ══════════════════════════════════════
@@ -3031,7 +3046,7 @@ function renderProfile() {
   const bar = document.getElementById('mp-bar');
   if (bar) bar.style.width = ((rem/limit)*100)+'%';
   setEl('mp-remaining', rem + ' / ' + limit + ' meals remaining');
-  setEl('st-orders', S.orders.length);
+  setEl('st-orders', S.orders.filter(o => o.status !== 'cancelled').length);
   const saved = S.orders.reduce((s,o) => s+(o.subsidy_applied||0), 0);
   setEl('st-saved', '₹'+saved);
   // Favorite items
@@ -3059,7 +3074,6 @@ function renderVendor() {
   const todayRev = myOrders.reduce((s,o) => s+(o.item_total||0), 0);
   setEl('v-new', newCnt);
   setEl('v-prep', prepCnt);
-  setEl('v-sales', '₹'+Math.round(todayRev).toLocaleString('en-IN'));
   const el = document.getElementById('vendor-body');
   if (!el) return;
   // Build new HTML
