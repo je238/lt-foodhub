@@ -3602,6 +3602,8 @@ async function renderAdminMenu(el) {
       if (data?.length) S.menu = data;
     } catch(e) {}
   }
+  // Build cats AFTER await so list reflects fresh DB data
+  const _adminMenuCats = [...new Set(S.menu.map(m=>m.category).filter(Boolean))].sort();
   el.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <div class="search-bar" style="flex:1;margin-bottom:0">
@@ -3616,7 +3618,7 @@ async function renderAdminMenu(el) {
     </div>
     <div class="chip-row" id="admin-menu-cats">
       <div class="chip active" onclick="filterAdminCat('All',this)">All Categories</div>
-      ${[...new Set(S.menu.map(m=>m.category).filter(Boolean))].sort().map(c=>`<div class="chip" onclick="filterAdminCat('${c}',this)">${c}</div>`).join('')}
+      ${_adminMenuCats.map(c=>`<div class="chip" onclick="filterAdminCat('${c}',this)">${c}</div>`).join('')}
     </div>
     <div id="admin-menu-list">
       ${S.menu.map(m => renderAdminMenuItem(m)).join('')}
