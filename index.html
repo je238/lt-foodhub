@@ -3605,6 +3605,8 @@ function generateDemoOrders() {
 
 function renderAdminMenu(el) {
   // S.menu and S.canteens are already loaded at login — render immediately, no DB re-fetch
+  if (!el) el = document.getElementById('admin-body');
+  if (!el) return;
   const _adminMenuCats = [...new Set(S.menu.map(m=>m.category).filter(Boolean))].sort();
   el.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:14px">
