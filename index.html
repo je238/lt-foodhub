@@ -1655,16 +1655,27 @@ async function unifiedLogin() {
         p_role: role
       }));
 
-      // Admin fallback: if RPC fails, try direct admins table query
+      // Admin fallback: fetch all admin rows and match locally (handles any column name)
       if ((authErr || !authResult?.success) && role === 'admin') {
         try {
-          const { data: adminRow } = await sb.from('admins')
-            .select('*')
-            .or(`staff_id.eq.${staffId},id.eq.${staffId}`)
-            .maybeSingle();
-          if (adminRow && (adminRow.password === pw || adminRow.password_hash === pw)) {
-            authResult = { success: true, name: adminRow.name || adminRow.staff_id || staffId, id: adminRow.id || staffId };
-            authErr = null;
+          const { data: adminRows } = await sb.from('admins').select('*').limit(20);
+          if (adminRows && adminRows.length) {
+            const inputL = staffId.toLowerCase();
+            const match = adminRows.find(function(row) {
+              var idMatch = Object.values(row).some(function(v) {
+                return typeof v === 'string' && v.toLowerCase() === inputL;
+              });
+              if (!idMatch) return false;
+              var pwMatch = Object.entries(row).some(function(entry) {
+                var k = entry[0], v = entry[1];
+                return (k.includes('pass') || k.includes('pwd') || k.includes('secret')) && typeof v === 'string' && v === pw;
+              });
+              return pwMatch;
+            });
+            if (match) {
+              authResult = { success: true, name: match.name || match.full_name || match.staff_id || match.username || staffId, id: match.id || staffId };
+              authErr = null;
+            }
           }
         } catch(e) {}
       }
