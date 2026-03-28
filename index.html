@@ -740,25 +740,31 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="role-tab" onclick="selRole('admin',this)">⚙️ Admin</div>
     </div>
 
-    <!-- EMPLOYEE LOGIN -->
+    <!-- EMPLOYEE LOGIN AREA -->
     <div id="emp-login-area">
 
-      <!-- STEP 1: Email -->
-      <div id="emp-step1">
+      <!-- DEFAULT: Email + Password Login -->
+      <div id="emp-main-login">
         <h2 class="login-title" style="margin-top:0">Welcome 👋</h2>
-        <p class="login-sub">Enter your L&T email address</p>
-        <input class="linp" type="email" id="emp-email" placeholder="name@larsentoubro.com" autocomplete="email" style="margin-bottom:10px">
-        <button class="login-btn" id="send-otp-btn" onclick="sendEmailOTP()"><span>Get OTP →</span></button>
-        <div class="login-err" id="login-err" style="margin-top:8px"></div>
-        <div style="text-align:center;margin-top:14px">
-          <span style="font-size:12px;color:rgba(255,255,255,.4)">New here? </span>
-          <span style="font-size:12px;color:var(--brand);cursor:pointer;font-weight:600" onclick="showRegister()">Register</span>
+        <p class="login-sub">Sign in with your L&T email &amp; password</p>
+        <input class="linp" type="email" id="emp-login-email" placeholder="name@larsentoubro.com" autocomplete="email" style="margin-bottom:10px"
+          onkeydown="if(event.key==='Enter')document.getElementById('emp-login-pw').focus()">
+        <input class="linp" type="password" id="emp-login-pw" placeholder="Password" autocomplete="current-password" style="margin-bottom:10px"
+          onkeydown="if(event.key==='Enter')empLogin()">
+        <button class="login-btn" id="emp-login-btn" onclick="empLogin()"><span>Sign In →</span></button>
+        <div class="login-err" id="emp-login-err" style="margin-top:8px"></div>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);text-align:center">
+          <span style="font-size:12px;color:rgba(255,255,255,.4)">New employee? </span>
+          <span style="font-size:12px;color:var(--brand);cursor:pointer;font-weight:700" onclick="showRegister()">Register here →</span>
         </div>
       </div>
 
-      <!-- STEP 2: OTP -->
+      <!-- STEP 2: OTP (only shown during registration) -->
       <div id="emp-step2" style="display:none">
-        <h2 class="login-title" style="margin-top:0">Check your email</h2>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToMainLogin()">← Back</span>
+          <h2 class="login-title" style="margin-top:0;margin-bottom:0;flex:1">Check your email</h2>
+        </div>
         <div id="otp-display" style="background:rgba(255,255,255,.08);border-radius:12px;padding:14px;text-align:center;margin-bottom:16px">
           <div style="font-size:22px;margin-bottom:6px">📧</div>
           <div id="otp-big" style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.6">We sent a 6-digit code to<br><strong id="otp-email-display" style="color:#fff">your email</strong></div>
@@ -772,26 +778,41 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
           <input class="linp" type="tel" id="otp-5" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,'otp-6')">
           <input class="linp" type="tel" id="otp-6" maxlength="1" style="width:44px;text-align:center;font-size:22px;font-weight:700;padding:10px 0;margin:0" oninput="otpNext(this,null)">
         </div>
-        <button class="login-btn" id="verify-otp-btn" onclick="verifyEmailOTP()"><span>Login →</span></button>
+        <button class="login-btn" id="verify-otp-btn" onclick="verifyEmailOTP()"><span>Verify OTP →</span></button>
         <div class="login-err" id="otp-err" style="margin-top:8px"></div>
         <div style="display:flex;justify-content:center;gap:16px;margin-top:12px">
-          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToEmail()">← Back</span>
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToMainLogin()">← Cancel</span>
           <span style="font-size:12px;color:var(--brand);cursor:pointer;font-weight:600" id="resend-otp-btn" onclick="resendEmailOTP()">Resend OTP</span>
         </div>
       </div>
 
-      <!-- REGISTER -->
+      <!-- REGISTER (only shown when "Register here" is clicked) -->
       <div id="emp-register" style="display:none">
-        <h2 class="login-title" style="margin-top:0">Register</h2>
-        <p class="login-sub">Create your FoodHub account</p>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToMainLogin()">← Back</span>
+          <h2 class="login-title" style="margin-top:0;margin-bottom:0;flex:1">Create Account</h2>
+        </div>
+        <p class="login-sub">Register with your L&T email</p>
         <input class="linp" type="text" id="reg-name" placeholder="Your Full Name" autocomplete="name">
-        <input class="linp" type="email" id="reg-email" placeholder="Your L&T email" autocomplete="email">
+        <input class="linp" type="email" id="reg-email" placeholder="name@larsentoubro.com" autocomplete="email">
         <input class="linp" type="tel" id="reg-phone" placeholder="Mobile number (optional)" maxlength="10" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
         <div style="height:6px"></div>
-        <button class="login-btn" id="reg-btn" onclick="registerEmployeeEmail()"><span>Register →</span></button>
+        <button class="login-btn" id="reg-btn" onclick="registerEmployeeEmail()"><span>Register &amp; Get OTP →</span></button>
         <div class="login-err" id="reg-err" style="margin-top:8px"></div>
+      </div>
+
+      <!-- SET PASSWORD (shown after OTP verified for new users) -->
+      <div id="emp-set-pw" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <h2 class="login-title" style="margin-top:0;margin-bottom:0;flex:1">Set Your Password</h2>
+        </div>
+        <p class="login-sub">Create a password for quick login next time</p>
+        <input class="linp" type="password" id="new-pw1" placeholder="Create a password (min 6 chars)" style="margin-bottom:10px">
+        <input class="linp" type="password" id="new-pw2" placeholder="Confirm password" style="margin-bottom:10px">
+        <button class="login-btn" id="set-pw-btn" onclick="setNewPassword()"><span>Set Password &amp; Login →</span></button>
+        <div class="login-err" id="set-pw-err" style="margin-top:8px"></div>
         <div style="text-align:center;margin-top:12px">
-          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToEmail()">← Back to Login</span>
+          <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="skipSetPassword()">Skip — Login without password</span>
         </div>
       </div>
 
@@ -803,7 +824,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <input class="linp" type="text" id="l-id" placeholder="Counter ID (e.g. counter-c1)">
       <input class="linp" type="password" id="l-pw" placeholder="Password">
       <button class="login-btn" onclick="doLogin()" id="login-btn"><span>Sign In →</span></button>
-      <div class="login-err" id="login-err"></div>
+      <div class="login-err" id="staff-login-err"></div>
     </div>
 
     <!-- FOOTER -->
@@ -1545,23 +1566,32 @@ function selRole(role, el) {
   }
 }
 
-// ══════════════════════════════════════
-// EMAIL OTP LOGIN
-// ══════════════════════════════════════
-let _otpEmail = '';
-let _otpEmpData = null;
+// ── Helper: show one sub-panel, hide others ──
+function _showEmpPanel(panelId) {
+  ['emp-main-login','emp-step2','emp-register','emp-set-pw'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (id === panelId) ? '' : 'none';
+  });
+}
 
+// ── Back to default login screen ──
+function backToMainLogin() {
+  _showEmpPanel('emp-main-login');
+  const err = document.getElementById('emp-login-err');
+  if (err) err.textContent = '';
+}
+
+// Legacy alias used by some inline onclick refs
+function backToEmail() { backToMainLogin(); }
+
+// ── Show Register form ──
 function showRegister() {
-  document.getElementById('emp-step1').style.display = 'none';
-  document.getElementById('emp-register').style.display = '';
-  document.getElementById('login-err').textContent = '';
+  _showEmpPanel('emp-register');
+  const err = document.getElementById('reg-err');
+  if (err) err.textContent = '';
 }
-function backToEmail() {
-  document.getElementById('emp-step1').style.display = '';
-  document.getElementById('emp-step2').style.display = 'none';
-  document.getElementById('emp-register').style.display = 'none';
-  document.getElementById('login-err').textContent = '';
-}
+
+// ── OTP digit-advance helper (unchanged logic) ──
 function otpNext(el, nextId) {
   el.value = el.value.replace(/\D/g,'').slice(0,1);
   if (el.value && nextId) document.getElementById(nextId)?.focus();
@@ -1569,67 +1599,135 @@ function otpNext(el, nextId) {
   if (code.length === 6) verifyEmailOTP();
 }
 
-async function sendEmailOTP() {
-  const email = document.getElementById('emp-email')?.value?.trim() || '';
-  const err = document.getElementById('login-err');
-  const btn = document.getElementById('send-otp-btn');
+// ══════════════════════════════════════
+// EMPLOYEE LOGIN — Email + Password
+// ══════════════════════════════════════
+// Stores verified OTP employee data until password is set
+let _pendingEmpData = null;
+
+async function empLogin() {
+  const email = (document.getElementById('emp-login-email')?.value || '').trim();
+  const pw    = (document.getElementById('emp-login-pw')?.value   || '').trim();
+  const err   = document.getElementById('emp-login-err');
+  const btn   = document.getElementById('emp-login-btn');
   err.textContent = '';
 
-  // Validate email
-  if (!email || !email.includes('@') || email.length < 5) {
-    err.textContent = 'Enter a valid email address';
-    return;
-  }
+  if (!email) { err.textContent = 'Enter your email address.'; return; }
+  if (!pw)    { err.textContent = 'Enter your password.'; return; }
 
   btn.classList.add('btn-loading'); btn.disabled = true;
 
   try {
     if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
 
-    // Call Edge Function to generate & send OTP email
-    const edgeFnUrl = SURL + '/functions/v1/send-otp-email';
-    const response = await fetch(edgeFnUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + SKEY,
-      },
-      body: JSON.stringify({ email }),
-    });
+    // First look up the employee record to give specific error messages
+    const { data: emp, error: empErr } = await sb
+      .from('employees').select('*').eq('email', email).single();
 
-    const result = await response.json();
-
-    if (!result.success) {
-      err.textContent = result.error || 'Failed to send OTP';
+    if (empErr || !emp) {
+      err.textContent = 'Email not found. Please register first.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
 
-    // Store email for verification step
-    _otpEmail = email;
+    // If employee has no password set, guide them to register flow
+    if (!emp.password_hash) {
+      err.textContent = 'No password set for this account. Click "Register here" to set your password via OTP.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
 
-    // Show OTP entry screen
-    document.getElementById('emp-step1').style.display = 'none';
-    document.getElementById('emp-step2').style.display = '';
-    document.getElementById('otp-email-display').textContent = result.maskedEmail || email;
-    ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].forEach(id => {
-      const b = document.getElementById(id); if(b) b.value='';
+    // Try RPC first (bcrypt server-side check)
+    const { data: authRes, error: authErr } = await sb.rpc('verify_employee_login', {
+      p_email: email,
+      p_password: pw
     });
-    document.getElementById('otp-1')?.focus();
-    document.getElementById('otp-err').textContent = '';
-    toast('OTP sent to ' + (result.maskedEmail || email) + ' 📧', 'success', '✅');
+
+    if (!authErr && authRes?.success) {
+      // RPC success — use returned employee data (most up to date)
+      await _finishEmpLogin(authRes.employee || emp);
+      return;
+    }
+
+    // If RPC doesn't exist yet (function not created in DB), give a clear message
+    if (authErr?.message?.includes('does not exist') || authErr?.code === '42883') {
+      err.textContent = 'Login system not configured. Ask admin to run the SQL setup.';
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
+
+    // RPC returned an auth failure
+    err.textContent = authRes?.error || 'Incorrect password. Try again.';
 
   } catch(e) {
-    err.textContent = 'Error sending OTP. Please try again.';
+    err.textContent = 'Login error: ' + (e.message || 'Please try again.');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
+// ── Shared post-login loader (used by empLogin & verifyEmailOTP) ──
+async function _finishEmpLogin(emp) {
+  S.user = emp;
+  S.user.wallet_balance = parseFloat(S.user.wallet_balance) || 0;
+  S.role = 'employee';
+  if (sb) {
+    const {data: freshMenu} = await sb.from('menu_items').select('*').limit(1000);
+    if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
+    const {data: freshCans} = await sb.from('canteens').select('*').order('id');
+    if (freshCans?.length) S.canteens = freshCans;
+    try {
+      const [{data: ordData}, {data: txnData}] = await Promise.all([
+        sb.from('orders').select('*, order_items(*)').eq('employee_id', emp.id).order('created_at', {ascending: false}).limit(50),
+        sb.from('wallet_transactions').select('*').eq('employee_id', emp.id).order('created_at', {ascending: false}).limit(30)
+      ]);
+      if (ordData?.length) S.orders = ordData.map(o => ({...o, items: o.order_items || []}));
+      if (txnData?.length) S.txns = txnData.map(t => ({
+        type: t.type, icon: t.type === 'credit' ? '💳' : '🍽️',
+        name: t.description || (t.type === 'credit' ? 'Wallet Top-up' : 'Order'),
+        date: t.created_at, amount: parseFloat(t.amount) || 0
+      }));
+    } catch(e) {}
+  }
+  renderHome();
+  goScreen('s-home');
+  toast(`Welcome, ${(S.user.name||'').split(' ')[0]}! 👋`, 'success', '✅');
+}
+
+// ══════════════════════════════════════
+// EMPLOYEE REGISTER — OTP flow
+// ══════════════════════════════════════
+let _otpEmail = '';
+let _otpEmpData = null;
+
+async function sendEmailOTP() {
+  // Called internally after registration completes
+  const email = _otpEmail;
+  if (!email) return;
+  try {
+    const edgeFnUrl = SURL + '/functions/v1/send-otp-email';
+    const response = await fetch(edgeFnUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
+      body: JSON.stringify({ email }),
+    });
+    const result = await response.json();
+    if (!result.success) { toast('OTP send failed: ' + (result.error||''), 'error', '❌'); return; }
+    // Show OTP screen
+    _showEmpPanel('emp-step2');
+    const dispEl = document.getElementById('otp-email-display');
+    if (dispEl) dispEl.textContent = result.maskedEmail || email;
+    ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].forEach(id => { const b=document.getElementById(id); if(b) b.value=''; });
+    document.getElementById('otp-1')?.focus();
+    document.getElementById('otp-err').textContent = '';
+    toast('OTP sent to ' + (result.maskedEmail || email) + ' 📧', 'success', '✅');
+  } catch(e) {
+    toast('OTP send error: ' + e.message, 'error', '❌');
+  }
+}
+
 async function resendEmailOTP() {
-  if (!_otpEmail) { backToEmail(); return; }
-  document.getElementById('emp-email').value = _otpEmail;
-  backToEmail();
-  setTimeout(() => sendEmailOTP(), 300);
+  if (!_otpEmail) { backToMainLogin(); return; }
+  await sendEmailOTP();
 }
 
 async function verifyEmailOTP() {
@@ -1637,102 +1735,129 @@ async function verifyEmailOTP() {
   const err = document.getElementById('otp-err');
   const btn = document.getElementById('verify-otp-btn');
   err.textContent = '';
-
   if (code.length !== 6) { err.textContent = 'Enter 6-digit OTP'; return; }
   if (!_otpEmail) { err.textContent = 'Session expired. Go back and try again.'; return; }
-
   btn.classList.add('btn-loading'); btn.disabled = true;
-
   try {
     if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-
-    // Verify OTP server-side
-    const { data: result, error: rpcErr } = await sb.rpc('verify_email_otp', {
-      p_email: _otpEmail,
-      p_otp: code
-    });
-
+    const { data: result, error: rpcErr } = await sb.rpc('verify_email_otp', { p_email: _otpEmail, p_otp: code });
     if (rpcErr || !result?.success) {
       err.textContent = result?.error || rpcErr?.message || 'Verification failed.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
-
-    // Login successful — employee data from server
-    S.user = result.employee;
-    S.user.wallet_balance = parseFloat(S.user.wallet_balance) || 0;
-    S.role = 'employee';
-
-    // Load fresh menu and canteens
-    if (sb) {
-      const {data: freshMenu} = await sb.from('menu_items').select('*').limit(1000);
-      if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
-      const {data: freshCans} = await sb.from('canteens').select('*').order('id');
-      if (freshCans?.length) S.canteens = freshCans;
-      // Load orders + transactions so history is available immediately
-      try {
-        const [{data: ordData}, {data: txnData}] = await Promise.all([
-          sb.from('orders').select('*, order_items(*)').eq('employee_id', S.user.id).order('created_at', {ascending: false}).limit(50),
-          sb.from('wallet_transactions').select('*').eq('employee_id', S.user.id).order('created_at', {ascending: false}).limit(30)
-        ]);
-        if (ordData?.length) S.orders = ordData.map(o => ({...o, items: o.order_items || []}));
-        if (txnData?.length) S.txns = txnData.map(t => ({
-          type: t.type, icon: t.type === 'credit' ? '💳' : '🍽️',
-          name: t.description || (t.type === 'credit' ? 'Wallet Top-up' : 'Order'),
-          date: t.created_at, amount: parseFloat(t.amount) || 0
-        }));
-      } catch(e) {}
-    }
-
-    renderHome();
-    goScreen('s-home');
-    toast(`Welcome, ${(S.user.name||'').split(' ')[0]}! 👋`, 'success', '✅');
-
+    // OTP verified — show set-password screen
+    _pendingEmpData = result.employee;
+    _showEmpPanel('emp-set-pw');
+    document.getElementById('set-pw-err').textContent = '';
+    document.getElementById('new-pw1').value = '';
+    document.getElementById('new-pw2').value = '';
   } catch(e) {
     err.textContent = 'Error: ' + (e.message || 'Try again');
   }
   btn.classList.remove('btn-loading'); btn.disabled = false;
 }
 
-async function registerEmployeeEmail() {
-  const name = document.getElementById('reg-name')?.value?.trim() || '';
-  const email = document.getElementById('reg-email')?.value?.trim() || '';
-  const phone = document.getElementById('reg-phone')?.value?.trim() || '';
-  const err = document.getElementById('reg-err');
-  const btn = document.getElementById('reg-btn');
+async function setNewPassword() {
+  const pw1 = (document.getElementById('new-pw1')?.value || '').trim();
+  const pw2 = (document.getElementById('new-pw2')?.value || '').trim();
+  const err = document.getElementById('set-pw-err');
+  const btn = document.getElementById('set-pw-btn');
   err.textContent = '';
-
-  if (!name || name.length < 2) { err.textContent = 'Enter your full name'; return; }
-  if (!email || !email.includes('@')) { err.textContent = 'Enter a valid email address'; return; }
-
+  if (!pw1 || pw1.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
+  if (pw1 !== pw2) { err.textContent = 'Passwords do not match.'; return; }
+  if (!_pendingEmpData?.id) { err.textContent = 'Session lost. Please register again.'; return; }
   btn.classList.add('btn-loading'); btn.disabled = true;
-
   try {
     if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-
-    // Register via server-side function
-    const { data: result, error: rpcErr } = await sb.rpc('register_employee', {
-      p_name: name,
-      p_email: email,
-      p_phone: phone || null
+    // Save password server-side via RPC (bcrypt hashing)
+    const { data: pwRes, error: pwErr } = await sb.rpc('set_employee_password', {
+      p_employee_id: _pendingEmpData.id,
+      p_password: pw1
     });
-
-    if (rpcErr || !result?.success) {
-      err.textContent = result?.error || rpcErr?.message || 'Registration failed.';
+    if (pwErr) {
+      // RPC failed — show clear error, do NOT log user in with unset password
+      err.textContent = 'Could not save password: ' + (pwErr.message || 'Try again.');
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
+    // Re-fetch employee record so we have the updated password_hash
+    const { data: freshEmp, error: fetchErr } = await sb
+      .from('employees').select('*').eq('id', _pendingEmpData.id).single();
+    const empToLogin = (!fetchErr && freshEmp) ? freshEmp : _pendingEmpData;
+    toast('Password set! Logging you in... 🔐', 'success', '✅');
+    await _finishEmpLogin(empToLogin);
+    _pendingEmpData = null;
+  } catch(e) {
+    err.textContent = 'Error: ' + (e.message || 'Try again');
+  }
+  btn.classList.remove('btn-loading'); btn.disabled = false;
+}
 
-    toast('Registered! ' + (result.message || ''), 'success', '✅');
+async function skipSetPassword() {
+  if (_pendingEmpData) {
+    await _finishEmpLogin(_pendingEmpData);
+    _pendingEmpData = null;
+  } else {
+    backToMainLogin();
+  }
+}
 
-    // Set email in login box and go to login
-    document.getElementById('emp-email').value = email;
-    document.getElementById('emp-register').style.display = 'none';
-    document.getElementById('emp-step1').style.display = '';
+async function registerEmployeeEmail() {
+  const name  = document.getElementById('reg-name')?.value?.trim() || '';
+  const email = document.getElementById('reg-email')?.value?.trim() || '';
+  const phone = document.getElementById('reg-phone')?.value?.trim() || '';
+  const err   = document.getElementById('reg-err');
+  const btn   = document.getElementById('reg-btn');
+  err.textContent = '';
+  if (!name || name.length < 2) { err.textContent = 'Enter your full name'; return; }
+  if (!email || !email.includes('@')) { err.textContent = 'Enter a valid email address'; return; }
+  btn.classList.add('btn-loading'); btn.disabled = true;
+  try {
+    if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
 
-    // Auto send OTP
-    setTimeout(() => sendEmailOTP(), 400);
+    // First check if email already exists in employees table
+    const { data: existing } = await sb
+      .from('employees').select('id, name, password_hash').eq('email', email).single();
 
+    if (existing) {
+      if (existing.password_hash) {
+        // User exists AND has a password — tell them to log in
+        err.textContent = 'Account already exists. Please log in with your email and password.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      } else {
+        // User exists but NO password set — allow OTP to set password
+        toast('Account found! Sending OTP to set your password... 📧', 'success', '✅');
+        _pendingEmpData = existing; // pre-set so setNewPassword has the id
+        _otpEmail = email;
+        await sendEmailOTP();
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
+    }
+
+    // New user — register via server-side RPC
+    const { data: result, error: rpcErr } = await sb.rpc('register_employee', {
+      p_name: name, p_email: email, p_phone: phone || null
+    });
+    if (rpcErr || !result?.success) {
+      // One more check: RPC may return "already registered" even if our check missed it
+      if ((result?.error || rpcErr?.message || '').toLowerCase().includes('already')) {
+        err.textContent = 'Email already registered. Please log in instead.';
+      } else {
+        err.textContent = result?.error || rpcErr?.message || 'Registration failed.';
+      }
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
+    // Fetch the new employee record so _pendingEmpData has the correct id
+    const { data: newEmp } = await sb.from('employees').select('id, name, email').eq('email', email).single();
+    if (newEmp) _pendingEmpData = newEmp;
+
+    toast('Account created! Sending OTP... 📧', 'success', '✅');
+    _otpEmail = email;
+    await sendEmailOTP();
   } catch(e) {
     err.textContent = 'Error: ' + (e.message || 'Try again');
   }
@@ -1754,7 +1879,7 @@ async function doLogin() {
   const id = document.getElementById('l-id').value.trim();
   const pw = document.getElementById('l-pw').value.trim();
   const btn = document.getElementById('login-btn');
-  const err = document.getElementById('login-err');
+  const err = document.getElementById('staff-login-err');
   if (!id || !pw) { err.textContent = 'Please enter ID and password.'; return; }
   err.textContent = '';
   btn.classList.add('btn-loading'); btn.disabled = true;
@@ -3348,12 +3473,22 @@ function filterAdminCanteen(cid, el) {
 function renderAdminMenuItem(m) {
   const stock = S.inventory[m.id] ?? m.stock ?? 99;
   const avail = m.is_available !== false;
+  // Show saved image_url first, then auto-matched food photo, then emoji
+  const imgUrl = m.image_url || (typeof _getFoodImg === 'function' ? _getFoodImg(m.name, m.emoji) : '') || '';
   return `
     <div class="menu-mgmt-item" id="mmi-${m.id}">
-      <div class="mgmt-emoji">${m.emoji||'🍽️'}</div>
+      <div onclick="showImageUploadModal('${m.id}')" title="Click to upload image"
+        style="width:52px;height:52px;border-radius:10px;overflow:hidden;flex-shrink:0;background:var(--light2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;transition:.2s"
+        onmouseover="this.style.borderColor='var(--brand)'" onmouseout="this.style.borderColor='var(--border)'">
+        ${imgUrl
+          ? `<img src="${imgUrl}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+          : ''}
+        <span style="font-size:22px;${imgUrl ? 'display:none;' : ''}width:100%;height:100%;display:flex;align-items:center;justify-content:center;">${m.emoji||'🍽️'}</span>
+        <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);height:16px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:700;letter-spacing:.2px">📷 IMG</div>
+      </div>
       <div class="mgmt-body">
         <div class="mgmt-name">${m.name}</div>
-        <div class="mgmt-meta">${m.category} · ${m.is_veg?'🟢 Veg':'🔴 Non-Veg'} · ${S.canteens.find(c=>c.id===m.canteen_id)?.name||'All'}</div>
+        <div class="mgmt-meta">${m.category||'—'} · ${m.is_veg?'🟢 Veg':'🔴 Non-Veg'} · ${S.canteens.find(c=>c.id===m.canteen_id)?.name||'All'}</div>
         <div class="mgmt-meta">Stock: ${stock} · ⭐ ${m.rating||'N/A'}</div>
       </div>
       <div class="mgmt-actions">
@@ -3377,6 +3512,144 @@ function filterAdminCat(cat, el) {
   el.classList.add('active');
   const items = cat === 'All' ? S.menu : S.menu.filter(m => m.category === cat);
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
+}
+
+// ═══════════════════════════════════════
+// IMAGE UPLOAD — Admin Menu Management
+// ═══════════════════════════════════════
+function showImageUploadModal(itemId) {
+  const item = S.menu.find(m => m.id === itemId);
+  if (!item) return;
+  const existingImg = item.image_url || (typeof _getFoodImg === 'function' ? _getFoodImg(item.name, item.emoji) : '') || '';
+  showModal(`
+    <div class="modal-head">
+      <span class="modal-title">📷 Upload Image — ${item.name}</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Preview area — click to pick file -->
+      <div id="img-preview-wrap"
+        onclick="document.getElementById('img-file-input').click()"
+        style="width:100%;height:160px;border-radius:12px;overflow:hidden;background:var(--light2);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;margin-bottom:14px;position:relative;cursor:pointer;transition:.2s"
+        onmouseover="this.style.borderColor='var(--brand)'" onmouseout="this.style.borderColor='var(--border)'">
+        ${existingImg
+          ? `<img id="img-preview-img" src="${existingImg}" style="width:100%;height:100%;object-fit:cover"><div style="position:absolute;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center"><span style="color:#fff;font-size:13px;font-weight:700;background:rgba(0,0,0,.5);padding:6px 14px;border-radius:8px">🔄 Click to change</span></div>`
+          : `<div style="text-align:center;pointer-events:none"><div style="font-size:36px;margin-bottom:6px">📷</div><div style="font-size:13px;font-weight:600;color:var(--mid)">Click to select image</div><div style="font-size:11px;color:var(--muted);margin-top:3px">JPG, PNG, WebP · Max 2MB</div></div>`}
+      </div>
+      <input type="file" id="img-file-input" accept="image/jpeg,image/png,image/webp"
+        style="display:none" onchange="previewUploadedImage(this,'${itemId}')">
+      <!-- Or paste URL -->
+      <div class="form-group">
+        <label class="form-label">Or paste image URL</label>
+        <div style="display:flex;gap:8px">
+          <input class="form-input" id="img-url-input" placeholder="https://..." value="${item.image_url||''}" style="flex:1">
+          <button class="btn btn-ghost btn-sm" onclick="previewImageUrl()">Preview</button>
+        </div>
+      </div>
+      <div id="img-upload-msg" style="font-size:12px;min-height:16px;text-align:center;margin-bottom:10px;color:var(--muted)"></div>
+      <div style="display:flex;gap:8px">
+        ${item.image_url ? `<button class="btn btn-danger btn-sm" onclick="removeItemImage('${itemId}')">🗑️ Remove</button>` : ''}
+        <button class="btn btn-primary" id="img-save-btn" onclick="saveItemImage('${itemId}')" style="flex:1">💾 Save Image</button>
+      </div>
+    </div>
+  `);
+}
+
+function previewUploadedImage(input, itemId) {
+  const file = input.files[0];
+  if (!file) return;
+  const msg = document.getElementById('img-upload-msg');
+  if (file.size > 2 * 1024 * 1024) {
+    if (msg) { msg.textContent = '⚠️ File too large. Max 2MB.'; msg.style.color = 'var(--red)'; }
+    input.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const wrap = document.getElementById('img-preview-wrap');
+    if (wrap) {
+      wrap.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover"><div style="position:absolute;inset:0;background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center"><span style="color:#fff;font-size:12px;font-weight:700;background:rgba(0,0,0,.4);padding:4px 10px;border-radius:8px">🔄 Click to change</span></div>`;
+      wrap.onclick = () => document.getElementById('img-file-input').click();
+    }
+    const urlInput = document.getElementById('img-url-input');
+    if (urlInput) urlInput.value = '';
+    if (msg) { msg.textContent = '✅ Image selected — click Save'; msg.style.color = 'var(--green2)'; }
+  };
+  reader.readAsDataURL(file);
+}
+
+function previewImageUrl() {
+  const url = document.getElementById('img-url-input')?.value?.trim();
+  if (!url) return;
+  const wrap = document.getElementById('img-preview-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover" onerror="document.getElementById('img-upload-msg').textContent='⚠️ Could not load image from this URL';document.getElementById('img-upload-msg').style.color='var(--red)'">`;
+  const msg = document.getElementById('img-upload-msg');
+  if (msg) { msg.textContent = 'URL preview loaded — click Save to apply'; msg.style.color = 'var(--muted)'; }
+}
+
+async function saveItemImage(itemId) {
+  const item = S.menu.find(m => m.id === itemId);
+  if (!item) return;
+  const btn = document.getElementById('img-save-btn');
+  const msg = document.getElementById('img-upload-msg');
+  const fileInput = document.getElementById('img-file-input');
+  const urlInput  = document.getElementById('img-url-input');
+  if (btn) { btn.classList.add('btn-loading'); btn.disabled = true; }
+  if (msg) { msg.textContent = 'Saving...'; msg.style.color = 'var(--muted)'; }
+  try {
+    let finalUrl = '';
+    // Option A: file upload to Supabase Storage
+    if (fileInput?.files?.length > 0) {
+      const file = fileInput.files[0];
+      if (!sb) throw new Error('Database not connected');
+      const ext  = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `menu-item-${itemId}-${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from('menu-images').upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw new Error('Upload failed: ' + upErr.message);
+      const { data: urlData } = sb.storage.from('menu-images').getPublicUrl(path);
+      finalUrl = urlData?.publicUrl || '';
+      if (!finalUrl) throw new Error('Could not get public URL after upload');
+    }
+    // Option B: direct URL
+    else if (urlInput?.value?.trim()) {
+      finalUrl = urlInput.value.trim();
+    } else {
+      if (msg) { msg.textContent = '⚠️ Select an image or paste a URL first'; msg.style.color = 'var(--red)'; }
+      if (btn) { btn.classList.remove('btn-loading'); btn.disabled = false; }
+      return;
+    }
+    // Save URL to menu_items.image_url
+    item.image_url = finalUrl;
+    if (sb) {
+      const { error: dbErr } = await sb.from('menu_items').update({ image_url: finalUrl }).eq('id', itemId);
+      if (dbErr) throw new Error('DB save failed: ' + dbErr.message);
+    }
+    toast(`Image saved for "${item.name}" 🖼️`, 'success', '✅');
+    closeModal();
+    // Refresh just this item's row in the list
+    const rowEl = document.getElementById('mmi-' + itemId);
+    if (rowEl) rowEl.outerHTML = renderAdminMenuItem(item);
+  } catch(e) {
+    if (msg) { msg.textContent = '❌ ' + (e.message || 'Save failed'); msg.style.color = 'var(--red)'; }
+    toast('Image save failed: ' + (e.message || ''), 'error', '❌');
+  }
+  if (btn) { btn.classList.remove('btn-loading'); btn.disabled = false; }
+}
+
+async function removeItemImage(itemId) {
+  const item = S.menu.find(m => m.id === itemId);
+  if (!item) return;
+  item.image_url = null;
+  try {
+    if (sb) await sb.from('menu_items').update({ image_url: null }).eq('id', itemId);
+    toast('Image removed', 'success', '🗑️');
+    closeModal();
+    const rowEl = document.getElementById('mmi-' + itemId);
+    if (rowEl) rowEl.outerHTML = renderAdminMenuItem(item);
+  } catch(e) {
+    toast('Remove failed: ' + e.message, 'error', '❌');
+  }
 }
 
 async function toggleMenuItem(id, toggleEl) {
@@ -4229,11 +4502,9 @@ async function sendForgotOTP(){
       return;
     }
     closeModal();
-    // Pre-fill login email and go to OTP step
-    document.getElementById('emp-email').value = email;
+    // Pre-fill login email and show OTP step
     _otpEmail = email;
-    document.getElementById('emp-step1').style.display = 'none';
-    document.getElementById('emp-step2').style.display = '';
+    _showEmpPanel('emp-step2');
     document.getElementById('otp-email-display').textContent = result.maskedEmail || email;
     ['otp-1','otp-2','otp-3','otp-4','otp-5','otp-6'].forEach(id => { const b = document.getElementById(id); if(b) b.value=''; });
     document.getElementById('otp-1')?.focus();
