@@ -1776,11 +1776,21 @@ async function setNewPassword() {
       p_password: pw1
     });
     if (pwErr) {
-      err.textContent = 'Could not save password: ' + (pwErr.message || 'Try again.');
+      // RPC failed — save plain text directly as fallback
+      const { error: directErr } = await sb.from('employees')
+        .update({ password_hash: pw1 })
+        .eq('id', _pendingEmpData.id);
+      if (directErr) {
+        err.textContent = 'Could not save password. Try again.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
+    } else if (pwRes && !pwRes.success) {
+      err.textContent = pwRes.error || 'Could not save password.';
       btn.classList.remove('btn-loading'); btn.disabled = false;
       return;
     }
-    // Re-fetch fresh employee record so password_hash is confirmed present
+    // Re-fetch fresh employee record
     const { data: freshEmp } = await sb.from('employees').select('*').eq('id', _pendingEmpData.id).single();
     const empToLogin = freshEmp || _pendingEmpData;
     toast('Password saved! Logging you in... 🔐', 'success', '✅');
@@ -1813,6 +1823,23 @@ async function registerEmployeeEmail() {
   btn.classList.add('btn-loading'); btn.disabled = true;
   try {
     if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+    // Check if employee already exists
+    const { data: existing } = await sb.from('employees').select('id,password_hash').eq('email', email).maybeSingle();
+    if (existing) {
+      if (existing.password_hash) {
+        err.textContent = 'Account exists. Please login instead.';
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      } else {
+        // Exists but no password — send OTP to set password
+        _pendingEmpData = existing;
+        toast('Account found! Sending OTP to set your password... 📧', 'success', '✅');
+        _otpEmail = email;
+        await sendEmailOTP();
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+        return;
+      }
+    }
     const { data: result, error: rpcErr } = await sb.rpc('register_employee', {
       p_name: name, p_email: email, p_phone: phone || null
     });
@@ -3535,9 +3562,16 @@ function filterAdminCanteen(cid, el) {
 function renderAdminMenuItem(m) {
   const stock = S.inventory[m.id] ?? m.stock ?? 99;
   const avail = m.is_available !== false;
+  const imgSrc = m.image_url || '';
   return `
     <div class="menu-mgmt-item" id="mmi-${m.id}">
-      <div class="mgmt-emoji">${m.emoji||'🍽️'}</div>
+      <div style="position:relative;flex-shrink:0;cursor:pointer;width:52px;height:52px" onclick="showImageUploadModal('${m.id}')" title="Click to upload image">
+        ${imgSrc
+          ? `<img src="${imgSrc}" style="width:52px;height:52px;border-radius:10px;object-fit:cover;display:block">`
+          : `<div style="width:52px;height:52px;border-radius:10px;background:var(--light2,#F1F5F9);display:flex;align-items:center;justify-content:center;font-size:22px">${m.emoji||'🍽️'}</div>`
+        }
+        <div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.5);border-radius:3px;padding:1px 3px;font-size:9px;color:#fff">📷</div>
+      </div>
       <div class="mgmt-body">
         <div class="mgmt-name">${m.name}</div>
         <div class="mgmt-meta">${m.category} · ${m.is_veg?'🟢 Veg':'🔴 Non-Veg'} · ${S.canteens.find(c=>c.id===m.canteen_id)?.name||'All'}</div>
