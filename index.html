@@ -2138,7 +2138,7 @@ async function doLogin() {
       S.user.wallet_balance = parseFloat(S.user.wallet_balance) || 0;
       S.role = 'employee';
       if (sb) {
-        const { data: freshMenu } = await sb.from('menu_items').select('*').eq('is_available', true).limit(700);
+        const { data: freshMenu } = await sb.from('menu_items').select('*').order('canteen_id').limit(700);
         if (freshMenu?.length) { S.menu = freshMenu; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
         const { data: freshCans } = await sb.from('canteens').select('*').order('id');
         if (freshCans?.length) S.canteens = freshCans;
@@ -7127,7 +7127,7 @@ async function refreshEmployee(btn) {
     const {data: cans} = await sb.from('canteens').select('*').order('id');
     if (cans?.length) { S.canteens = cans; renderCanteens(); }
     // Refresh menu
-    const {data: menu} = await sb.from('menu_items').select('*').eq('is_available', true).limit(700);
+    const {data: menu} = await sb.from('menu_items').select('*').order('canteen_id').limit(700);
     if (menu?.length) { S.menu = menu; renderMenu(); }
     // Refresh orders
     const {data: orders} = await sb.from('orders').select('*, order_items(*)').eq('employee_id', S.user.id).order('created_at',{ascending:false}).limit(30);
