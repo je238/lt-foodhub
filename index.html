@@ -44,6 +44,7 @@ html, body {
   min-height: 100vh !important;
   height: auto !important;
   overflow: visible !important;
+  background: #F2EDE6;
 }
 .page, .page-wide {
   height: auto !important;
@@ -98,9 +99,10 @@ html, body {
 }
 
 /* RESET & BASE */
-body{font-family:var(--f);background:var(--light);color:var(--dark);min-height:100vh;overflow-x:hidden;font-size:14px;line-height:1.5}
+body{font-family:var(--f);background:#F2EDE6;color:var(--dark);min-height:100vh;overflow-x:hidden;font-size:14px;line-height:1.5}
 /* Subtle background pattern */
 .page{padding:14px 14px 90px;max-width:520px;width:100%;margin:0 auto;position:relative}
+#tab-home{padding:0 0 90px}
 
 /* Hero entrance */
 .hero{animation:slideUp .5s var(--ease)}
@@ -197,24 +199,24 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .login-err{color:#ff9999;font-size:12px;text-align:center;margin-top:8px;min-height:18px}
 
 /* ─── TOP NAV ─── */
-.tnav{background:rgba(255,255,255,.82);backdrop-filter:blur(20px) saturate(1.8);-webkit-backdrop-filter:blur(20px) saturate(1.8);border-bottom:1px solid rgba(226,232,240,.6);height:60px;display:flex;align-items:center;padding:0 16px;gap:10px;position:sticky;top:0;z-index:100}
+.tnav{background:rgba(20,6,0,.72);backdrop-filter:blur(20px) saturate(1.8);-webkit-backdrop-filter:blur(20px) saturate(1.8);border-bottom:1px solid rgba(255,255,255,.08);height:60px;display:flex;align-items:center;padding:0 16px;gap:10px;position:sticky;top:0;z-index:100}
 .nav-logo{display:flex;align-items:center;gap:9px}
 .nav-icon{width:32px;height:32px;background:var(--brand);border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-weight:700;font-size:10px;color:#fff;flex-shrink:0}
-.nav-title{font-family:var(--fh);font-weight:700;font-size:15px;color:var(--dark)}
-.nav-sub{font-size:10px;color:var(--muted);margin-top:-1px}
+.nav-title{font-family:var(--fh);font-weight:700;font-size:15px;color:#fff}
+.nav-sub{font-size:10px;color:rgba(255,200,150,.55);margin-top:-1px}
 .nsp{flex:1}
-.wallet-chip{display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#ECFDF5,#D1FAE5);border:1px solid #a7f3d0;border-radius:22px;padding:6px 14px;cursor:pointer;transition:all .25s var(--ease)}
-.wallet-chip:hover{background:linear-gradient(135deg,#D1FAE5,#A7F3D0);transform:scale(1.03);box-shadow:0 4px 12px rgba(5,150,105,.15)}
-.wallet-amt{font-weight:800;font-size:13px;color:var(--green2);font-family:var(--fh)}
-.wallet-lbl{font-size:9px;color:var(--mid);font-weight:600;letter-spacing:.3px;text-transform:uppercase}
+.wallet-chip{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:22px;padding:6px 14px;cursor:pointer;transition:all .25s var(--ease);backdrop-filter:blur(8px)}
+.wallet-chip:hover{background:rgba(255,255,255,.2);transform:scale(1.03)}
+.wallet-amt{font-weight:800;font-size:13px;color:#fff;font-family:var(--fh)}
+.wallet-lbl{font-size:9px;color:rgba(255,255,255,.55);font-weight:600;letter-spacing:.3px;text-transform:uppercase}
 .av-btn{width:34px;height:34px;background:var(--brand);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px;cursor:pointer;flex-shrink:0;font-family:var(--fh);transition:.2s}
 .av-btn:hover{transform:scale(1.08)}
-.icon-btn{width:38px;height:38px;border-radius:11px;border:1px solid var(--border);background:var(--white);display:flex;align-items:center;justify-content:center;font-size:16px;transition:.2s;flex-shrink:0;cursor:pointer;position:relative}
-.icon-btn:hover{background:var(--light2)}
+.icon-btn{width:38px;height:38px;border-radius:11px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:16px;transition:.2s;flex-shrink:0;cursor:pointer;position:relative}
+.icon-btn:hover{background:rgba(255,255,255,.2)}
 .icon-btn .notif-dot{position:absolute;top:6px;right:6px;width:7px;height:7px;background:var(--brand);border-radius:50%;border:1.5px solid #fff}
 
 /* ─── BOTTOM NAV ─── */
-.bnav{background:rgba(255,255,255,.88);backdrop-filter:blur(20px) saturate(1.8);-webkit-backdrop-filter:blur(20px) saturate(1.8);border-top:1px solid rgba(226,232,240,.5);display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100;padding:4px 0 max(4px,env(safe-area-inset-bottom))}
+.bnav{background:rgba(255,255,255,.95);backdrop-filter:blur(24px) saturate(2);-webkit-backdrop-filter:blur(24px) saturate(2);border-top:1px solid rgba(226,232,240,.6);display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100;padding:4px 0 max(4px,env(safe-area-inset-bottom));box-shadow:0 -4px 20px rgba(15,23,42,.08)}
 
 .bni{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border:none;background:none;position:relative;transition:all .3s var(--ease)}
 .bni-icon{font-size:20px;transition:all .3s var(--ease)}
@@ -275,7 +277,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 /* ─── CHIPS/FILTERS ─── */
 .chip-row{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;margin-bottom:14px}
 .chip-row::-webkit-scrollbar{display:none}
-.chip{padding:8px 16px;border-radius:22px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;border:1.5px solid var(--border);background:var(--white);color:var(--mid);transition:all .25s var(--ease);flex-shrink:0}
+.chip{padding:8px 16px;border-radius:50px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;border:1.5px solid var(--border);background:var(--white);color:var(--mid);transition:all .25s var(--ease);flex-shrink:0;box-shadow:0 1px 4px rgba(15,23,42,.06)}
 .chip.active{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:0 4px 12px rgba(232,56,13,.25)}
 .chip:hover:not(.active){border-color:var(--brand-m);color:var(--brand);background:var(--brand-l)}
 
@@ -336,32 +338,40 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 ═══════════════════════════════ */
 
 /* Hero Banner */
-.hero{background:linear-gradient(135deg,#0F172A 0%,#1E3A5F 50%,#172554 100%);border-radius:var(--rxxl);padding:24px 20px;color:#fff;margin-bottom:18px;position:relative;overflow:hidden;box-shadow:0 8px 32px rgba(15,23,42,.25)}
-.hero::before{content:'';position:absolute;width:260px;height:260px;background:radial-gradient(circle,rgba(232,56,13,.3) 0%,transparent 70%);right:-60px;top:-60px;pointer-events:none}
-.hero::after{content:'';position:absolute;width:160px;height:160px;background:radial-gradient(circle,rgba(37,99,235,.15) 0%,transparent 70%);left:-30px;bottom:-40px;pointer-events:none}
-.hero-greet{font-size:12px;opacity:.6;margin-bottom:2px;font-weight:500;letter-spacing:.3px}
-.hero-name{font-family:var(--fh);font-size:24px;font-weight:700;margin-bottom:14px}
-.hero-chips{display:flex;gap:8px;flex-wrap:wrap}
-.hero-chip{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.1);backdrop-filter:blur(8px);border-radius:20px;padding:6px 12px;font-size:11px;font-weight:600;border:1px solid rgba(255,255,255,.12);transition:all .2s var(--ease)}
-.hero-chip:hover{background:rgba(255,255,255,.18)}
+.hero{background:linear-gradient(160deg,#1a0a00 0%,#3d1500 40%,#5c2200 70%,#2a0f00 100%);border-radius:0 0 32px 32px;padding:0;margin-bottom:0;position:relative;overflow:hidden;min-height:200px;display:flex;flex-direction:column;justify-content:flex-end}
+.hero-bg-img{position:absolute;inset:0;background:url('https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=600&q=60') center/cover no-repeat;opacity:.35;z-index:0}
+.hero-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(20,6,0,.2) 0%,rgba(20,6,0,.7) 60%,rgba(20,6,0,.9) 100%);z-index:1}
+.hero-content{position:relative;z-index:2;padding:20px 18px 22px}
+.hero-greet{font-size:13px;color:rgba(255,220,180,.7);margin-bottom:2px;font-weight:500;letter-spacing:.3px}
+.hero-name{font-family:var(--fh);font-size:24px;font-weight:700;color:#fff;margin-bottom:16px;line-height:1.25}
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap}
+.hero-btn-primary{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,var(--brand),#FF5722);border-radius:50px;padding:11px 20px;font-size:13px;font-weight:700;color:#fff;box-shadow:0 4px 16px rgba(232,56,13,.45);transition:all .2s;cursor:pointer;border:none}
+.hero-btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(232,56,13,.55)}
+.hero-btn-secondary{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.12);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.25);border-radius:50px;padding:11px 18px;font-size:13px;font-weight:600;color:#fff;transition:all .2s;cursor:pointer}
+.hero-btn-secondary:hover{background:rgba(255,255,255,.2)}
+.hero-btn-divider{width:1px;background:rgba(255,255,255,.25);margin:0 2px}
+.hero-chip{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.1);backdrop-filter:blur(8px);border-radius:20px;padding:6px 12px;font-size:11px;font-weight:600;border:1px solid rgba(255,255,255,.12);color:#fff;transition:all .2s var(--ease)}
 
 /* Canteen Cards */
 .canteen-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:5px;margin-bottom:18px;scrollbar-width:none}
 .canteen-scroll::-webkit-scrollbar{display:none}
-.canteen-card{min-width:115px;background:var(--white);border:2px solid rgba(226,232,240,.7);border-radius:16px;padding:14px 12px;cursor:pointer;transition:all .3s var(--ease-bounce);text-align:center;flex-shrink:0;position:relative}
-.canteen-card:hover,.canteen-card.active{border-color:var(--brand);background:var(--brand-l);transform:translateY(-4px);box-shadow:0 8px 24px rgba(232,56,13,.18)}
-.canteen-card.closed{opacity:.5;cursor:not-allowed}
-.canteen-card .canteen-icon{font-size:30px;margin-bottom:6px;transition:transform .3s var(--ease-bounce)}
-.canteen-card:hover .canteen-icon{transform:scale(1.15)}
-.canteen-card .canteen-name{font-weight:700;font-size:11px;color:var(--dark);margin-bottom:2px}
-.canteen-card .canteen-loc{font-size:9px;color:var(--muted)}
-.canteen-card .canteen-status{display:inline-block;margin-top:6px;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700}
+.canteen-card{min-width:155px;width:155px;background:var(--white);border:2.5px solid transparent;border-radius:20px;cursor:pointer;transition:all .3s var(--ease-bounce);flex-shrink:0;position:relative;overflow:hidden;box-shadow:0 3px 12px rgba(15,23,42,.1)}
+.canteen-card:hover,.canteen-card.active{border-color:var(--brand);transform:translateY(-4px);box-shadow:0 10px 28px rgba(232,56,13,.22)}
+.canteen-card.closed{opacity:.55;cursor:not-allowed}
+.canteen-card .canteen-img{width:100%;height:105px;object-fit:cover;display:block;background:var(--light2)}
+.canteen-card .canteen-img-emoji{width:100%;height:105px;display:flex;align-items:center;justify-content:center;font-size:44px;background:linear-gradient(145deg,#FFF3E0,#FFE0B2)}
+.canteen-card .canteen-body{padding:10px 11px 12px}
+.canteen-card .canteen-name{font-weight:700;font-size:13px;color:var(--dark);margin-bottom:3px}
 .canteen-card.active .canteen-name{color:var(--brand)}
+.canteen-card .canteen-meta{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-bottom:5px}
+.canteen-card .canteen-loc{font-size:10px;color:var(--muted);display:flex;align-items:center;justify-content:space-between}
+.canteen-card .canteen-check{width:20px;height:20px;border-radius:50%;background:var(--green-l);border:1.5px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.canteen-card.active .canteen-check{background:var(--brand-l);border-color:var(--brand)}
 
 /* Menu Items */
 /* ─── FOOD IMAGES & ZOMATO-STYLE MENU ─── */
-.menu-item{background:var(--white);border-radius:18px;padding:0;display:flex;align-items:stretch;gap:0;box-shadow:0 2px 12px rgba(15,23,42,.07),0 1px 3px rgba(15,23,42,.04);border:1px solid rgba(226,232,240,.6);margin-bottom:14px;transition:all .28s var(--ease);position:relative;overflow:hidden}
-.menu-item:hover{box-shadow:0 8px 28px rgba(15,23,42,.13),0 2px 8px rgba(15,23,42,.06);transform:translateY(-3px)}
+.menu-item{background:var(--white);border-radius:18px;padding:0;display:flex;align-items:stretch;gap:0;box-shadow:0 2px 16px rgba(15,23,42,.08),0 1px 4px rgba(15,23,42,.04);border:1px solid rgba(226,232,240,.5);margin-bottom:14px;transition:all .28s var(--ease);position:relative;overflow:hidden}
+.menu-item:hover{box-shadow:0 10px 32px rgba(15,23,42,.14),0 2px 8px rgba(15,23,42,.06);transform:translateY(-3px)}
 .menu-item:active{transform:scale(.985)}
 .menu-item.unavailable{opacity:.5}
 .menu-img-wrap{width:120px;min-height:120px;flex-shrink:0;position:relative;overflow:hidden;background:linear-gradient(145deg,#f1f5f9,#e2e8f0);border-radius:18px 0 0 18px}
@@ -665,17 +675,18 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .notif-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
 
 /* ─── SEARCH ─── */
-.search-bar{display:flex;align-items:center;background:var(--white);border:2px solid var(--border);border-radius:14px;padding:12px 15px;gap:10px;margin-bottom:16px;transition:all .3s var(--ease);box-shadow:var(--sh)}
-.search-bar:focus-within{border-color:var(--brand);background:var(--brand-l);box-shadow:0 0 0 3px rgba(232,56,13,.1)}
-.search-bar input{flex:1;font-size:15px;color:var(--dark);background:none;border:none}
+.search-bar{display:flex;align-items:center;background:var(--white);border:1.5px solid var(--border);border-radius:50px;padding:13px 18px;gap:10px;margin-bottom:18px;transition:all .3s var(--ease);box-shadow:0 2px 12px rgba(15,23,42,.08)}
+.search-bar:focus-within{border-color:var(--brand);box-shadow:0 0 0 3px rgba(232,56,13,.1)}
+.search-bar input{flex:1;font-size:14px;color:var(--dark);background:none;border:none}
 .search-bar input::placeholder{color:var(--muted)}
 .search-icon{font-size:18px;color:var(--muted);flex-shrink:0}
 
 /* ─── MISC ─── */
 .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.section-title{font-family:var(--fh);font-weight:700;font-size:18px}
+.section-title{font-family:var(--fh);font-weight:700;font-size:18px;color:var(--dark)}
 .section-action{font-size:12px;color:var(--brand);font-weight:700;cursor:pointer;transition:color .2s}
 .section-action:hover{color:var(--brand2)}
+.home-content{background:#fff;border-radius:28px 28px 0 0;margin-top:-18px;position:relative;z-index:2;padding:20px 16px 0;min-height:70vh}
 
 /* Canteen card entrance */
 @keyframes canteenPop{from{opacity:0;transform:scale(.9) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
@@ -879,32 +890,48 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
   <!-- HOME TAB -->
   <div class="page scroll" id="tab-home">
+    <!-- Hero Banner -->
     <div class="hero">
-      <div class="hero-name" id="h-name">Employee 👋</div>
-      <div class="hero-chips">
-
-        <span class="hero-chip" id="h-orders-count">📋 0 orders today</span>
+      <div class="hero-bg-img"></div>
+      <div class="hero-overlay"></div>
+      <div class="hero-content">
+        <div class="hero-greet">👋 Welcome back,</div>
+        <div class="hero-name" id="h-name">Loading...</div>
+        <div class="hero-actions">
+          <button class="hero-btn-primary" onclick="document.getElementById('menu-search').focus()">
+            🍽️ Today's Special 🔥
+          </button>
+          <button class="hero-btn-secondary" onclick="goTab('orders')">
+            📋 Quick Order ⚡
+            <div class="hero-btn-divider"></div>
+            <span style="font-size:16px;opacity:.7">≡</span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Search -->
-    <div class="search-bar" id="menu-search-bar">
-      <span class="search-icon">🔍</span>
-      <input type="text" placeholder="Search dishes..." id="menu-search" oninput="searchMenu()">
-    </div>
+    <!-- White card content area -->
+    <div class="home-content">
+      <!-- Search -->
+      <div class="search-bar" id="menu-search-bar">
+        <span class="search-icon" style="font-size:18px">🔍</span>
+        <input type="text" placeholder="Search pizza, dosa, chai... 😋" id="menu-search" oninput="searchMenu()">
+        <span style="font-size:18px;opacity:.5;cursor:pointer" onclick="toggleVegFilter(document.getElementById('veg-toggle'))">🎛️</span>
+      </div>
 
-    <div class="section-header">
-      <div class="section-title">Choose Canteen</div>
-      <span class="section-action" onclick="goTab('orders')">My Orders →</span>
-    </div>
-    <div class="canteen-scroll" id="canteen-row"></div>
+      <div class="section-header">
+        <div class="section-title">Choose Canteen</div>
+        <span class="section-action" onclick="goTab('orders')">My Orders →</span>
+      </div>
+      <div class="canteen-scroll" id="canteen-row"></div>
 
-    <div class="section-header">
-      <div class="section-title" id="menu-sec-title">Menu</div>
-      <div class="chip-row" id="cat-row" style="margin-bottom:0;flex:0 0 auto"></div>
-    </div>
+      <div class="section-header" style="margin-top:4px">
+        <div class="section-title" id="menu-sec-title">Menu</div>
+      </div>
+      <div class="chip-row" id="cat-row" style="margin-bottom:14px"></div>
 
-    <div id="menu-list"><div class="loader"></div></div>
+      <div id="menu-list"><div class="loader"></div></div>
+    </div>
   </div>
 
   <!-- ORDERS TAB -->
@@ -2085,7 +2112,7 @@ function logout() {
 function renderHome() {
   if (!S.user) return;
   const hr = new Date().getHours();
-  setEl('h-name', S.user.name + ' 👋');
+  setElInner('h-name', 'Hey ' + (S.user.name||'').split(' ')[0] + ',<br><span style="font-weight:800">kya khaoge aaj? 😋</span>');
   setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
   setEl('nav-av', S.user.initials || initials(S.user.name));
   setEl('h-subsidy', `🎯 Subsidy ₹${S.user.subsidy_per_meal||80}/meal`);
@@ -2099,16 +2126,39 @@ function renderHome() {
   generateSlots();
 }
 
+// Canteen background images by canteen id
+const _CANTEEN_IMGS = {
+  'c1': 'photo-1585937421612-70a008356fbe', // north indian thali
+  'c2': 'photo-1630383249896-424e482df921', // south indian dosa
+  'c3': 'photo-1569718212165-3a8278d5f624', // chinese noodles
+  'c4': 'photo-1565299624946-b28f40a0ae38', // pizza/italian
+  'c5': 'photo-1603133872878-684f208fb84b', // non-veg chicken
+  'c6': 'photo-1606491956689-2ea866880049', // chaat
+  'c7': 'photo-1509042239860-f550ce710b93', // beverages
+};
 function renderCanteens() {
   const el = document.getElementById('canteen-row');
   if (!el) return;
-  el.innerHTML = S.canteens.map(c => `
+  el.innerHTML = S.canteens.map(c => {
+    const imgId = _CANTEEN_IMGS[c.id];
+    const imgUrl = imgId ? `https://images.unsplash.com/${imgId}?w=300&h=200&fit=crop&q=70` : '';
+    const rating = (4.1 + (c.id?.charCodeAt(1)||0) % 5 * 0.1).toFixed(1);
+    const wait = c.id === 'c7' ? '2-5' : '5-10';
+    return `
     <div class="canteen-card${!c.is_open?' closed':''}${S.selCanteen?.id===c.id?' active':''}" onclick="selCanteen('${c.id}')">
-      <div class="canteen-icon">${c.icon}</div>
-      <div class="canteen-name">${c.name}</div>
-      <div class="canteen-loc">${c.location||''}</div>
-      <div class="canteen-status ${c.is_open?'badge-open':'badge-closed'}">${c.is_open?'● Open':'● Closed'}</div>
-    </div>`).join('');
+      ${imgUrl
+        ? `<img class="canteen-img" src="${imgUrl}" alt="${c.name}" loading="lazy" onerror="this.outerHTML='<div class=canteen-img-emoji>${c.icon}</div>'">`
+        : `<div class="canteen-img-emoji">${c.icon}</div>`}
+      <div class="canteen-body">
+        <div class="canteen-name">${c.name.replace(' Counter','').replace(' Canteen','')}</div>
+        <div class="canteen-meta">⭐ ${rating} · ${wait} min</div>
+        <div class="canteen-loc">
+          <span>${c.location||'Campus'}</span>
+          <div class="canteen-check">${c.is_open?'✓':'✕'}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function selCanteen(id) {
@@ -2123,10 +2173,22 @@ function selCanteen(id) {
   renderMenu();
 }
 
+const _CAT_ICONS = {
+  'All':'🍽️','Biryani & Pulao':'🍚','Biryani':'🍗','Rice':'🍚','Fried Rice':'🍳',
+  'Combo Meals':'🥘','North Indian':'🫕','South Indian':'🥣','Chinese':'🍜',
+  'Pizza':'🍕','Pasta':'🍝','Italian':'🍕','Snacks':'🥪','Chaat':'🥟',
+  'Hot Beverages':'☕','Cold Beverages':'🥤','Beverages':'🧃','Milkshakes':'🥛',
+  'Idli & Snacks':'🥣','Dosa':'🫓','Non-Veg Rice':'🍗','Egg Special':'🥚',
+  'Thali':'🍱','Desserts':'🍮','Salads':'🥗','Soups':'🍲',
+  'Veg Rice':'🌿','Khichdi':'🫕','Non-Veg':'🍖',
+};
 function renderCats() {
   let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
   const cats = ['All', ...new Set(items.map(m => m.category).filter(Boolean))];
-  const html = cats.map(c => `<div class="chip${c===S.selCat?' active':''}" onclick="selCat('${c}')">${c}</div>`).join('');
+  const html = cats.map(c => {
+    const icon = _CAT_ICONS[c] || '🍽️';
+    return `<div class="chip${c===S.selCat?' active':''}" onclick="selCat('${c}')" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap"><span>${icon}</span>${c}</div>`;
+  }).join('');
   setElInner('cat-row', html);
 }
 
