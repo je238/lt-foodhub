@@ -5158,9 +5158,9 @@ function startRealtime() {
         if (S.role === 'employee') {
           renderMenu();
           renderCats();
-          if (!updated.is_available) toast(`${updated.name} is now unavailable`, 'warn', '🚫');
+          // No toast — silently update menu to avoid spam when many items change at once
         }
-        if (S.role === 'vendor' || S.role === 'kitchen') renderVendor && renderVendor();
+        if (S.role === 'vendor' || S.role === 'kitchen') { if(typeof renderVendor==='function') renderVendor(); }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'menu_items' }, payload => {
         const newItem = payload.new;
