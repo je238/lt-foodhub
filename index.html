@@ -2257,7 +2257,7 @@ const _CAT_ICONS = {
   'Veg Rice':'🌿','Khichdi':'🫕','Non-Veg':'🍖',
 };
 function renderCats() {
-  let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
+  let items = S.menu.filter(m => (!m.canteen_id || m.canteen_id === S.selCanteen?.id) && m.is_available !== false);
   const cats = ['All', ...new Set(items.map(m => m.category).filter(Boolean))];
   const html = cats.map(c => {
     const icon = _CAT_ICONS[c] || '🍽️';
@@ -2332,8 +2332,8 @@ function _getFoodImg(name, emoji) {
 
 function renderMenu(searchQuery) {
   // // removed debug log
-  let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
-  // // removed debug log
+  // Employee sees only available items — unavailable items hidden entirely
+  let items = S.menu.filter(m => (!m.canteen_id || m.canteen_id === S.selCanteen?.id) && m.is_available !== false);
   if (S.selCat !== 'All') items = items.filter(m => m.category === S.selCat);
   if (S.vegOnly) items = items.filter(m => m.is_veg);
   if (searchQuery) {
