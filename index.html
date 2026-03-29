@@ -1099,7 +1099,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div class="divider-text">Pickup Details</div>
     <div class="slot-picker">
       <div class="card-title">⏰ Choose Pickup Time</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">🔥 Peak: 12:30–1:30 PM — longer wait</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">🍽️ Lunch: 12:00–2:00 PM · Orders open from 8:00 AM</div>
       <div class="slot-grid" id="slot-grid"></div>
     </div>
     <div class="summary-box" id="cart-summary"></div>
@@ -2552,7 +2552,8 @@ function isSlotPast(slot) {
   let [h, m] = time.split(':').map(Number);
   if (ampm === 'PM' && h !== 12) h += 12;
   if (ampm === 'AM' && h === 12) h = 0;
-  const slotDate = new Date(); slotDate.setHours(h, m+10, 0);
+  // Slot expires 20 mins after its start time
+  const slotDate = new Date(); slotDate.setHours(h, m + 20, 0);
   return slotDate < now;
 }
 
@@ -4369,25 +4370,12 @@ async function renderAdminTopups(el) {
       .order('created_at', { ascending: false })
       .limit(200);
     if (error) throw error;
-    txns = (rows || []).filter(t =>
-      t.description && (
-        t.description.toLowerCase().includes('top') ||
-        t.description.toLowerCase().includes('icici') ||
-        t.description.toLowerCase().includes('payment') ||
-        t.description.toLowerCase().includes('recharge') ||
-        t.description.toLowerCase().includes('add') ||
-        t.description.toLowerCase().includes('credit')
-      )
-    );
-    // If no filtered results, show all credits (they're all top-ups or refunds)
-    if (txns.length === 0) txns = rows || [];
-
-    // Classify: ICICI txns have txnNo in description; others are refunds
-    const topups = txns.filter(t => t.description && (t.description.includes('TxnNo') || t.description.toLowerCase().includes('icici') || t.description.toLowerCase().includes('top')));
+    // Show ALL credit transactions — any credit is a top-up or refund
+    txns = rows || [];
     const refunds = txns.filter(t => t.description && t.description.toLowerCase().includes('refund'));
-
-    totalAmt = topups.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
-    totalSuccess = topups.length;
+    const topups = txns.filter(t => !t.description?.toLowerCase().includes('refund'));
+    totalAmt = txns.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+    totalSuccess = txns.length;
 
     // Also check if any payments failed — stored as payment_logs if table exists
     let failedPayments = [];
@@ -5155,6 +5143,31 @@ function startRealtime() {
               else toast(`${fc.icon||'🍽️'} ${fc.name} is now OPEN 🎉`, 'success', '🟢');
             }
           }
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'menu_items' }, payload => {
+        const updated = payload.new;
+        const idx = S.menu.findIndex(m => m.id === updated.id);
+        if (idx !== -1) {
+          S.menu[idx] = { ...S.menu[idx], ...updated };
+          S.inventory[updated.id] = updated.stock ?? S.inventory[updated.id];
+        } else {
+          S.menu.push(updated);
+          S.inventory[updated.id] = updated.stock ?? 50;
+        }
+        if (S.role === 'employee') {
+          renderMenu();
+          renderCats();
+          if (!updated.is_available) toast(`${updated.name} is now unavailable`, 'warn', '🚫');
+        }
+        if (S.role === 'vendor' || S.role === 'kitchen') renderVendor && renderVendor();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'menu_items' }, payload => {
+        const newItem = payload.new;
+        if (!S.menu.find(m => m.id === newItem.id)) {
+          S.menu.push(newItem);
+          S.inventory[newItem.id] = newItem.stock ?? 50;
+          if (S.role === 'employee') { renderMenu(); renderCats(); }
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
