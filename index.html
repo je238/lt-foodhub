@@ -2257,7 +2257,7 @@ const _CAT_ICONS = {
   'Veg Rice':'🌿','Khichdi':'🫕','Non-Veg':'🍖',
 };
 function renderCats() {
-  let items = S.menu.filter(m => (!m.canteen_id || m.canteen_id === S.selCanteen?.id) && m.is_available !== false);
+  let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
   const cats = ['All', ...new Set(items.map(m => m.category).filter(Boolean))];
   const html = cats.map(c => {
     const icon = _CAT_ICONS[c] || '🍽️';
@@ -2332,8 +2332,8 @@ function _getFoodImg(name, emoji) {
 
 function renderMenu(searchQuery) {
   // // removed debug log
-  // Employee sees only available items — unavailable items hidden entirely
-  let items = S.menu.filter(m => (!m.canteen_id || m.canteen_id === S.selCanteen?.id) && m.is_available !== false);
+  let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
+  // // removed debug log
   if (S.selCat !== 'All') items = items.filter(m => m.category === S.selCat);
   if (S.vegOnly) items = items.filter(m => m.is_veg);
   if (searchQuery) {
@@ -5405,7 +5405,7 @@ async function showSoldOutPanel(){
     </div>
     <div class="modal-body" style="max-height:75svh;overflow-y:auto">
       <div style="background:var(--light2);border-radius:10px;padding:10px 13px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:var(--muted)">${availCnt} of ${items.length} items available for this counter</span>
+        <span style="font-size:12px;color:var(--muted)">${availCnt} of ${items.length} items available</span>
         <div style="display:flex;gap:8px">
           <button class="btn btn-ghost btn-sm" onclick="stockToggleAll(true)">✅ All On</button>
           <button class="btn btn-ghost btn-sm" onclick="stockToggleAll(false)">🚫 All Off</button>
@@ -5433,12 +5433,11 @@ function stockToggleAll(on) {
 async function vendorToggleItem(id, toggleEl){
   const item = S.menu.find(m=>m.id===id);
   if(!item) return;
-  // Read state from the toggle el (already toggled by onclick) — don't double-flip
-  const nowOn = toggleEl.classList.contains('on');
-  item.is_available = nowOn;
-  if(!nowOn) S.inventory[id] = 0;
-  // No toast here — stock control changes many items silently
-  try{ if(sb){ const{error}=await sb.from('menu_items').update({is_available:nowOn}).eq('id',id); if(error) toast('Update failed: '+error.message,'error','❌'); } }catch(e){ toast('Update failed','error','❌'); }
+  item.is_available = !item.is_available;
+  if(!item.is_available) S.inventory[id] = 0;
+  toggleEl.classList.toggle('on', item.is_available);
+  toast(`${item.name} marked ${item.is_available?'available':'sold out'}`, item.is_available?'success':'warn', item.is_available?'✅':'🚫');
+  try{ if(sb){ const{error}=await sb.from('menu_items').update({is_available:item.is_available}).eq('id',id); if(error) toast('Update failed: '+error.message,'error','❌'); } }catch(e){ toast('Update failed','error','❌'); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -6866,14 +6865,17 @@ async function saveDailyMenu(cid) {
     const { error } = await sb.from('daily_menu').insert(selections);
     if (error) { toast('Failed: ' + error.message, 'error', '❌'); return; }
 
-    // Update each item individually — more reliable than batch .in() with Supabase RLS
+    // Batch update menu_items is_available — single upsert instead of N sequential calls
     const batchUpdates = selections.map(sel => ({ id: sel.menu_item_id, is_available: sel.is_available }));
     // Update local state immediately
     batchUpdates.forEach(u => { const item = S.menu.find(m => m.id === u.id); if (item) item.is_available = u.is_available; });
-    // Update DB one by one (reliable with any ID type + RLS)
-    await Promise.all(
-      batchUpdates.map(u => sb.from('menu_items').update({ is_available: u.is_available }).eq('id', u.id))
-    );
+    // Two batch calls: enable items, disable items
+    const toEnable = batchUpdates.filter(u => u.is_available).map(u => u.id);
+    const toDisable = batchUpdates.filter(u => !u.is_available).map(u => u.id);
+    const updates = [];
+    if (toEnable.length) updates.push(sb.from('menu_items').update({ is_available: true }).in('id', toEnable));
+    if (toDisable.length) updates.push(sb.from('menu_items').update({ is_available: false }).in('id', toDisable));
+    await Promise.all(updates);
 
     closeModal();
     const availCount = selections.filter(s => s.is_available).length;
