@@ -1036,7 +1036,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-val" id="st-orders">0</div><div class="stat-sub stat-up">This month</div></div>
-      <div class="stat-card"><div class="stat-label">Amount Saved</div><div class="stat-val" id="st-saved" style="font-size:18px">₹0</div><div class="stat-sub">Via subsidy</div></div>
+      <div class="stat-card"><div class="stat-label">Avg Order</div><div class="stat-val" id="st-saved" style="font-size:18px">₹0</div><div class="stat-sub">Per order</div></div>
     </div>
     <div class="card">
       <div class="card-title">⚙️ Preferences</div>
@@ -2189,8 +2189,6 @@ function renderHome() {
   setElInner('h-name', 'Hey ' + (S.user.name||'').split(' ')[0] + ',<br><span style="font-weight:800">kya khaoge aaj? 😋</span>');
   setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
   setEl('nav-av', S.user.initials || initials(S.user.name));
-  setEl('h-subsidy', `🎯 Subsidy ₹${S.user.subsidy_per_meal||80}/meal`);
-  setEl('h-pass', S.user.meal_pass_active ? '🎫 Meal Pass Active' : '🚫 No Meal Pass');
   const _todayStr = new Date().toISOString().slice(0,10);
   const _todayOrders = S.orders.filter(o => o.created_at && String(o.created_at).slice(0,10) === _todayStr);
   setEl('h-orders-count', `📋 ${_todayOrders.length} orders today`);
@@ -2257,7 +2255,7 @@ const _CAT_ICONS = {
   'Veg Rice':'🌿','Khichdi':'🫕','Non-Veg':'🍖',
 };
 function renderCats() {
-  let items = S.menu.filter(m => (!m.canteen_id || m.canteen_id === S.selCanteen?.id) && m.is_available !== false);
+  let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
   const cats = ['All', ...new Set(items.map(m => m.category).filter(Boolean))];
   const html = cats.map(c => {
     const icon = _CAT_ICONS[c] || '🍽️';
@@ -2332,8 +2330,8 @@ function _getFoodImg(name, emoji) {
 
 function renderMenu(searchQuery) {
   // // removed debug log
-  // Employee sees only available items — unavailable items hidden entirely
-  let items = S.menu.filter(m => (!m.canteen_id || m.canteen_id === S.selCanteen?.id) && m.is_available !== false);
+  let items = S.menu.filter(m => !m.canteen_id || m.canteen_id === S.selCanteen?.id);
+  // // removed debug log
   if (S.selCat !== 'All') items = items.filter(m => m.category === S.selCat);
   if (S.vegOnly) items = items.filter(m => m.is_veg);
   if (searchQuery) {
@@ -3197,16 +3195,10 @@ function renderProfile() {
   setEl('p-name', S.user.name);
   setEl('p-id', S.user.id);
   setEl('p-dept', (S.user.department||'L&T') + ' — ' + (S.user.campus||'Powai Campus'));
-  setEl('mp-month', new Date().toLocaleString('en-IN',{month:'long',year:'numeric'}));
-  const used = S.user.meal_pass_used || 0;
-  const limit = S.user.meal_pass_limit || 30;
-  const rem = limit - used;
-  const bar = document.getElementById('mp-bar');
-  if (bar) bar.style.width = ((rem/limit)*100)+'%';
-  setEl('mp-remaining', rem + ' / ' + limit + ' meals remaining');
   setEl('st-orders', S.orders.filter(o => o.status !== 'cancelled').length);
-  const saved = S.orders.reduce((s,o) => s+(o.subsidy_applied||0), 0);
-  setEl('st-saved', '₹'+saved);
+  const activeOrders = S.orders.filter(o => o.status !== 'cancelled');
+  const avgOrder = activeOrders.length > 0 ? Math.round(activeOrders.reduce((s,o) => s+(parseFloat(o.amount_paid)||0), 0) / activeOrders.length) : 0;
+  setEl('st-saved', '₹'+avgOrder);
   // Favorite items
   const itemCounts = {};
   S.orders.forEach(o => (o.items||[]).forEach(i => { itemCounts[i.item_name||i.name] = (itemCounts[i.item_name||i.name]||0)+1; }));
@@ -3542,7 +3534,6 @@ async function renderAdminOverview(el) {
       <div class="stat-card"><div class="stat-label">Today's Orders</div><div class="stat-val">${todayOrderCount}</div><div class="stat-sub stat-neu">Live from database</div></div>
       <div class="stat-card"><div class="stat-label">Revenue Today</div><div class="stat-val" style="font-size:20px">₹${todayRevenue>999?(todayRevenue/1000).toFixed(1)+'K':todayRevenue}</div><div class="stat-sub stat-neu">Incl. GST</div></div>
       <div class="stat-card"><div class="stat-label">Enrolled Employees</div><div class="stat-val">${totalEmployees.toLocaleString('en-IN')}</div><div class="stat-sub stat-neu">Total registered</div></div>
-      <div class="stat-card"><div class="stat-label">Subsidy Disbursed</div><div class="stat-val" style="font-size:20px">₹${todaySubsidy>999?(todaySubsidy/1000).toFixed(1)+'K':todaySubsidy}</div><div class="stat-sub stat-neu">Today</div></div>
     </div>
     <div class="card">
       <div class="card-title">🏪 Canteen Revenue Today</div>
@@ -4514,10 +4505,10 @@ async function renderAdminRevenue(el) {
       }).join('')}
     </div>
     <div class="card">
-      <div class="card-title">💳 Subsidy Report — ${new Date().toLocaleString('en-IN',{month:'long',year:'numeric'})}</div>
+      <div class="card-title">📊 Monthly Summary — ${new Date().toLocaleString('en-IN',{month:'long',year:'numeric'})}</div>
       <div class="stats-grid">
-        <div class="stat-card"><div class="stat-label">Total Disbursed</div><div class="stat-val" style="font-size:20px">₹${monthSubsidy>999?(monthSubsidy/1000).toFixed(1)+'K':monthSubsidy}</div><div class="stat-sub stat-neu">This month</div></div>
         <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-val">${(monthOrders||[]).length}</div><div class="stat-sub stat-neu">This month</div></div>
+        <div class="stat-card"><div class="stat-label">Avg Order</div><div class="stat-val" style="font-size:20px">₹${(monthOrders||[]).length>0?Math.round((monthOrders||[]).reduce((s,o)=>s+(parseFloat(o.amount_paid)||0),0)/(monthOrders||[]).length):0}</div><div class="stat-sub stat-neu">Per order</div></div>
       </div>
       <button class="btn btn-ghost btn-full btn-sm" style="margin-top:12px" onclick="exportRealReport()">📥 Download Report CSV</button>
     </div>`;
@@ -4530,10 +4521,10 @@ async function exportRealReport() {
     const weekAgo = new Date(Date.now() - 30*86400000).toISOString();
     const {data} = await sb.from('orders').select('id, token_number, employee_name, canteen_name, item_total, gst_amount, subsidy_applied, amount_paid, status, created_at').gte('created_at', weekAgo).order('created_at',{ascending:false});
     if (!data?.length) { toast('No orders to export', 'warn', '📥'); return; }
-    const csv = 'Date,Time,Token,Employee,Canteen,Subtotal,GST,Subsidy,Paid,Status\n' +
+    const csv = 'Date,Time,Token,Employee,Canteen,Subtotal,GST,Paid,Status\n' +
       data.map(o => {
         const d = new Date(o.created_at);
-        return `${d.toLocaleDateString('en-IN')},${d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})},#${o.token_number},${o.employee_name},${o.canteen_name},${o.item_total||0},${o.gst_amount||0},${o.subsidy_applied||0},${o.amount_paid||0},${o.status}`;
+        return `${d.toLocaleDateString('en-IN')},${d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})},#${o.token_number},${o.employee_name},${o.canteen_name},${o.item_total||0},${o.gst_amount||0},${o.amount_paid||0},${o.status}`;
       }).join('\n');
     const blob = new Blob([csv], {type:'text/csv'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'lt-foodhub-report-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
@@ -5405,7 +5396,7 @@ async function showSoldOutPanel(){
     </div>
     <div class="modal-body" style="max-height:75svh;overflow-y:auto">
       <div style="background:var(--light2);border-radius:10px;padding:10px 13px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:var(--muted)">${availCnt} of ${items.length} items available for this counter</span>
+        <span style="font-size:12px;color:var(--muted)">${availCnt} of ${items.length} items available</span>
         <div style="display:flex;gap:8px">
           <button class="btn btn-ghost btn-sm" onclick="stockToggleAll(true)">✅ All On</button>
           <button class="btn btn-ghost btn-sm" onclick="stockToggleAll(false)">🚫 All Off</button>
@@ -5433,12 +5424,11 @@ function stockToggleAll(on) {
 async function vendorToggleItem(id, toggleEl){
   const item = S.menu.find(m=>m.id===id);
   if(!item) return;
-  // Read state from the toggle el (already toggled by onclick) — don't double-flip
-  const nowOn = toggleEl.classList.contains('on');
-  item.is_available = nowOn;
-  if(!nowOn) S.inventory[id] = 0;
-  // No toast here — stock control changes many items silently
-  try{ if(sb){ const{error}=await sb.from('menu_items').update({is_available:nowOn}).eq('id',id); if(error) toast('Update failed: '+error.message,'error','❌'); } }catch(e){ toast('Update failed','error','❌'); }
+  item.is_available = !item.is_available;
+  if(!item.is_available) S.inventory[id] = 0;
+  toggleEl.classList.toggle('on', item.is_available);
+  toast(`${item.name} marked ${item.is_available?'available':'sold out'}`, item.is_available?'success':'warn', item.is_available?'✅':'🚫');
+  try{ if(sb){ const{error}=await sb.from('menu_items').update({is_available:item.is_available}).eq('id',id); if(error) toast('Update failed: '+error.message,'error','❌'); } }catch(e){ toast('Update failed','error','❌'); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -5857,21 +5847,13 @@ function downloadWalletStatement(){
 // ══════════════════════════════════════════════════════
 // ㉒ MONTHLY SPENDING LIMIT
 // ══════════════════════════════════════════════════════
-const MONTHLY_LIMIT = 2000; // ₹2000/month default
 function getMonthlySpent(){
   return S.txns.filter(t=>t.type==='debit').reduce((s,t)=>s+t.amount,0);
 }
-function checkSpendingLimit(amount){
-  const spent = getMonthlySpent();
-  const remaining = MONTHLY_LIMIT - spent;
-  if(remaining <= 0){ toast('Monthly spending limit (₹'+MONTHLY_LIMIT+') reached!','error','🚫'); return false; }
-  if(spent+amount > MONTHLY_LIMIT){ toast(`Only ₹${remaining} remaining in monthly limit`,'warn','⚠️'); return false; }
-  if(remaining < 200) toast(`Low monthly balance: ₹${remaining} left`,'warn','⚠️');
-  return true;
-}
+function checkSpendingLimit(amount){ return true; }
 
 // ══════════════════════════════════════════════════════
-// ㉓ LOW BALANCE WARNING (enhanced)
+// LOW BALANCE WARNING
 // ══════════════════════════════════════════════════════
 function checkLowBalance(){
   if(!S.user) return;
@@ -6221,30 +6203,12 @@ renderMenu = function(searchQuery){
   }
 };
 
-// Patch: renderWallet — add statement download + spending limit
+// Patch: renderWallet — add statement download
 const _origRenderWallet = renderWallet;
 renderWallet = async function(){
   await _origRenderWallet();
   const el = document.getElementById('tab-wallet');
   if(!el) return;
-  const spent = getMonthlySpent();
-  // spending limit removed
-  const hero = el.querySelector('.wallet-hero');
-  if(hero && !el.querySelector('.spending-limit-card')){
-    const limitCard = document.createElement('div');
-    limitCard.className='card spending-limit-card'; limitCard.style.display='none';
-    limitCard.innerHTML=`
-      <div class="card-title">📊 Monthly Spending Limit</div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-        <span style="font-size:13px;color:var(--muted)">Spent this month</span>
-        <span style="font-weight:800;font-family:var(--fh)">₹${Math.round(spent)} <span style="font-size:11px;color:var(--muted);font-weight:400">/ ₹${MONTHLY_LIMIT}</span></span>
-      </div>
-      <div class="progress" style="height:10px">
-        <div class="progress-fill ${limitPct>80?'red':limitPct>60?'amber':'green'}" style="width:${limitPct}%"></div>
-      </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:5px">₹${MONTHLY_LIMIT-Math.round(spent)} remaining this month</div>`;
-    hero.after(limitCard);
-  }
   // Add download button before topup
   const stmtBtnId = 'stmt-btn';
   if(!document.getElementById(stmtBtnId)){
@@ -6866,14 +6830,17 @@ async function saveDailyMenu(cid) {
     const { error } = await sb.from('daily_menu').insert(selections);
     if (error) { toast('Failed: ' + error.message, 'error', '❌'); return; }
 
-    // Update each item individually — more reliable than batch .in() with Supabase RLS
+    // Batch update menu_items is_available — single upsert instead of N sequential calls
     const batchUpdates = selections.map(sel => ({ id: sel.menu_item_id, is_available: sel.is_available }));
     // Update local state immediately
     batchUpdates.forEach(u => { const item = S.menu.find(m => m.id === u.id); if (item) item.is_available = u.is_available; });
-    // Update DB one by one (reliable with any ID type + RLS)
-    await Promise.all(
-      batchUpdates.map(u => sb.from('menu_items').update({ is_available: u.is_available }).eq('id', u.id))
-    );
+    // Two batch calls: enable items, disable items
+    const toEnable = batchUpdates.filter(u => u.is_available).map(u => u.id);
+    const toDisable = batchUpdates.filter(u => !u.is_available).map(u => u.id);
+    const updates = [];
+    if (toEnable.length) updates.push(sb.from('menu_items').update({ is_available: true }).in('id', toEnable));
+    if (toDisable.length) updates.push(sb.from('menu_items').update({ is_available: false }).in('id', toDisable));
+    await Promise.all(updates);
 
     closeModal();
     const availCount = selections.filter(s => s.is_available).length;
