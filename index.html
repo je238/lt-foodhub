@@ -173,7 +173,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 @keyframes loadBar{0%{width:0}60%{width:70%}100%{width:100%}}
 
 /* ─── LOGIN ─── */
-#s-login{background:#0a0a1a;align-items:flex-start;justify-content:flex-start;position:relative;overflow-y:auto;overflow-x:hidden;padding:0;display:flex;flex-direction:column}
+#s-login{background:#0a0a1a;align-items:flex-start;justify-content:flex-start;position:relative;overflow-y:auto;overflow-x:hidden;padding:0;flex-direction:column}
+#s-login.active{display:flex!important}
 .login-hero-img{width:100%;height:220px;object-fit:cover;display:block;position:relative;flex-shrink:0}
 .login-hero-wrap{position:relative;width:100%;flex-shrink:0}
 .login-hero-wrap::after{content:'';position:absolute;bottom:0;left:0;right:0;height:120px;background:linear-gradient(to bottom,transparent,#0a0a1a);pointer-events:none}
@@ -191,6 +192,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .linp{width:100%;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.12);border-radius:14px;padding:14px 15px 14px 44px;color:#fff;font-size:14px;font-family:var(--f);transition:.2s;margin-bottom:12px;box-sizing:border-box}
 .linp:focus{border-color:rgba(232,56,13,.7);background:rgba(255,255,255,.12);outline:none}
 .linp::placeholder{color:rgba(255,255,255,.22)}
+.linp:-webkit-autofill,.linp:-webkit-autofill:hover,.linp:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 1000px #1a1a2e inset!important;-webkit-text-fill-color:#fff!important;border-color:rgba(255,255,255,.2)!important;caret-color:#fff}
 .linp-wrap{position:relative;margin-bottom:0}
 .linp-wrap .linp{margin-bottom:0}
 .linp-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:15px;opacity:.5;pointer-events:none}
@@ -1061,14 +1063,15 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     </div>
   </div>
 
-  <!-- Bottom Nav -->
-  <nav class="bnav">
-    <button class="bni act" onclick="goTab('home',this)"><span class="bni-icon">🏠</span><span class="bni-label">Home</span></button>
-    <button class="bni" onclick="goTab('orders',this)" id="ord-nav"><span class="bni-icon">📋</span><span class="bni-label">Orders</span><span class="bni-badge hidden" id="ord-badge">0</span></button>
-    <button class="bni" onclick="goTab('wallet',this)"><span class="bni-icon">💚</span><span class="bni-label">Wallet</span></button>
-    <button class="bni" onclick="goTab('profile',this)"><span class="bni-icon">👤</span><span class="bni-label">Profile</span></button>
-  </nav>
 </div>
+
+<!-- Bottom Nav — outside all screens so it can be hidden independently -->
+<nav class="bnav" id="main-bnav" style="display:none">
+  <button class="bni act" onclick="goTab('home',this)"><span class="bni-icon">🏠</span><span class="bni-label">Home</span></button>
+  <button class="bni" onclick="goTab('orders',this)" id="ord-nav"><span class="bni-icon">📋</span><span class="bni-label">Orders</span><span class="bni-badge hidden" id="ord-badge">0</span></button>
+  <button class="bni" onclick="goTab('wallet',this)"><span class="bni-icon">💚</span><span class="bni-label">Wallet</span></button>
+  <button class="bni" onclick="goTab('profile',this)"><span class="bni-icon">👤</span><span class="bni-label">Profile</span></button>
+</nav>
 
 <!-- Floating Cart Button -->
 <div class="cart-float gone" id="cart-float" onclick="goScreen('s-cart')">
@@ -1485,6 +1488,8 @@ let _handlingPopState = false;
 
 function goScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const _bnav = document.getElementById('main-bnav');
+  if (_bnav) _bnav.style.display = id === 's-home' ? '' : 'none';
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.add('active');
