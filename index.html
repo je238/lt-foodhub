@@ -5155,19 +5155,22 @@ function startRealtime() {
           S.menu.push(updated);
           S.inventory[updated.id] = updated.stock ?? 50;
         }
-        if (S.role === 'employee') {
-          renderMenu();
-          renderCats();
-          // No toast — silently update menu to avoid spam when many items change at once
-        }
-        if (S.role === 'vendor' || S.role === 'kitchen') { if(typeof renderVendor==='function') renderVendor(); }
+        // Debounce: collect all rapid-fire updates then render ONCE after 600ms
+        clearTimeout(window._menuRenderDebounce);
+        window._menuRenderDebounce = setTimeout(() => {
+          if (S.role === 'employee') { renderMenu(); renderCats(); }
+          if (S.role === 'vendor' || S.role === 'kitchen') { if(typeof renderVendor==='function') renderVendor(); }
+        }, 600);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'menu_items' }, payload => {
         const newItem = payload.new;
         if (!S.menu.find(m => m.id === newItem.id)) {
           S.menu.push(newItem);
           S.inventory[newItem.id] = newItem.stock ?? 50;
-          if (S.role === 'employee') { renderMenu(); renderCats(); }
+          clearTimeout(window._menuRenderDebounce);
+          window._menuRenderDebounce = setTimeout(() => {
+            if (S.role === 'employee') { renderMenu(); renderCats(); }
+          }, 600);
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
