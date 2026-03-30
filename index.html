@@ -2173,13 +2173,13 @@ function logout() {
   stopRealtime(); // CRITICAL: prevents old channel pushing orders after re-login
   S.cart = []; S.user = null; S.orders = []; S.allOrders = [];
   S.txns = []; S.notifs = []; S.role = null;
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('s-login').classList.add('active');
   // Reset login panel to default (email+password) for next person
   if (typeof _showEmpPanel === 'function') _showEmpPanel('emp-main-login');
   // Restore body scroll
   document.body.style.overflow = '';
   document.documentElement.style.overflow = '';
+  // Use goScreen so bnav gets hidden correctly
+  goScreen('s-login');
 }
 
 // ═════════════════════════════════════
@@ -5245,6 +5245,22 @@ function startRealtime() {
             }
             if (o.status === 'preparing') {
               myOrd.status = 'preparing';
+            }
+          }
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'employees' }, payload => {
+        // Employee wallet balance updated (e.g. admin manual refund / topup)
+        if (S.role === 'employee' && S.user && payload.new.id === S.user.id) {
+          const newBal = parseFloat(payload.new.wallet_balance) || 0;
+          if (newBal !== S.user.wallet_balance) {
+            const diff = newBal - S.user.wallet_balance;
+            S.user.wallet_balance = newBal;
+            setEl('nav-bal', '₹' + Math.round(newBal));
+            setEl('w-bal', '₹' + Math.round(newBal));
+            if (diff > 0) {
+              addNotif(`₹${Math.round(diff)} added to your wallet 💚`, '💚');
+              toast(`₹${Math.round(diff)} added to your wallet!`, 'success', '💚');
             }
           }
         }
