@@ -775,7 +775,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
       <!-- DEFAULT: Unified Login -->
       <div id="emp-main-login">
-        <div class="login-greeting" id="login-time-greeting">Good Morning 🌅</div>
+        <div class="login-greeting" id="login-time-greeting"></div>
         <h2 class="login-title" style="margin-top:0">Welcome!</h2>
         <p class="login-sub">Delicious meals are just a tap away.</p>
         <div class="linp-wrap" style="margin-bottom:12px">
@@ -787,6 +787,9 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
           <span class="linp-icon">🔒</span>
           <input class="linp" type="password" id="emp-login-pw" placeholder="Password" autocomplete="current-password"
             onkeydown="if(event.key==='Enter')unifiedLogin()">
+        </div>
+        <div style="text-align:right;margin-bottom:10px">
+          <span style="font-size:12px;color:var(--brand);cursor:pointer;font-weight:600" onclick="showForgotPassword()">Forgot Password?</span>
         </div>
         <button class="login-btn" id="emp-login-btn" onclick="unifiedLogin()"><span>Sign In →</span></button>
         <div class="login-err" id="emp-login-err" style="margin-top:8px"></div>
@@ -940,7 +943,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="hero-bg-img"></div>
       <div class="hero-overlay"></div>
       <div class="hero-content">
-        <div class="hero-greet">👋 Welcome back,</div>
+        <div class="hero-greet"></div>
         <div class="hero-name" id="h-name">Loading...</div>
         <div class="hero-actions">
           <button class="hero-btn-primary" onclick="document.getElementById('menu-search').focus()">
@@ -1398,9 +1401,8 @@ async function init() {
   document.getElementById('s-loading')?.classList.remove('active');
   // Set time-based greeting
   const hr = new Date().getHours();
-  const greet = hr < 12 ? 'Good Morning 🌅' : hr < 17 ? 'Good Afternoon ☀️' : hr < 21 ? 'Good Evening 🌆' : 'Good Night 🌙';
   const greetEl = document.getElementById('login-time-greeting');
-  if (greetEl) greetEl.textContent = greet;
+  if (greetEl) greetEl.textContent = '';
   // Update Today's Specials from real menu (bestsellers or first 3)
   try {
     const specials = S.menu.filter(m => m.is_bestseller && m.is_available).slice(0,3);
@@ -2349,8 +2351,6 @@ function renderMenu(searchQuery) {
   el.innerHTML = items.map(m => {
     const ci = S.cart.find(c => c.id === m.id);
     const qty = ci ? ci.qty : 0;
-    const sub = m.subsidy_amount || 0;
-    const youPay = Math.max(0, m.price - sub);
     const stock = S.inventory[m.id] ?? m.stock ?? 99;
     const avail = m.is_available !== false && stock > 0;
     const imgUrl = m.image_url || _getFoodImg(m.name, m.emoji);
@@ -2895,30 +2895,37 @@ async function submitRating(orderId) {
 // ═════════════════════════════════════
 async function renderWallet() {
   if (!S.user) return;
+  // Always refresh balance from DB
+  try {
+    if (sb) {
+      const {data: empFresh} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+      if (empFresh) { S.user.wallet_balance = parseFloat(empFresh.wallet_balance) || 0; }
+    }
+  } catch(e) {}
   setEl('w-bal', '₹' + Math.round(parseFloat(S.user.wallet_balance) || 0));
+  setEl('nav-bal', '₹' + Math.round(parseFloat(S.user.wallet_balance) || 0));
   setEl('w-id', S.user.id);
   let txns = [...S.txns];
   try {
     if (sb) {
-      const {data} = await sb.from('wallet_transactions').select('*').eq('employee_id',S.user.id).order('created_at',{ascending:false}).limit(20);
+      const {data} = await sb.from('wallet_transactions').select('*').eq('employee_id',S.user.id).order('created_at',{ascending:false}).limit(30);
       if (data?.length) {
         txns = data.map(t => {
           const matchOrder = S.orders.find(o => t.description && t.description.includes('#' + o.token_number));
           const details = matchOrder ? `${matchOrder.canteen_icon||'🍽️'} ${matchOrder.canteen_name} · Token #${matchOrder.token_number} · ${(matchOrder.items||[]).map(i=>i.item_name||i.name).slice(0,2).join(', ')}` : '';
           return {type:t.type==='credit'?'credit':'debit',icon:t.type==='credit'?'💰':'🍽️',name:t.description||'Transaction',details,date:fmtDate(t.created_at),amount:parseFloat(Math.abs(t.amount))||0};
         });
-      } else { txns = [...S.txns]; }
+        S.txns = txns;
+      }
     }
   } catch(e) {}
-  const monthSpend = txns.filter(t => t.type==='debit').reduce((s,t) => s+t.amount, 0);
-  // spending removed
   const el = document.getElementById('txn-list');
   if (!el) return;
   if (txns.length === 0) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">💸</div><div class="empty-title">No transactions yet</div><div class="empty-sub">Top up to start ordering</div></div>';
     return;
   }
-  el.innerHTML = txns.slice(0,20).map(t => `
+  el.innerHTML = txns.slice(0,30).map(t => `
     <div class="txn-item">
       <div class="txn-icon ${t.type}">${t.icon}</div>
       <div class="txn-body">
@@ -5000,7 +5007,7 @@ function showCustomizeItem(itemId){
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--light2);border-radius:12px;margin-bottom:20px">
         <span style="font-size:36px">${item.emoji||'🍽️'}</span>
-        <div><div style="font-weight:700;font-size:14px">${item.name}</div><div style="font-size:12px;color:var(--muted)">₹${item.price}${item.subsidy_amount>0?` · You pay ₹${Math.max(0,item.price-item.subsidy_amount)}`:''}  </div></div>
+        <div><div style="font-weight:700;font-size:14px">${item.name}</div><div style="font-size:12px;color:var(--muted)">₹${item.price} · ${item.category||''}</div></div>
       </div>
       ${item.category==='Meals'||item.category==='Snacks'?`
       <div class="form-group">
@@ -5853,7 +5860,7 @@ function getMonthlySpent(){
 function checkSpendingLimit(amount){ return true; }
 
 // ══════════════════════════════════════════════════════
-// LOW BALANCE WARNING
+// ㉓ LOW BALANCE WARNING (enhanced)
 // ══════════════════════════════════════════════════════
 function checkLowBalance(){
   if(!S.user) return;
@@ -5903,7 +5910,6 @@ function showItemDetail(itemId){
         <div style="background:var(--light2);border-radius:11px;padding:12px;text-align:center">
           <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">Price</div>
           <div style="font-family:var(--fh);font-size:22px;font-weight:700">₹${item.price}</div>
-          ${item.subsidy_amount>0?`<div style="font-size:11px;color:var(--green2);font-weight:600">You pay ₹${Math.max(0,item.price-item.subsidy_amount)}</div>`:''}
         </div>
         <div style="background:var(--light2);border-radius:11px;padding:12px;text-align:center">
           <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">Rating</div>
@@ -6209,7 +6215,6 @@ renderWallet = async function(){
   await _origRenderWallet();
   const el = document.getElementById('tab-wallet');
   if(!el) return;
-  // Add download button before topup
   const stmtBtnId = 'stmt-btn';
   if(!document.getElementById(stmtBtnId)){
     const topupGrid = el.querySelector('.topup-grid');
