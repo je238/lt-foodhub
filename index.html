@@ -1889,11 +1889,14 @@ async function _finishEmpLogin(emp) {
         sb.from('wallet_transactions').select('*').eq('employee_id', emp.id).order('created_at', {ascending: false}).limit(30)
       ]);
       if (ordData?.length) S.orders = ordData.map(o => ({...o, items: o.order_items || []}));
-      if (txnData?.length) S.txns = txnData.map(t => ({
-        type: t.type, icon: t.type === 'credit' ? '💳' : '🍽️',
-        name: t.description || (t.type === 'credit' ? 'Wallet Top-up' : 'Order'),
-        date: t.created_at, amount: parseFloat(t.amount) || 0
-      }));
+      if (txnData?.length) S.txns = txnData.map(t => {
+        const matchOrder = (S.orders||[]).find(o => t.description && t.description.includes('#' + o.token_number));
+        const details = matchOrder ? `${matchOrder.canteen_icon||'🍽️'} ${matchOrder.canteen_name} · Token #${matchOrder.token_number}` : '';
+        return {type:t.type==='credit'?'credit':'debit', icon:t.type==='credit'?'💰':'🍽️',
+          name:t.description||(t.type==='credit'?'Wallet Top-up':'Order'),
+          details, date:fmtDate(t.created_at)||t.created_at, amount:parseFloat(Math.abs(t.amount))||0};
+      });
+      else S.txns = [];
     } catch(e) {}
   }
   renderHome();
@@ -2904,9 +2907,11 @@ async function renderWallet() {
   setEl('w-bal', '₹' + Math.round(parseFloat(S.user.wallet_balance) || 0));
   setEl('nav-bal', '₹' + Math.round(parseFloat(S.user.wallet_balance) || 0));
   setEl('w-id', S.user.id);
-  let txns = [];
+  // Always start from S.txns (loaded at login) — DB fetch enhances it if RLS allows
+  let txns = [...S.txns];
   try {
-    if (sb) {
+    if (sb && S.txns.length === 0) {
+      // Only hit DB if S.txns is empty (RLS may block this on custom-auth sessions)
       const {data} = await sb.from('wallet_transactions').select('*').eq('employee_id',S.user.id).order('created_at',{ascending:false}).limit(50);
       if (data?.length) {
         txns = data.map(t => {
@@ -2915,14 +2920,9 @@ async function renderWallet() {
           return {type:t.type==='credit'?'credit':'debit',icon:t.type==='credit'?'💰':'🍽️',name:t.description||'Transaction',details,date:fmtDate(t.created_at),amount:parseFloat(Math.abs(t.amount))||0};
         });
         S.txns = txns;
-      } else {
-        // DB returned empty — fallback to in-memory if available
-        if (S.txns.length) txns = [...S.txns];
       }
-    } else {
-      txns = [...S.txns];
     }
-  } catch(e) { txns = [...S.txns]; }
+  } catch(e) {}
   const el = document.getElementById('txn-list');
   if (!el) return;
   if (txns.length === 0) {
@@ -6291,11 +6291,13 @@ init = async function(){
             ]);
             if (ordData?.length) S.orders = ordData.map(o => ({...o, items: o.order_items || []}));
             else S.orders = [];
-            if (txnData?.length) S.txns = txnData.map(t => ({
-              type: t.type, icon: t.type === 'credit' ? '💳' : '🍽️',
-              name: t.description || (t.type === 'credit' ? 'Wallet Top-up' : 'Order'),
-              date: t.created_at, amount: parseFloat(t.amount) || 0
-            }));
+            if (txnData?.length) S.txns = txnData.map(t => {
+              const matchOrder = (S.orders||[]).find(o => t.description && t.description.includes('#' + o.token_number));
+              const details = matchOrder ? `${matchOrder.canteen_icon||'🍽️'} ${matchOrder.canteen_name} · Token #${matchOrder.token_number}` : '';
+              return {type:t.type==='credit'?'credit':'debit', icon:t.type==='credit'?'💰':'🍽️',
+                name:t.description||(t.type==='credit'?'Wallet Top-up':'Order'),
+                details, date:fmtDate(t.created_at)||t.created_at, amount:parseFloat(Math.abs(t.amount))||0};
+            });
             else S.txns = [];
           } catch(e) { console.warn('Session restore fetch error:', e); }
           renderHome(); goScreen('s-home');
