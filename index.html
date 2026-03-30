@@ -3426,24 +3426,43 @@ async function fetchAllOrders() {
 function startPoll() {
   clearInterval(S.pollInterval);
   if (S.role === 'employee') {
-    // Employees: only poll canteen open/close status every 30s as realtime backup
+    // Poll every 30s — refresh menu_items + canteens so employee always sees latest
     S.pollInterval = setInterval(async () => {
       try {
         if (!sb) return;
-        const {data} = await sb.from('canteens').select('id, is_open, name, icon');
-        if (data?.length) {
-          let changed = false;
-          data.forEach(fc => {
+        const cid = S.selCanteen?.id;
+        // Fetch menu for current canteen (lightweight — only this canteen's items)
+        const {data: menuData} = await sb.from('menu_items').select('id, is_available, stock, price, name')
+          .eq('canteen_id', cid || 'c1');
+        if (menuData?.length) {
+          let menuChanged = false;
+          menuData.forEach(updated => {
+            const idx = S.menu.findIndex(m => m.id === updated.id);
+            if (idx !== -1) {
+              const old = S.menu[idx];
+              if (old.is_available !== updated.is_available || old.stock !== updated.stock || old.price !== updated.price) {
+                S.menu[idx] = { ...old, ...updated };
+                S.inventory[updated.id] = updated.stock ?? S.inventory[updated.id];
+                menuChanged = true;
+              }
+            }
+          });
+          if (menuChanged) { renderMenu(); renderCats(); }
+        }
+        // Also poll canteens open/close
+        const {data: canData} = await sb.from('canteens').select('id, is_open, name, icon');
+        if (canData?.length) {
+          let canChanged = false;
+          canData.forEach(fc => {
             const c = S.canteens.find(x => x.id === fc.id);
             if (c && c.is_open !== fc.is_open) {
-              const wasOpen = c.is_open;
               c.is_open = fc.is_open;
-              changed = true;
+              canChanged = true;
               if (!fc.is_open) toast(`${fc.icon||'🍽️'} ${fc.name} is now CLOSED`, 'warn', '🔴');
               else toast(`${fc.icon||'🍽️'} ${fc.name} is now OPEN 🎉`, 'success', '🟢');
             }
           });
-          if (changed) {
+          if (canChanged) {
             renderCanteens();
             if (S.selCanteen && !S.selCanteen.is_open) {
               const nextOpen = S.canteens.find(x => x.is_open);
