@@ -2904,10 +2904,10 @@ async function renderWallet() {
   setEl('w-bal', '₹' + Math.round(parseFloat(S.user.wallet_balance) || 0));
   setEl('nav-bal', '₹' + Math.round(parseFloat(S.user.wallet_balance) || 0));
   setEl('w-id', S.user.id);
-  let txns = [...S.txns];
+  let txns = [];
   try {
     if (sb) {
-      const {data} = await sb.from('wallet_transactions').select('*').eq('employee_id',S.user.id).order('created_at',{ascending:false}).limit(30);
+      const {data} = await sb.from('wallet_transactions').select('*').eq('employee_id',S.user.id).order('created_at',{ascending:false}).limit(50);
       if (data?.length) {
         txns = data.map(t => {
           const matchOrder = S.orders.find(o => t.description && t.description.includes('#' + o.token_number));
@@ -2915,9 +2915,14 @@ async function renderWallet() {
           return {type:t.type==='credit'?'credit':'debit',icon:t.type==='credit'?'💰':'🍽️',name:t.description||'Transaction',details,date:fmtDate(t.created_at),amount:parseFloat(Math.abs(t.amount))||0};
         });
         S.txns = txns;
+      } else {
+        // DB returned empty — fallback to in-memory if available
+        if (S.txns.length) txns = [...S.txns];
       }
+    } else {
+      txns = [...S.txns];
     }
-  } catch(e) {}
+  } catch(e) { txns = [...S.txns]; }
   const el = document.getElementById('txn-list');
   if (!el) return;
   if (txns.length === 0) {
