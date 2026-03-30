@@ -1350,7 +1350,7 @@ const S = {
   kdsFilter: 'all',
   adminTab: 'overview',
   tokenCounters: {}, // per-canteen token counters — loaded from DB
-  subsidy: 80,
+  subsidy: 0,
   menuItems: [],    // admin managed
   inventory: {},
   ratings: {},
@@ -1446,8 +1446,7 @@ async function loadData() {
     // Load app settings (subsidy, monthly limit, etc.)
     if (settingsRes.data?.length) {
       settingsRes.data.forEach(s => {
-        if (s.key === 'subsidy_per_meal') S.subsidy = parseInt(s.value) || 80;
-        if (s.key === 'monthly_limit') window._monthlyLimit = parseInt(s.value) || 2000;
+        if (s.key === 'subsidy_per_meal') S.subsidy = 0;
       });
     }
     // Load token counters + operating hours from canteens table
@@ -3152,8 +3151,7 @@ async function renderMyOrders() {
       </div>
       <div class="order-footer">
         <div class="order-savings">
-          Paid <strong style="color:var(--brand)">₹${o.amount_paid||0}</strong> · 
-          Saved <strong style="color:var(--green2)">₹${o.subsidy_applied||0}</strong>
+          Paid <strong style="color:var(--brand)">₹${o.amount_paid||0}</strong>
           ${o.rating ? ` · Rated ${'⭐'.repeat(o.rating)}` : ''}
         </div>
       </div>
@@ -4001,10 +3999,6 @@ function showAddItemModal() {
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Subsidy (₹)</label>
-          <input class="form-input" id="new-subsidy" type="number" placeholder="0" min="0">
-        </div>
-        <div class="form-group">
           <label class="form-label">Stock Count</label>
           <input class="form-input" id="new-stock" type="number" placeholder="50" min="0">
         </div>
@@ -4029,7 +4023,7 @@ async function saveNewItem() {
     price,
     category: document.getElementById('new-cat').value,
     canteen_id: document.getElementById('new-canteen').value,
-    subsidy_amount: parseFloat(document.getElementById('new-subsidy').value) || 0,
+    subsidy_amount: 0,
     stock: parseInt(document.getElementById('new-stock').value) || 50,
     emoji: document.getElementById('new-emoji').value || '🍽️',
     is_veg: document.getElementById('new-veg-toggle').classList.contains('on'),
@@ -4075,10 +4069,6 @@ function showEditItemModal(id) {
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Subsidy (₹)</label>
-          <input class="form-input" id="e-subsidy" type="number" value="${m.subsidy_amount||0}">
-        </div>
-        <div class="form-group">
           <label class="form-label">Stock Count</label>
           <input class="form-input" id="e-stock" type="number" value="${S.inventory[m.id]||m.stock||50}">
         </div>
@@ -4095,7 +4085,7 @@ async function saveEditItem(id) {
   m.price = parseFloat(document.getElementById('e-price').value) || m.price;
   m.description = document.getElementById('e-desc').value.trim();
   m.emoji = document.getElementById('e-emoji').value || m.emoji;
-  m.subsidy_amount = parseFloat(document.getElementById('e-subsidy').value) || 0;
+  m.subsidy_amount = 0;
   S.inventory[m.id] = parseInt(document.getElementById('e-stock').value) || 0;
   try { if(sb){ const{error}=await sb.from('menu_items').update({name:m.name,price:m.price,description:m.description,emoji:m.emoji,subsidy_amount:m.subsidy_amount}).eq('id',id); if(error) toast('Save failed: '+error.message,'error','❌'); } } catch(e) { toast('Save failed','error','❌'); }
   closeModal();
@@ -4566,14 +4556,10 @@ function renderAdminSettings(el) {
   // Load saved settings from state
   const settings = S._appSettings || {accept_orders:true, preorder:true, guest_ordering:false, email_summaries:true, low_stock_alerts:true, daily_report:true, traffic_alerts:true};
   el.innerHTML = `
-    <div class="subsidy-card">
-      <div class="sub-label">Current Subsidy Per Meal</div>
-      <div class="sub-value">₹${S.subsidy}</div>
-      <div class="sub-sub">Applied to all enrolled employees</div>
-      <div class="sub-input-row">
-        <input class="sub-input" id="new-subsidy-val" type="number" value="${S.subsidy}" placeholder="80">
-        <button class="btn btn-primary btn-sm" onclick="updateSubsidy()">Update</button>
-      </div>
+    <div class="card" style="background:linear-gradient(135deg,var(--blue) 0%,var(--blue2) 100%);color:#fff;border:none;margin-bottom:12px">
+      <div style="font-size:10px;opacity:.6;letter-spacing:.5px;text-transform:uppercase;font-weight:600;margin-bottom:4px">Pricing</div>
+      <div style="font-family:var(--fh);font-size:20px;font-weight:700;margin-bottom:2px">Dish Price + 5% GST</div>
+      <div style="font-size:11px;opacity:.5">No platform fee · No hidden charges</div>
     </div>
     <div class="card">
       <div class="card-title">⚙️ System Settings</div>
@@ -5403,8 +5389,8 @@ function printKOT(orderId){
       <div class="divider"></div>
       ${items.map(i=>`<div class="row"><span>${i.emoji||''} ${i.item_name||i.name}${i.customNote?`<br><small style="color:#666">${i.customNote}</small>`:''}</span><span>×${i.quantity||i.qty}</span></div>`).join('')}
       <div class="divider"></div>
-      <div class="row"><span>Total</span><span>₹${o.item_total||0}</span></div>
-      <div class="row"><span>Subsidy</span><span>-₹${o.subsidy_applied||0}</span></div>
+      <div class="row"><span>Subtotal</span><span>₹${o.item_total||0}</span></div>
+      <div class="row"><span>GST (5%)</span><span>₹${o.gst_amount||Math.round((o.item_total||0)*0.05)}</span></div>
       <div class="row"><strong>Paid</strong><strong>₹${o.amount_paid||0}</strong></div>
       <div class="divider"></div>
       <div class="center" style="font-size:11px;margin-top:8px">*** Please collect at counter ***</div>
@@ -6047,7 +6033,7 @@ renderMyOrders = async function(){
         ${(o.items||[]).map(i=>`<div class="order-item-row"><strong>${i.item_emoji||i.emoji||''} ${i.item_name||i.name||''} ×${i.quantity||i.qty||1}${(i.custom_note||i.customNote)?` <small style="color:var(--muted)">(${i.custom_note||i.customNote})</small>`:''}</strong><span>₹${((i.unit_price||i.price||0)*(i.quantity||i.qty||1)).toFixed(0)}</span></div>`).join('')}
       </div>
       <div class="order-footer">
-        <div class="order-savings">Paid <strong style="color:var(--brand)">₹${o.amount_paid||0}</strong> · Saved <strong style="color:var(--green2)">₹${o.subsidy_applied||0}</strong>${o.rating?` · ${'⭐'.repeat(o.rating)}`:''}</div>
+        <div class="order-savings">Paid <strong style="color:var(--brand)">₹${o.amount_paid||0}</strong>${o.rating?` · ${'⭐'.repeat(o.rating)}`:''}</div>
       </div>
       <div class="order-actions">
         ${o.status==='ready'?`<button class="btn btn-green btn-sm" style="flex:1" onclick="showPickupOTP('${o.id}')">🔐 Get Pickup OTP</button>`:''}
