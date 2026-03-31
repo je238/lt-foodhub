@@ -2173,6 +2173,7 @@ async function doLogin() {
 
 function logout() {
   clearInterval(S.pollInterval);
+  clearInterval(S._menuPollInterval);
   stopRealtime(); // CRITICAL: prevents old channel pushing orders after re-login
   S.cart = []; S.user = null; S.orders = []; S.allOrders = [];
   S.txns = []; S.notifs = []; S.role = null;
@@ -3436,29 +3437,10 @@ function startPoll() {
   clearInterval(S.pollInterval);
   if (S.role === 'employee') {
     // Poll every 30s — refresh menu_items + canteens so employee always sees latest
+    // Fast poll: canteen open/close every 5s (instant feedback)
     S.pollInterval = setInterval(async () => {
       try {
-        if (!sb) return;
-        const cid = S.selCanteen?.id;
-        // Fetch menu for current canteen (lightweight — only this canteen's items)
-        const {data: menuData} = await sb.from('menu_items').select('id, is_available, stock, price, name')
-          .eq('canteen_id', cid || 'c1');
-        if (menuData?.length) {
-          let menuChanged = false;
-          menuData.forEach(updated => {
-            const idx = S.menu.findIndex(m => m.id === updated.id);
-            if (idx !== -1) {
-              const old = S.menu[idx];
-              if (old.is_available !== updated.is_available || old.stock !== updated.stock || old.price !== updated.price) {
-                S.menu[idx] = { ...old, ...updated };
-                S.inventory[updated.id] = updated.stock ?? S.inventory[updated.id];
-                menuChanged = true;
-              }
-            }
-          });
-          if (menuChanged) { renderMenu(); renderCats(); }
-        }
-        // Also poll canteens open/close
+        if (!sb || S.role !== 'employee') return;
         const {data: canData} = await sb.from('canteens').select('id, is_open, name, icon');
         if (canData?.length) {
           let canChanged = false;
@@ -3473,11 +3455,36 @@ function startPoll() {
           });
           if (canChanged) {
             renderCanteens();
+            renderMenu();
             if (S.selCanteen && !S.selCanteen.is_open) {
               const nextOpen = S.canteens.find(x => x.is_open);
               if (nextOpen) { S.selCanteen = nextOpen; renderMenu(); }
             }
           }
+        }
+      } catch(e) {}
+    }, 5000);
+    // Slow poll: menu items every 30s
+    S._menuPollInterval = setInterval(async () => {
+      try {
+        if (!sb || S.role !== 'employee') return;
+        const cid = S.selCanteen?.id;
+        if (!cid) return;
+        const {data: menuData} = await sb.from('menu_items').select('id, is_available, stock, price, name').eq('canteen_id', cid);
+        if (menuData?.length) {
+          let menuChanged = false;
+          menuData.forEach(updated => {
+            const idx = S.menu.findIndex(m => m.id === updated.id);
+            if (idx !== -1) {
+              const cur = S.menu[idx];
+              if (cur.is_available !== updated.is_available || cur.stock !== updated.stock || cur.price !== updated.price) {
+                S.menu[idx] = { ...cur, ...updated };
+                S.inventory[updated.id] = updated.stock ?? S.inventory[updated.id];
+                menuChanged = true;
+              }
+            }
+          });
+          if (menuChanged) { renderMenu(); renderCats(); }
         }
       } catch(e) {}
     }, 30000);
