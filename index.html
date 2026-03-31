@@ -2220,7 +2220,7 @@ function renderCanteens() {
     const imgId = _CANTEEN_IMGS[c.id];
     const imgUrl = imgId ? `https://images.unsplash.com/${imgId}?w=300&h=200&fit=crop&q=70` : '';
     const rating = (4.1 + (c.id?.charCodeAt(1)||0) % 5 * 0.1).toFixed(1);
-    const wait = c.id === 'c7' ? '2-5' : '5-10';
+    const wait = c.id === 'c7' ? '5-10' : '20-30';
     return `
     <div class="canteen-card${!c.is_open?' closed':''}${S.selCanteen?.id===c.id?' active':''}" onclick="selCanteen('${c.id}')">
       ${imgUrl
@@ -3770,10 +3770,16 @@ function generateDemoOrders() {
   }));
 }
 
-function renderAdminMenu(el) {
-  // S.menu and S.canteens are already loaded at login — render immediately, no DB re-fetch
+async function renderAdminMenu(el) {
   if (!el) el = document.getElementById('admin-body');
   if (!el) return;
+  // Always fetch fresh from DB so all canteen items including c7 are present
+  if (sb) {
+    try {
+      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('name').limit(500);
+      if (data?.length) { S.menu = data; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? S.inventory[m.id] ?? 50; }); }
+    } catch(e) {}
+  }
   const _adminMenuCats = [...new Set(S.menu.map(m=>m.category).filter(Boolean))].sort();
   el.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:14px">
@@ -3835,7 +3841,8 @@ function renderAdminMenuItem(m) {
 }
 
 function filterAdminMenu(q) {
-  const items = q ? S.menu.filter(m => m.name.toLowerCase().includes(q.toLowerCase())) : S.menu;
+  let base = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen);
+  const items = q ? base.filter(m => m.name.toLowerCase().includes(q.toLowerCase())) : base;
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }
 
@@ -3844,7 +3851,8 @@ function filterAdminCat(cat, el) {
   _adminMenuCat = cat;
   document.querySelectorAll('#admin-menu-cats .chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
-  const items = cat === 'All' ? S.menu : S.menu.filter(m => m.category === cat);
+  let items = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen);
+  if (cat !== 'All') items = items.filter(m => m.category === cat);
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }
 
@@ -5097,8 +5105,8 @@ function applyCustomization(itemId){
 // ══════════════════════════════════════════════════════
 function getWaitTime(canteenId){
   const activeOrders = S.allOrders.filter(o=>o.canteen_id===canteenId && ['new','preparing'].includes(o.status)).length;
-  const baseTime = 5; // min base
-  const perOrder = 1.5; // extra min per order in queue
+  const baseTime = 20; // min base
+  const perOrder = 2; // extra min per order in queue
   const peakHour = new Date().getHours();
   const isPeak = peakHour>=12 && peakHour<=14;
   const wait = Math.round(baseTime + activeOrders*perOrder + (isPeak?5:0));
@@ -5106,8 +5114,8 @@ function getWaitTime(canteenId){
 }
 function getWaitLabel(canteenId){
   const w = getWaitTime(canteenId);
-  if(w<=8) return {label:`~${w} min`,cls:'green'};
-  if(w<=15) return {label:`~${w} min`,cls:'amber'};
+  if(w<=25) return {label:`~${w} min`,cls:'green'};
+  if(w<=35) return {label:`~${w} min`,cls:'amber'};
   return {label:`~${w}+ min`,cls:'red'};
 }
 
