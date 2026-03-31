@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-<title>L&T FoodHub</title>
+<title>SLP Nexus — Campus Cafeteria</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://browser.sentry-cdn.com/7.99.0/bundle.min.js" crossorigin="anonymous"></script>
 <script>
@@ -180,7 +180,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .login-hero-wrap::after{content:'';position:absolute;bottom:0;left:0;right:0;height:120px;background:linear-gradient(to bottom,transparent,#0a0a1a);pointer-events:none}
 .login-card{background:transparent;width:100%;max-width:480px;margin:0 auto;position:relative;z-index:1;padding:0 24px 32px;flex:1}
 .login-logo{display:flex;align-items:center;gap:12px;margin-bottom:28px}
-.login-icon{width:52px;height:52px;background:var(--brand);border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-weight:700;font-size:14px;color:#fff;box-shadow:0 8px 24px rgba(232,56,13,.5);flex-shrink:0}
+.login-icon{width:52px;height:52px;background:linear-gradient(135deg,var(--brand),#FF6B1A);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;box-shadow:0 8px 24px rgba(232,56,13,.5);flex-shrink:0}
 .login-brand h2{font-family:var(--fh);font-size:24px;color:#fff;font-weight:700;line-height:1}
 .login-brand p{font-size:12px;color:rgba(255,255,255,.45);margin-top:3px}
 .login-greeting{font-size:15px;color:rgba(255,220,150,.8);font-weight:500;margin-bottom:4px}
@@ -216,7 +216,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 /* ─── TOP NAV ─── */
 .tnav{background:rgba(20,6,0,.72);backdrop-filter:blur(20px) saturate(1.8);-webkit-backdrop-filter:blur(20px) saturate(1.8);border-bottom:1px solid rgba(255,255,255,.08);height:60px;display:flex;align-items:center;padding:0 16px;gap:10px;position:sticky;top:0;z-index:100}
 .nav-logo{display:flex;align-items:center;gap:9px}
-.nav-icon{width:32px;height:32px;background:var(--brand);border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-weight:700;font-size:10px;color:#fff;flex-shrink:0}
+.nav-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--brand),#FF6B1A);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0}
 .nav-title{font-family:var(--fh);font-weight:700;font-size:15px;color:#fff}
 .nav-sub{font-size:10px;color:rgba(255,200,150,.55);margin-top:-1px}
 .nsp{flex:1}
@@ -742,9 +742,9 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 ══════════════════════════════════ -->
 <div class="screen active" id="s-loading">
   <div class="splash-logo">
-    <div class="splash-icon">L&T</div>
-    <div class="splash-title">FoodHub</div>
-    <div class="splash-sub">Larsen &amp; Toubro · Campus Canteen</div>
+    <div class="splash-icon" style="background:linear-gradient(135deg,#E8380D,#FF6B1A);border-radius:16px;width:72px;height:72px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px">🍽️</div>
+    <div class="splash-title">SLP Nexus</div>
+    <div class="splash-sub">Campus Cafeteria · Powai</div>
     <div class="splash-bar"><div class="splash-fill"></div></div>
   </div>
 </div>
@@ -760,8 +760,8 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
   <div class="login-card">
     <div class="login-logo">
-      <div class="login-icon">L&T</div>
-      <div class="login-brand"><h2>FoodHub</h2><p>Larsen &amp; Toubro — Campus Canteen</p></div>
+      <div class="login-icon" style="background:linear-gradient(135deg,#E8380D,#FF6B1A);font-size:22px">🍽️</div>
+      <div class="login-brand"><h2>SLP Nexus</h2><p>Campus Cafeteria · Powai</p></div>
     </div>
     <div class="role-tabs" id="role-tabs" style="display:none">
       <div class="role-tab active" onclick="selRole('employee',this)">👤 Employee</div>
@@ -850,7 +850,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
           <span style="font-size:12px;color:rgba(255,255,255,.4);cursor:pointer" onclick="backToMainLogin()">← Back</span>
           <h2 class="login-title" style="margin-top:0;margin-bottom:0;flex:1">Create Account</h2>
         </div>
-        <p class="login-sub">Register with your L&T email</p>
+        <p class="login-sub">Register with your company email</p>
         <input class="linp" type="text" id="reg-name" placeholder="Your Full Name" autocomplete="name">
         <input class="linp" type="email" id="reg-email" placeholder="name@larsentoubro.com" autocomplete="email">
         <input class="linp" type="tel" id="reg-phone" placeholder="Mobile number (optional)" maxlength="10" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
@@ -905,9 +905,9 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
   <!-- Top Nav -->
   <nav class="tnav">
     <div class="nav-logo">
-      <div class="nav-icon">L&T</div>
+      <div class="nav-icon" style="font-size:16px;background:linear-gradient(135deg,#E8380D,#FF6B1A)">🍽️</div>
       <div>
-        <div class="nav-title">FoodHub</div>
+        <div class="nav-title">SLP Nexus</div>
         <div class="nav-sub" id="nav-campus">Powai Campus</div>
       </div>
     </div>
@@ -1110,7 +1110,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="card-title">💳 Payment Method</div>
       <div class="pay-option active" onclick="selPay(this,'wallet')" id="pay-opt-wallet">
         <span class="pay-icon">💚</span>
-        <div class="pay-body"><div class="pay-name">FoodHub Wallet</div><div class="pay-sub" id="pay-bal-lbl">Balance: ₹580</div></div>
+        <div class="pay-body"><div class="pay-name">SLP Nexus Wallet</div><div class="pay-sub" id="pay-bal-lbl">Balance: ₹580</div></div>
         <div class="pay-radio"></div>
       </div>
       <div class="pay-option" onclick="selPay(this,'upi')" style="opacity:0.6">
@@ -1151,7 +1151,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <!-- Invoice Header -->
       <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px dashed var(--border);margin-bottom:12px">
         <div>
-          <div style="font-size:16px;font-weight:800;color:var(--dark);font-family:var(--fh)">L&T FoodHub</div>
+          <div style="font-size:16px;font-weight:800;color:var(--dark);font-family:var(--fh)">SLP Nexus</div>
           <div style="font-size:11px;color:var(--muted)">Powai Campus Canteen</div>
         </div>
         <div style="text-align:right">
@@ -1181,7 +1181,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:13px;color:var(--mid)">Payment</div>
-        <div style="font-size:13px;font-weight:600;color:var(--green2)">✅ FoodHub Wallet</div>
+        <div style="font-size:13px;font-weight:600;color:var(--green2)">✅ SLP Nexus Wallet</div>
       </div>
       <div style="display:flex;justify-content:space-between;padding:10px;background:var(--light2);border-radius:10px">
         <div style="font-size:15px;font-weight:800;color:var(--dark)">Total Paid</div>
@@ -1288,7 +1288,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
         <div class="admin-title">Admin Dashboard</div>
-        <div class="admin-sub">L&T Powai Campus · All Canteens</div>
+        <div class="admin-sub">SLP Nexus · Powai Campus</div>
       </div>
       <div style="display:flex;gap:10px;align-items:center">
         <div style="cursor:pointer;font-size:18px;opacity:.6" onclick="refreshAdmin(this)" title="Refresh dashboard">🔄</div>
@@ -2174,7 +2174,6 @@ async function doLogin() {
 function logout() {
   clearInterval(S.pollInterval);
   clearInterval(S._menuPollInterval);
-  clearInterval(S._orderPollInterval);
   stopRealtime(); // CRITICAL: prevents old channel pushing orders after re-login
   S.cart = []; S.user = null; S.orders = []; S.allOrders = [];
   S.txns = []; S.notifs = []; S.role = null;
@@ -2576,7 +2575,7 @@ function selSlot(el, slot) {
 
 function selPay(el, method) {
   if (method === 'upi') {
-    toast('UPI coming soon! Please use FoodHub Wallet.', 'warn', '📱');
+    toast('UPI coming soon! Please use SLP Nexus Wallet.', 'warn', '📱');
     return;
   }
   document.querySelectorAll('.pay-option').forEach(p => p.classList.remove('active'));
@@ -2590,7 +2589,7 @@ function selPay(el, method) {
 async function placeOrder() {
   if (S.cart.length === 0) { toast('Your cart is empty!', 'error', '🛒'); return; }
   if (S.selCanteen && !S.selCanteen.is_open) { toast('This canteen is currently closed!', 'error', '🚫'); return; }
-  if (S.selPay === 'upi') { toast('UPI coming soon! Please use FoodHub Wallet.', 'warn', '📱'); return; }
+  if (S.selPay === 'upi') { toast('UPI coming soon! Please use SLP Nexus Wallet.', 'warn', '📱'); return; }
   if (!sb) { toast('Database not connected!', 'error', '❌'); return; }
 
   // Quick client-side balance estimate before hitting server
@@ -2967,7 +2966,7 @@ function showTopUp(amount) {
     <div class="modal-body">
       <div style="text-align:center;padding:16px 0 24px">
         <div style="font-size:48px;font-family:var(--fh);font-weight:800;color:var(--brand)">₹${amount.toLocaleString('en-IN')}</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px">will be added to your FoodHub Wallet</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">will be added to your SLP Nexus Wallet</div>
       </div>
       <div style="background:var(--light2);border-radius:12px;padding:14px;margin-bottom:16px">
         <div style="font-size:12px;font-weight:700;color:var(--mid);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Payment Method</div>
@@ -3489,46 +3488,6 @@ function startPoll() {
         }
       } catch(e) {}
     }, 30000);
-    // Order status poll: every 10s check if any active orders changed status
-    S._orderPollInterval = setInterval(async () => {
-      try {
-        if (!sb || S.role !== 'employee' || !S.user) return;
-        const activeOrders = S.orders.filter(o => o.status === 'new' || o.status === 'preparing' || o.status === 'ready');
-        if (activeOrders.length === 0) return;
-        const ids = activeOrders.map(o => o.id);
-        const {data} = await sb.from('orders').select('id, status, token_number').in('id', ids);
-        if (!data?.length) return;
-        data.forEach(fresh => {
-          const local = S.orders.find(o => o.id === fresh.id);
-          if (!local || local.status === fresh.status) return;
-          const oldStatus = local.status;
-          local.status = fresh.status;
-          const ao = S.allOrders.find(o => o.id === fresh.id);
-          if (ao) ao.status = fresh.status;
-          // Fire notifications based on status change
-          if (fresh.status === 'preparing' && oldStatus === 'new') {
-            addNotif(`Order #${fresh.token_number} is being prepared 🍳`, '⏳');
-            toast(`Order #${fresh.token_number} is being prepared 🍳`, 'info', '⏳');
-          }
-          if (fresh.status === 'ready') {
-            addNotif(`Order #${fresh.token_number} is READY for pickup!`, '🔔');
-            toast(`Order #${fresh.token_number} is READY! Go collect your food 🎉`, 'success', '🔔');
-            try { playNewOrderAlert(); } catch(e) {}
-            const badge = document.getElementById('ord-badge');
-            if (badge) { badge.textContent = S.orders.filter(o2=>o2.status==='ready').length; badge.classList.remove('hidden'); }
-          }
-          if (fresh.status === 'done') {
-            addNotif(`Order #${fresh.token_number} collected! ✅`, '✅');
-            toast(`Order #${fresh.token_number} collected ✅`, 'success', '✅');
-          }
-          if (fresh.status === 'cancelled' && oldStatus !== 'cancelled') {
-            addNotif(`Order #${fresh.token_number} was cancelled`, '❌');
-            toast(`Order #${fresh.token_number} cancelled`, 'warn', '❌');
-          }
-          renderMyOrders();
-        });
-      } catch(e) {}
-    }, 10000);
     return;
   }
   // Vendor/Kitchen: poll every 15s as backup to Realtime
@@ -4777,7 +4736,7 @@ document.addEventListener('keydown', (e) => {
 // ① PWA — Manifest + Service Worker (installable app)
 // ══════════════════════════════════════════════════════
 (function setupPWA(){
-  const manifest = {name:'L&T FoodHub',short_name:'FoodHub',description:'Campus Cafeteria Ordering',start_url:'/',display:'standalone',background_color:'#0F172A',theme_color:'#E8380D',orientation:'portrait',icons:[{src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="40" fill="%23E8380D"/><text x="96" y="130" font-size="100" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold">🍛</text></svg>',sizes:'192x192',type:'image/svg+xml'},{src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="100" fill="%23E8380D"/><text x="256" y="340" font-size="280" text-anchor="middle" fill="white" font-family="Arial">🍛</text></svg>',sizes:'512x512',type:'image/svg+xml'}]};
+  const manifest = {name:'SLP Nexus',short_name:'SLP Nexus',description:'Campus Cafeteria Ordering',start_url:'/',display:'standalone',background_color:'#0F172A',theme_color:'#E8380D',orientation:'portrait',icons:[{src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="40" fill="%23E8380D"/><text x="96" y="130" font-size="100" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold">🍛</text></svg>',sizes:'192x192',type:'image/svg+xml'},{src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="100" fill="%23E8380D"/><text x="256" y="340" font-size="280" text-anchor="middle" fill="white" font-family="Arial">🍛</text></svg>',sizes:'512x512',type:'image/svg+xml'}]};
   const blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
   const el = document.getElementById('pwa-manifest');
   if(el) el.href = URL.createObjectURL(blob);
@@ -5310,8 +5269,7 @@ function startRealtime() {
             }
             if (o.status === 'preparing') {
               myOrd.status = 'preparing';
-              addNotif(`Order #${myOrd.token_number} is being prepared 🍳`, '⏳');
-              toast(`Order #${myOrd.token_number} is being prepared 🍳`, 'info', '⏳');
+              addNotif(`Order #${myOrd.token_number} is being prepared`, '⏳');
               renderMyOrders();
             }
             if (o.status === 'done') {
@@ -5459,7 +5417,7 @@ function printKOT(orderId){
       @media print{button{display:none}}
     </style></head>
     <body>
-      <h2>L&T FoodHub — KOT</h2>
+      <h2>SLP Nexus — Campus Cafeteria</h2>
       <div class="center" style="font-size:11px">${o.canteen_name||'Canteen'} · ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
       <div class="divider"></div>
       <div class="big">#${o.token_number}</div>
@@ -6465,7 +6423,7 @@ async function saveAllCanteenHours(){
   banner.id='install-banner';
   banner.className='hidden';
   banner.style.cssText='position:fixed;bottom:80px;left:14px;right:14px;background:var(--dark);color:#fff;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;z-index:200;box-shadow:var(--shl)';
-  banner.innerHTML=`<span style="font-size:24px">📱</span><div style="flex:1"><div style="font-weight:700;font-size:13px">Install FoodHub App</div><div style="font-size:11px;opacity:.6">Add to home screen for quick access</div></div><button class="btn btn-primary btn-sm" onclick="window._installPWA()">Install</button><span onclick="document.getElementById('install-banner').classList.add('hidden')" style="font-size:18px;cursor:pointer;opacity:.5;padding:4px">✕</span>`;
+  banner.innerHTML=`<span style="font-size:24px">📱</span><div style="flex:1"><div style="font-weight:700;font-size:13px">Install SLP Nexus App</div><div style="font-size:11px;opacity:.6">Add to home screen for quick access</div></div><button class="btn btn-primary btn-sm" onclick="window._installPWA()">Install</button><span onclick="document.getElementById('install-banner').classList.add('hidden')" style="font-size:18px;cursor:pointer;opacity:.5;padding:4px">✕</span>`;
   document.body.appendChild(banner);
 })();
 
@@ -6647,7 +6605,7 @@ function printPOSReceipt(token, customer, method, subtotal, fees, items) {
     .sm{font-size:11px;color:#888}
     @media print{button{display:none}}
   </style></head><body>
-    <h2 style="text-align:center;font-size:16px;margin-bottom:4px">L&T FoodHub</h2>
+    <h2 style="text-align:center;font-size:16px;margin-bottom:4px">SLP Nexus</h2>
     <div class="center" style="font-size:11px">${canteen.icon} ${canteen.name} · ${now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
     <div class="divider"></div>
     <div class="big">#${token}</div>
@@ -7282,10 +7240,10 @@ function showRefundPolicy(){
       <p style="margin-bottom:12px">You may cancel your order only if its status is <strong>New</strong>. Once the order is being prepared or ready, cancellation is not possible.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">2. Refund on Cancellation</p>
-      <p style="margin-bottom:12px">Upon successful cancellation, the full amount paid (including GST) will be refunded to your FoodHub Wallet instantly. No deductions are made.</p>
+      <p style="margin-bottom:12px">Upon successful cancellation, the full amount paid (including GST) will be refunded to your SLP Nexus Wallet instantly. No deductions are made.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">3. Wallet Top-up Refunds</p>
-      <p style="margin-bottom:12px">Wallet top-ups are non-refundable to bank account. The balance remains in your FoodHub Wallet and can be used for future orders.</p>
+      <p style="margin-bottom:12px">Wallet top-ups are non-refundable to bank account. The balance remains in your SLP Nexus Wallet and can be used for future orders.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. Wrong or Missing Items</p>
       <p style="margin-bottom:12px">If you receive a wrong or incomplete order, raise a complaint via the Orders tab. Our team will review and process a refund to your wallet within 24-48 hours.</p>
@@ -7306,7 +7264,7 @@ function showPrivacyPolicy(){
       <p style="margin-bottom:12px">Last updated: March 2026</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">1. Data We Collect</p>
-      <p style="margin-bottom:12px">We collect your name, employee ID, company email, department, and order history to provide the FoodHub service.</p>
+      <p style="margin-bottom:12px">We collect your name, employee ID, company email, department, and order history to provide the SLP Nexus service.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">2. How We Use Your Data</p>
       <p style="margin-bottom:12px">Your data is used solely to process orders, manage your wallet, and improve the canteen service. We do not sell your data to third parties.</p>
