@@ -2174,6 +2174,7 @@ async function doLogin() {
 function logout() {
   clearInterval(S.pollInterval);
   clearInterval(S._menuPollInterval);
+  clearInterval(S._orderPollInterval);
   stopRealtime(); // CRITICAL: prevents old channel pushing orders after re-login
   S.cart = []; S.user = null; S.orders = []; S.allOrders = [];
   S.txns = []; S.notifs = []; S.role = null;
@@ -3488,6 +3489,46 @@ function startPoll() {
         }
       } catch(e) {}
     }, 30000);
+    // Order status poll: every 10s check if any active orders changed status
+    S._orderPollInterval = setInterval(async () => {
+      try {
+        if (!sb || S.role !== 'employee' || !S.user) return;
+        const activeOrders = S.orders.filter(o => o.status === 'new' || o.status === 'preparing' || o.status === 'ready');
+        if (activeOrders.length === 0) return;
+        const ids = activeOrders.map(o => o.id);
+        const {data} = await sb.from('orders').select('id, status, token_number').in('id', ids);
+        if (!data?.length) return;
+        data.forEach(fresh => {
+          const local = S.orders.find(o => o.id === fresh.id);
+          if (!local || local.status === fresh.status) return;
+          const oldStatus = local.status;
+          local.status = fresh.status;
+          const ao = S.allOrders.find(o => o.id === fresh.id);
+          if (ao) ao.status = fresh.status;
+          // Fire notifications based on status change
+          if (fresh.status === 'preparing' && oldStatus === 'new') {
+            addNotif(`Order #${fresh.token_number} is being prepared 🍳`, '⏳');
+            toast(`Order #${fresh.token_number} is being prepared 🍳`, 'info', '⏳');
+          }
+          if (fresh.status === 'ready') {
+            addNotif(`Order #${fresh.token_number} is READY for pickup!`, '🔔');
+            toast(`Order #${fresh.token_number} is READY! Go collect your food 🎉`, 'success', '🔔');
+            try { playNewOrderAlert(); } catch(e) {}
+            const badge = document.getElementById('ord-badge');
+            if (badge) { badge.textContent = S.orders.filter(o2=>o2.status==='ready').length; badge.classList.remove('hidden'); }
+          }
+          if (fresh.status === 'done') {
+            addNotif(`Order #${fresh.token_number} collected! ✅`, '✅');
+            toast(`Order #${fresh.token_number} collected ✅`, 'success', '✅');
+          }
+          if (fresh.status === 'cancelled' && oldStatus !== 'cancelled') {
+            addNotif(`Order #${fresh.token_number} was cancelled`, '❌');
+            toast(`Order #${fresh.token_number} cancelled`, 'warn', '❌');
+          }
+          renderMyOrders();
+        });
+      } catch(e) {}
+    }, 10000);
     return;
   }
   // Vendor/Kitchen: poll every 15s as backup to Realtime
@@ -5269,7 +5310,8 @@ function startRealtime() {
             }
             if (o.status === 'preparing') {
               myOrd.status = 'preparing';
-              addNotif(`Order #${myOrd.token_number} is being prepared`, '⏳');
+              addNotif(`Order #${myOrd.token_number} is being prepared 🍳`, '⏳');
+              toast(`Order #${myOrd.token_number} is being prepared 🍳`, 'info', '⏳');
               renderMyOrders();
             }
             if (o.status === 'done') {
