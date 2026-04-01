@@ -1314,6 +1314,56 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 </div>
 
 <!-- ══════════════════════════════════
+     POS BILLING (Counter Mode)
+══════════════════════════════════ -->
+<div class="screen" id="s-pos" style="background:var(--light);display:flex;flex-direction:column;height:100vh;overflow:hidden">
+  <div style="background:var(--dark);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+    <div>
+      <div style="font-family:var(--fh);font-size:18px;font-weight:800">Shri Sankalp</div>
+      <div style="font-size:11px;opacity:.6" id="pos-counter-name">POS Counter</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-ghost btn-sm" style="color:#fff;border-color:rgba(255,255,255,.2)" onclick="posRefreshMenu()">🔄</button>
+      <button class="btn btn-ghost btn-sm" style="color:#fff;border-color:rgba(255,255,255,.2)" onclick="posShowHistory()">📋 History</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:rgba(255,100,100,.3)" onclick="logout()">⏻ Exit</button>
+    </div>
+  </div>
+  <div style="display:flex;flex:1;overflow:hidden">
+    <!-- Left: Menu -->
+    <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px" id="pos-menu-area">
+      <div style="display:flex;gap:8px;margin-bottom:4px;flex-shrink:0">
+        <div class="search-bar" style="flex:1;margin:0">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Search dishes..." id="pos-search" oninput="posFilterMenu()">
+        </div>
+      </div>
+      <div class="chip-row" id="pos-canteen-chips" style="flex-shrink:0;margin-bottom:4px"></div>
+      <div class="chip-row" id="pos-cat-chips" style="flex-shrink:0;margin-bottom:4px"></div>
+      <div id="pos-menu-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;overflow-y:auto;flex:1"></div>
+    </div>
+    <!-- Right: Cart -->
+    <div style="width:320px;min-width:280px;border-left:1px solid var(--border);background:var(--white);display:flex;flex-direction:column;flex-shrink:0" id="pos-cart-panel">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-family:var(--fh);font-weight:700;font-size:15px;display:flex;justify-content:space-between;align-items:center">
+        <span>🛒 Current Order</span>
+        <span style="font-size:12px;color:var(--muted)" id="pos-b-item-count">0 items</span>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:10px" id="pos-b-cart-list">
+        <div style="text-align:center;color:var(--muted);padding:40px 0;font-size:13px">Tap items to add</div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding:12px 14px;flex-shrink:0">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Subtotal</span><span id="pos-b-subtotal">₹0</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;color:var(--muted)"><span>GST 5%</span><span id="pos-b-gst">₹0</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:800;font-family:var(--fh);margin-bottom:10px;padding-top:6px;border-top:1px dashed var(--border)"><span>Total</span><span id="pos-b-total">₹0</span></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" style="flex:1" onclick="posBillingClear()">🗑️ Clear</button>
+          <button class="btn btn-primary" style="flex:2;font-weight:800" onclick="posBillingGenerate()">🧾 Generate Bill</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
      MODALS
 ══════════════════════════════════ -->
 <div id="modal-container"></div>
@@ -1734,10 +1784,12 @@ async function unifiedLogin() {
     const isKitchen = inputLower.startsWith('kitchen');
     // Vendor: counter-c1..counter-c7, vendor1..vendor7
     const isVendor = inputLower.startsWith('counter') || inputLower.startsWith('vendor');
+    // POS Counter: pos, pos-counter, pos1
+    const isPOS = inputLower === 'pos' || inputLower.startsWith('pos-') || inputLower.startsWith('pos_');
 
-    if (!isEmail && (isAdmin || isKitchen || isVendor)) {
+    if (!isEmail && (isAdmin || isKitchen || isVendor || isPOS)) {
       // ── Staff login via verify_staff_login RPC ──
-      const role = isAdmin ? 'admin' : isKitchen ? 'kitchen' : 'vendor';
+      const role = isPOS ? 'vendor' : isAdmin ? 'admin' : isKitchen ? 'kitchen' : 'vendor';
       loginRole = role;
 
       // Map kitchen/vendor short IDs to counter IDs
@@ -1797,7 +1849,24 @@ async function unifiedLogin() {
         icon: S.canteens.find(c => c.id === authResult.canteen_id)?.icon || '🍽️'
       } : null);
 
-      if (role === 'vendor') {
+      if (isPOS) {
+        // POS Counter Mode — standalone billing screen
+        S.role = 'pos_counter';
+        S.user = { id: staffId, name: authResult.name || 'POS Counter', initials: '🧾', canteen_id: counter?.id || 'c1' };
+        S._staffAuth = { id: staffId, pw };
+        try {
+          const [{data: canData}, {data: menuData}] = await Promise.all([
+            sb.from('canteens').select('*').order('id'),
+            sb.from('menu_items').select('*').eq('is_available', true).order('canteen_id').order('name').limit(1000)
+          ]);
+          if (canData?.length) S.canteens = canData;
+          if (menuData?.length) { S.menu = menuData; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
+        } catch(e) {}
+        goScreen('s-pos');
+        posInitScreen();
+        toast('POS Counter ready', 'success', '🧾');
+
+      } else if (role === 'vendor') {
         if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
         S.role = 'vendor';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
@@ -1822,7 +1891,7 @@ async function unifiedLogin() {
           const [ordRes, canRes, menuRes] = await Promise.all([
             sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200),
             sb.from('canteens').select('*').order('id'),
-            sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(1000)
+            sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(500)
           ]);
           if (ordRes.data?.length) S.allOrders = ordRes.data.map(o=>({...o, items:o.order_items||[]}));
           if (canRes.data?.length) S.canteens = canRes.data;
@@ -3783,7 +3852,7 @@ async function renderAdminMenu(el) {
   // Always fetch fresh from DB so all canteen items including c7 are present
   if (sb) {
     try {
-      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('name').limit(1000);
+      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('name').limit(500);
       if (data?.length) { S.menu = data; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? S.inventory[m.id] ?? 50; }); }
     } catch(e) {}
   }
@@ -7278,6 +7347,290 @@ function showPrivacyPolicy(){
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Contact</p>
       <p>For privacy queries contact: <strong>info@slphospitality.com</strong></p>
     </div>`);
+}
+
+// ══════════════════════════════════════════════════════
+// POS BILLING (Counter Mode) — Standalone Module
+// ══════════════════════════════════════════════════════
+let _posCart = [];
+let _posCanteen = 'All';
+let _posCat = 'All';
+
+function posInitScreen() {
+  _posCart = [];
+  _posCanteen = 'All';
+  _posCat = 'All';
+  setEl('pos-counter-name', S.user?.name || 'POS Counter');
+  posRenderCanteenChips();
+  posRenderCatChips();
+  posRenderMenu();
+  posRenderCart();
+}
+
+function posRefreshMenu() {
+  if (!sb) return;
+  toast('Refreshing menu...', 'info', '🔄');
+  sb.from('menu_items').select('*').eq('is_available', true).order('canteen_id').order('name').limit(1000)
+    .then(({data}) => {
+      if (data?.length) { S.menu = data; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? 50; }); }
+      posRenderMenu();
+      posRenderCatChips();
+      toast('Menu refreshed', 'success', '✅');
+    });
+}
+
+function posRenderCanteenChips() {
+  const el = document.getElementById('pos-canteen-chips');
+  if (!el) return;
+  el.innerHTML = `<div class="chip ${_posCanteen==='All'?'active':''}" onclick="_posCanteen='All';_posCat='All';posRenderCatChips();posRenderMenu();document.querySelectorAll('#pos-canteen-chips .chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">All</div>` +
+    S.canteens.map(c => `<div class="chip ${_posCanteen===c.id?'active':''}" onclick="_posCanteen='${c.id}';_posCat='All';posRenderCatChips();posRenderMenu();document.querySelectorAll('#pos-canteen-chips .chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">${c.icon} ${c.name}</div>`).join('');
+}
+
+function posRenderCatChips() {
+  const el = document.getElementById('pos-cat-chips');
+  if (!el) return;
+  const base = _posCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _posCanteen);
+  const cats = [...new Set(base.map(m => m.category).filter(Boolean))].sort();
+  el.innerHTML = `<div class="chip ${_posCat==='All'?'active':''}" onclick="_posCat='All';posRenderMenu();document.querySelectorAll('#pos-cat-chips .chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">All</div>` +
+    cats.map(c => `<div class="chip ${_posCat===c?'active':''}" onclick="_posCat='${c}';posRenderMenu();document.querySelectorAll('#pos-cat-chips .chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">${c}</div>`).join('');
+}
+
+function posFilterMenu() {
+  posRenderMenu();
+}
+
+function posRenderMenu() {
+  const el = document.getElementById('pos-menu-grid');
+  if (!el) return;
+  const q = (document.getElementById('pos-search')?.value || '').toLowerCase();
+  let items = _posCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _posCanteen);
+  if (_posCat !== 'All') items = items.filter(m => m.category === _posCat);
+  if (q) items = items.filter(m => m.name.toLowerCase().includes(q));
+  items = items.filter(m => m.is_available !== false);
+
+  if (items.length === 0) {
+    el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">No items found</div>';
+    return;
+  }
+  el.innerHTML = items.map(m => {
+    const inCart = _posCart.find(c => c.id === m.id);
+    const stock = S.inventory[m.id] ?? m.stock ?? 99;
+    return `
+    <div style="background:var(--white);border-radius:10px;padding:10px;cursor:pointer;border:2px solid ${inCart?'var(--brand)':'var(--border)'};transition:.15s;position:relative" onclick="posAddToCart('${m.id}')">
+      ${inCart ? `<div style="position:absolute;top:-6px;right:-6px;background:var(--brand);color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${inCart.qty}</div>` : ''}
+      <div style="text-align:center;font-size:28px;margin-bottom:4px">${m.emoji||'🍽️'}</div>
+      <div style="font-size:11px;font-weight:700;text-align:center;line-height:1.2;margin-bottom:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${m.name}</div>
+      <div style="font-size:13px;font-weight:800;text-align:center;color:var(--brand);font-family:var(--fh)">₹${m.price}</div>
+      ${stock <= 5 && stock > 0 ? `<div style="font-size:9px;text-align:center;color:var(--amber);font-weight:700">${stock} left</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function posAddToCart(id) {
+  const item = S.menu.find(m => m.id === id);
+  if (!item) return;
+  const ex = _posCart.find(c => c.id === id);
+  if (ex) {
+    if (ex.qty >= 10) { toast('Max 10 per item', 'warn', '⚠️'); return; }
+    ex.qty++;
+  } else {
+    _posCart.push({ id: item.id, name: item.name, emoji: item.emoji || '', price: item.price, qty: 1, canteen_id: item.canteen_id });
+  }
+  posRenderCart();
+  posRenderMenu();
+}
+
+function posCartQty(id, delta) {
+  const idx = _posCart.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  _posCart[idx].qty += delta;
+  if (_posCart[idx].qty <= 0) _posCart.splice(idx, 1);
+  if (_posCart[idx]?.qty > 10) _posCart[idx].qty = 10;
+  posRenderCart();
+  posRenderMenu();
+}
+
+function posRemoveFromCart(id) {
+  _posCart = _posCart.filter(c => c.id !== id);
+  posRenderCart();
+  posRenderMenu();
+}
+
+function posRenderCart() {
+  const listEl = document.getElementById('pos-b-cart-list');
+  const subtotal = _posCart.reduce((s, i) => s + i.price * i.qty, 0);
+  const gst = Math.round(subtotal * 0.05 * 100) / 100;
+  const total = Math.round((subtotal + gst) * 100) / 100;
+
+  setEl('pos-b-item-count', _posCart.reduce((s,i) => s+i.qty, 0) + ' items');
+  setEl('pos-b-subtotal', '₹' + subtotal);
+  setEl('pos-b-gst', '₹' + gst.toFixed(2));
+  setEl('pos-b-total', '₹' + total.toFixed(2));
+
+  if (!listEl) return;
+  if (_posCart.length === 0) {
+    listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px 0;font-size:13px">Tap items to add</div>';
+    return;
+  }
+  listEl.innerHTML = _posCart.map(i => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--light2);border-radius:8px;margin-bottom:6px">
+      <span style="font-size:18px">${i.emoji}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.name}</div>
+        <div style="font-size:11px;color:var(--muted)">₹${i.price} × ${i.qty} = ₹${i.price * i.qty}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <button style="width:24px;height:24px;border:1px solid var(--border);border-radius:6px;background:var(--white);cursor:pointer;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center" onclick="posCartQty('${i.id}',-1)">−</button>
+        <span style="font-size:12px;font-weight:800;min-width:18px;text-align:center">${i.qty}</span>
+        <button style="width:24px;height:24px;border:1px solid var(--border);border-radius:6px;background:var(--white);cursor:pointer;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center" onclick="posCartQty('${i.id}',1)">+</button>
+      </div>
+      <button style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:4px" onclick="posRemoveFromCart('${i.id}')">✕</button>
+    </div>`).join('');
+}
+
+function posBillingClear() {
+  if (_posCart.length === 0) return;
+  if (confirm('Clear entire cart?')) {
+    _posCart = [];
+    posRenderCart();
+    posRenderMenu();
+  }
+}
+
+async function posBillingGenerate() {
+  if (_posCart.length === 0) { toast('Add items first', 'warn', '🛒'); return; }
+  if (!sb) { toast('Database not connected', 'error', '❌'); return; }
+
+  const btn = document.querySelector('#pos-cart-panel .btn-primary');
+  if (btn) { btn.classList.add('btn-loading'); btn.disabled = true; }
+
+  try {
+    // Group by canteen
+    const byCanteen = {};
+    _posCart.forEach(i => {
+      const cid = i.canteen_id || S.user?.canteen_id || 'c1';
+      if (!byCanteen[cid]) byCanteen[cid] = [];
+      byCanteen[cid].push(i);
+    });
+
+    const allTokens = [];
+    for (const cid of Object.keys(byCanteen)) {
+      const items = byCanteen[cid];
+      const canteen = S.canteens.find(c => c.id === cid) || { name: 'Counter', icon: '🍽️' };
+      const { data: result, error } = await sb.rpc('pos_cash_order', {
+        p_canteen_id: cid,
+        p_canteen_name: canteen.name,
+        p_canteen_icon: canteen.icon || '🍽️',
+        p_items: items.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price }))
+      });
+      if (error || !result?.success) {
+        toast('Order failed: ' + (result?.error || error?.message || 'Unknown'), 'error', '❌');
+        if (btn) { btn.classList.remove('btn-loading'); btn.disabled = false; }
+        return;
+      }
+      allTokens.push({ token: result.token_number, canteen: canteen.name, icon: canteen.icon, items, subtotal: items.reduce((s,i)=>s+i.price*i.qty,0), paid: result.amount_paid });
+    }
+
+    // Print KOT receipt
+    const cartSnapshot = [..._posCart];
+    const subtotal = cartSnapshot.reduce((s, i) => s + i.price * i.qty, 0);
+    const gst = Math.round(subtotal * 0.05 * 100) / 100;
+    const total = Math.round((subtotal + gst) * 100) / 100;
+    const tokenStr = allTokens.map(t => '#' + t.token).join('/');
+
+    posPrintKOT(allTokens, cartSnapshot, subtotal, gst, total);
+
+    toast(`Bill generated! Token ${tokenStr} — ₹${total}`, 'success', '🧾');
+    _posCart = [];
+    posRenderCart();
+    posRenderMenu();
+
+  } catch(e) {
+    toast('Error: ' + e.message, 'error', '❌');
+  }
+  if (btn) { btn.classList.remove('btn-loading'); btn.disabled = false; }
+}
+
+function posPrintKOT(tokens, items, subtotal, gst, total) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const tokenStr = tokens.map(t => t.token).join(' / ');
+
+  const html = `<html><head><style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Courier New',monospace;font-size:13px;max-width:300px;margin:0 auto;padding:12px}
+    .center{text-align:center}
+    .divider{border-top:1px dashed #000;margin:8px 0}
+    .row{display:flex;justify-content:space-between;margin:3px 0}
+    .bold{font-weight:bold}
+    .big{font-size:32px;font-weight:bold;text-align:center;margin:6px 0;letter-spacing:2px}
+    .header{font-size:18px;font-weight:bold;text-align:center;margin-bottom:2px}
+    @media print{.no-print{display:none} body{padding:4px}}
+  </style></head><body>
+    <div class="header">Shri Sankalp</div>
+    <div class="center" style="font-size:10px;margin-bottom:4px">L&T Powai Campus</div>
+    <div class="divider"></div>
+    <div class="big">#${tokenStr}</div>
+    <div class="center" style="font-size:10px">${dateStr} · ${timeStr}</div>
+    ${tokens.length > 1 ? `<div class="center" style="font-size:10px;margin-top:4px">${tokens.map(t=>t.icon+' '+t.canteen+' #'+t.token).join(' | ')}</div>` : `<div class="center" style="font-size:10px">${tokens[0]?.icon||''} ${tokens[0]?.canteen||''}</div>`}
+    <div class="divider"></div>
+    <div class="row bold"><span>Item</span><span>Qty</span><span>Amt</span></div>
+    <div class="divider"></div>
+    ${items.map(i => `<div class="row"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px">${i.emoji||''} ${i.name}</span><span style="width:30px;text-align:center">×${i.qty}</span><span style="width:50px;text-align:right">₹${i.price*i.qty}</span></div>`).join('')}
+    <div class="divider"></div>
+    <div class="row"><span>Subtotal</span><span>₹${subtotal}</span></div>
+    <div class="row"><span>GST 5%</span><span>₹${gst.toFixed(2)}</span></div>
+    <div class="divider"></div>
+    <div class="row bold" style="font-size:15px"><span>TOTAL</span><span>₹${total.toFixed(2)}</span></div>
+    <div class="divider"></div>
+    <div class="center" style="font-size:10px;margin-top:6px">Thank you! Please collect at counter.</div>
+    <div class="center" style="font-size:9px;margin-top:4px;color:#999">POS Order · ${now.toISOString().slice(0,10)}</div>
+    <br>
+    <div class="no-print center">
+      <button onclick="window.print()" style="padding:10px 24px;font-size:14px;cursor:pointer;border-radius:8px;border:none;background:#E8380D;color:#fff;font-weight:700">🖨️ Print Receipt</button>
+      <button onclick="window.close()" style="padding:10px 16px;font-size:14px;cursor:pointer;border-radius:8px;border:1px solid #ddd;background:#fff;margin-left:8px">Close</button>
+    </div>
+  </body></html>`;
+
+  const w = window.open('', '_blank', 'width=340,height=550');
+  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400); }
+  else toast('Pop-up blocked — allow pop-ups for receipt printing', 'warn', '⚠️');
+}
+
+function posShowHistory() {
+  if (!sb) return;
+  toast('Loading order history...', 'info', '📋');
+  const today = new Date().toISOString().slice(0, 10);
+  sb.from('orders').select('id, token_number, canteen_name, item_total, gst_amount, amount_paid, status, created_at')
+    .eq('employee_id', 'POS-CASH')
+    .gte('created_at', today + 'T00:00:00')
+    .order('created_at', { ascending: false })
+    .limit(50)
+    .then(({data}) => {
+      const orders = data || [];
+      const totalRev = orders.reduce((s,o) => s + (parseFloat(o.amount_paid)||0), 0);
+      showModal(`
+        <div class="modal-head">
+          <span class="modal-title">📋 Today's POS Orders</span>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+          <div style="display:flex;justify-content:space-between;padding:10px;background:var(--light2);border-radius:10px;margin-bottom:12px">
+            <div style="text-align:center"><div style="font-size:10px;color:var(--muted)">Orders</div><div style="font-weight:800;font-family:var(--fh)">${orders.length}</div></div>
+            <div style="text-align:center"><div style="font-size:10px;color:var(--muted)">Revenue</div><div style="font-weight:800;font-family:var(--fh)">₹${Math.round(totalRev)}</div></div>
+          </div>
+          ${orders.length === 0 ? '<div style="text-align:center;color:var(--muted);padding:24px">No POS orders today</div>' :
+            orders.map(o => `
+              <div style="padding:10px;background:var(--light2);border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <div style="font-weight:700;font-size:13px">#${o.token_number} · ${o.canteen_name||''}</div>
+                  <div style="font-size:11px;color:var(--muted)">${new Date(o.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
+                </div>
+                <div style="font-weight:800;font-family:var(--fh);color:var(--brand)">₹${o.amount_paid||0}</div>
+              </div>`).join('')}
+        </div>`);
+    });
 }
 </script>
 </body>
