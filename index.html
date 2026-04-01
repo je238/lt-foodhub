@@ -6156,7 +6156,7 @@ const _origPlaceOrder = placeOrder;
 placeOrder = async function(){
   if (!navigator.onLine) { toast('You are offline! Cannot place order.', 'error', '📡'); return; }
   if (S._ordersPaused) { toast('Ordering is temporarily paused. Please try again later.', 'warn', '⏸️'); return; }
-  if (!rateCheck('placeOrder', 5)) return;
+  if (!rateCheck('placeOrder', 15)) return;
   // Inner placeOrder handles all its own errors — no try/catch here to avoid double-catching
   await _origPlaceOrder();
   try { saveSession(); } catch(e) {}
