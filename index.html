@@ -3816,7 +3816,8 @@ function filterAdminCanteen(cid, el) {
   document.querySelectorAll('#admin-menu-canteens .chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   document.querySelectorAll('#admin-menu-cats .chip').forEach(c => c.classList.toggle('active', c.textContent === 'All Categories'));
-  const items = cid === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === cid);
+  const normCid = cid.replace(/^counter-/, '');
+  const items = cid === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === cid || m.canteen_id === normCid || ('counter-' + m.canteen_id) === cid);
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }
 
@@ -3848,7 +3849,8 @@ function renderAdminMenuItem(m) {
 }
 
 function filterAdminMenu(q) {
-  let base = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen);
+  const _normCid2 = _adminMenuCanteen.replace(/^counter-/, '');
+  let base = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen || m.canteen_id === _normCid2 || ('counter-' + m.canteen_id) === _adminMenuCanteen);
   const items = q ? base.filter(m => m.name.toLowerCase().includes(q.toLowerCase())) : base;
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }
@@ -3858,7 +3860,8 @@ function filterAdminCat(cat, el) {
   _adminMenuCat = cat;
   document.querySelectorAll('#admin-menu-cats .chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
-  let items = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen);
+  const _normCid = _adminMenuCanteen.replace(/^counter-/, '');
+  let items = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen || m.canteen_id === _normCid || ('counter-' + m.canteen_id) === _adminMenuCanteen);
   if (cat !== 'All') items = items.filter(m => m.category === cat);
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }
