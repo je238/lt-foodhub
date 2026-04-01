@@ -1802,6 +1802,11 @@ async function unifiedLogin() {
         S.role = 'vendor';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        // Sync canteen open state from DB
+        try {
+          const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
+          if (canRow) { _kitchenOpen = canRow.is_open; const c = S.canteens.find(x=>x.id===counter.id); if(c) c.is_open = canRow.is_open; }
+        } catch(e) {}
         goScreen('s-vendor'); setEl('vendor-title', counter.icon + ' ' + counter.name);
         toast(counter.icon + ' ' + counter.name + ' loaded', 'success', '✅');
 
@@ -1810,7 +1815,18 @@ async function unifiedLogin() {
         S.role = 'kitchen';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        // Fetch actual canteen open/close state from DB
+        try {
+          const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
+          if (canRow) { _kitchenOpen = canRow.is_open; }
+        } catch(e) {}
         goScreen('s-kitchen'); setEl('kds-title', '📺 ' + counter.name + ' Kitchen');
+        // Sync toggle button to actual DB state
+        const kdsBtn = document.getElementById('kds-toggle-btn');
+        if (kdsBtn) {
+          if (_kitchenOpen) { kdsBtn.style.background = '#22c55e'; kdsBtn.textContent = '🟢 OPEN'; }
+          else { kdsBtn.style.background = '#ef4444'; kdsBtn.textContent = '🔴 CLOSED'; }
+        }
         toast(counter.icon + ' ' + counter.name + ' Kitchen active', 'success', '📺');
 
       } else {
