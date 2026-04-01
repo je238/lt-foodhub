@@ -1822,7 +1822,7 @@ async function unifiedLogin() {
           const [ordRes, canRes, menuRes] = await Promise.all([
             sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200),
             sb.from('canteens').select('*').order('id'),
-            sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(1000)
+            sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(500)
           ]);
           if (ordRes.data?.length) S.allOrders = ordRes.data.map(o=>({...o, items:o.order_items||[]}));
           if (canRes.data?.length) S.canteens = canRes.data;
@@ -3783,7 +3783,7 @@ async function renderAdminMenu(el) {
   // Always fetch fresh from DB so all canteen items including c7 are present
   if (sb) {
     try {
-      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('name').limit(1000);
+      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('name').limit(500);
       if (data?.length) { S.menu = data; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? S.inventory[m.id] ?? 50; }); }
     } catch(e) {}
   }
