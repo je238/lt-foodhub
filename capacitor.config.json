@@ -1,0 +1,8 @@
+{
+  "appId": "com.slphospitality.nexus",
+  "appName": "SLP Nexus",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
