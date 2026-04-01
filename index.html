@@ -429,13 +429,13 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .qty-num{font-weight:800;font-size:14px;min-width:26px;text-align:center;color:var(--brand);font-family:var(--fh);background:#fff}
 
 /* Floating Cart */
-.cart-float{position:fixed;bottom:74px;left:14px;right:14px;max-width:492px;margin:0 auto;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#0F172A 0%,#1E293B 100%);color:#fff;border-radius:18px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 12px 40px rgba(15,23,42,.4);cursor:pointer;animation:slideUp .35s var(--ease-bounce);z-index:50;width:calc(100% - 28px);border:1px solid rgba(255,255,255,.08)}
+.cart-float{position:fixed;bottom:68px;left:14px;right:14px;max-width:492px;margin:0 auto;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#0F172A 0%,#1E293B 100%);color:#fff;border-radius:12px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 8px 24px rgba(15,23,42,.35);cursor:pointer;animation:slideUp .3s var(--ease-bounce);z-index:50;width:calc(100% - 28px);border:1px solid rgba(255,255,255,.08)}
 .cart-float.gone{display:none}
-.cart-float-left{display:flex;align-items:center;gap:12px}
-.cart-float-count{background:var(--brand);color:#fff;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;animation:bounce .6s ease}
-.cart-float-text{font-weight:600;font-size:13px}
-.cart-float-sub{font-size:10px;opacity:.5}
-.cart-float-price{font-family:var(--fh);font-size:20px;font-weight:700;color:var(--brand)}
+.cart-float-left{display:flex;align-items:center;gap:8px}
+.cart-float-count{background:var(--brand);color:#fff;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex-shrink:0}
+.cart-float-text{font-weight:600;font-size:12px}
+.cart-float-sub{font-size:9px;opacity:.5}
+.cart-float-price{font-family:var(--fh);font-size:16px;font-weight:700;color:var(--brand)}
 
 /* Cart Screen */
 .cart-item{background:var(--white);border-radius:var(--rl);padding:13px;display:flex;align-items:center;gap:11px;border:1px solid var(--border);margin-bottom:8px}
@@ -1077,21 +1077,15 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 </nav>
 
 <!-- Floating Cart Button -->
-<div class="cart-float gone" id="cart-float">
-  <div onclick="toggleCartPreview()" style="display:flex;align-items:center;justify-content:space-between;width:100%">
-    <div class="cart-float-left">
-      <div class="cart-float-count" id="cf-count">0</div>
-      <div>
-        <div class="cart-float-text">View Cart</div>
-        <div class="cart-float-sub" id="cf-sub">0 items</div>
-      </div>
+<div class="cart-float gone" id="cart-float" onclick="goScreen('s-cart')">
+  <div class="cart-float-left">
+    <div class="cart-float-count" id="cf-count">0</div>
+    <div>
+      <div class="cart-float-text">View Cart</div>
+      <div class="cart-float-sub" id="cf-sub">0 items</div>
     </div>
-    <div class="cart-float-price" id="cf-price">₹0</div>
   </div>
-  <div id="cart-preview" style="display:none;width:100%;padding-top:10px;border-top:1px solid rgba(255,255,255,.12);margin-top:10px">
-    <div id="cart-preview-items" style="max-height:180px;overflow-y:auto"></div>
-    <button class="btn btn-primary btn-full" style="margin-top:8px;border-radius:10px" onclick="goScreen('s-cart')">Checkout →</button>
-  </div>
+  <div class="cart-float-price" id="cf-price">₹0</div>
 </div>
 
 <!-- ══════════════════════════════════
@@ -2473,44 +2467,11 @@ function updateCartFloat() {
   const fees = calcFees(price);
   const cf = document.getElementById('cart-float');
   if (!cf) return;
-  if (tot === 0) { cf.classList.add('gone'); const p = document.getElementById('cart-preview'); if(p) p.style.display='none'; return; }
+  if (tot === 0) { cf.classList.add('gone'); return; }
   cf.classList.remove('gone');
   setEl('cf-count', tot);
   setEl('cf-sub', tot + ' item' + (tot!==1?'s':''));
   setEl('cf-price', '₹'+Math.round(fees.grandTotal));
-  // Update preview items if open
-  const previewEl = document.getElementById('cart-preview-items');
-  if (previewEl && document.getElementById('cart-preview')?.style.display !== 'none') {
-    renderCartPreview();
-  }
-}
-
-function toggleCartPreview() {
-  const preview = document.getElementById('cart-preview');
-  if (!preview) return;
-  if (preview.style.display === 'none') {
-    preview.style.display = 'block';
-    renderCartPreview();
-  } else {
-    preview.style.display = 'none';
-  }
-}
-
-function renderCartPreview() {
-  const el = document.getElementById('cart-preview-items');
-  if (!el) return;
-  if (S.cart.length === 0) { el.innerHTML = ''; return; }
-  el.innerHTML = S.cart.map(i => `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <span style="font-size:16px">${i.emoji||'🍽️'}</span>
-      <div style="flex:1;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.name}</div>
-      <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
-        <button style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:none;color:#fff;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();chgQty('${i.id}',-1)">−</button>
-        <span style="font-size:13px;font-weight:800;min-width:16px;text-align:center">${i.qty}</span>
-        <button style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:none;color:#fff;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();chgQty('${i.id}',1)">+</button>
-      </div>
-      <span style="font-size:12px;font-weight:700;min-width:40px;text-align:right">₹${i.price*i.qty}</span>
-    </div>`).join('');
 }
 
 // Fee calculation — food cost + 5% GST only
