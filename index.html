@@ -1822,7 +1822,7 @@ async function unifiedLogin() {
           const [ordRes, canRes, menuRes] = await Promise.all([
             sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200),
             sb.from('canteens').select('*').order('id'),
-            sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(500)
+            sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(1000)
           ]);
           if (ordRes.data?.length) S.allOrders = ordRes.data.map(o=>({...o, items:o.order_items||[]}));
           if (canRes.data?.length) S.canteens = canRes.data;
@@ -3783,7 +3783,7 @@ async function renderAdminMenu(el) {
   // Always fetch fresh from DB so all canteen items including c7 are present
   if (sb) {
     try {
-      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('name').limit(500);
+      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('name').limit(1000);
       if (data?.length) { S.menu = data; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? S.inventory[m.id] ?? 50; }); }
     } catch(e) {}
   }
@@ -3816,8 +3816,7 @@ function filterAdminCanteen(cid, el) {
   document.querySelectorAll('#admin-menu-canteens .chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   document.querySelectorAll('#admin-menu-cats .chip').forEach(c => c.classList.toggle('active', c.textContent === 'All Categories'));
-  const normCid = cid.replace(/^counter-/, '');
-  const items = cid === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === cid || m.canteen_id === normCid || ('counter-' + m.canteen_id) === cid);
+  const items = cid === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === cid);
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }
 
@@ -3849,8 +3848,7 @@ function renderAdminMenuItem(m) {
 }
 
 function filterAdminMenu(q) {
-  const _normCid2 = _adminMenuCanteen.replace(/^counter-/, '');
-  let base = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen || m.canteen_id === _normCid2 || ('counter-' + m.canteen_id) === _adminMenuCanteen);
+  let base = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen);
   const items = q ? base.filter(m => m.name.toLowerCase().includes(q.toLowerCase())) : base;
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }
@@ -3860,8 +3858,7 @@ function filterAdminCat(cat, el) {
   _adminMenuCat = cat;
   document.querySelectorAll('#admin-menu-cats .chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
-  const _normCid = _adminMenuCanteen.replace(/^counter-/, '');
-  let items = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen || m.canteen_id === _normCid || ('counter-' + m.canteen_id) === _adminMenuCanteen);
+  let items = _adminMenuCanteen === 'All' ? S.menu : S.menu.filter(m => m.canteen_id === _adminMenuCanteen);
   if (cat !== 'All') items = items.filter(m => m.category === cat);
   setElInner('admin-menu-list', items.map(m => renderAdminMenuItem(m)).join(''));
 }

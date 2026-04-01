@@ -1,4 +1,5 @@
-.vercel
-supabase.exe
-supabase.tar.gz
-supabase/
+node_modules/
+android/capacitor/build/
+android/app/build/
+.gradle/
+*.dex
