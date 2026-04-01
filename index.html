@@ -2493,18 +2493,23 @@ function renderCart() {
     if(cartList) cartList.innerHTML = '<div class="empty"><div class="empty-icon">🛒</div><div class="empty-title">Cart is empty</div><div class="empty-sub">Add items from the menu</div></div>';
   } else {
     if(cartList) cartList.innerHTML = S.cart.map(i => `
-      <div class="cart-item">
-        <div class="cart-emoji">${i.emoji||'🍽️'}</div>
-        <div class="cart-item-body">
-          <div class="cart-item-name">${i.name}</div>
-          <div class="cart-item-price">₹${i.price} × ${i.qty}</div>
+      <div class="cart-item" style="padding:14px;margin-bottom:10px;border-radius:14px;border:1.5px solid var(--border)">
+        <div class="cart-emoji" style="font-size:28px">${i.emoji||'🍽️'}</div>
+        <div class="cart-item-body" style="flex:1;min-width:0">
+          <div class="cart-item-name" style="font-size:14px;font-weight:700">${i.name}</div>
+          <div class="cart-item-price" style="font-size:12px;color:var(--muted)">₹${i.price} each</div>
         </div>
-        <div class="qty-ctrl">
-          <button class="qty-btn" onclick="chgQty('${i.id}',-1)">−</button>
-          <span class="qty-num">${i.qty}</span>
-          <button class="qty-btn" onclick="chgQty('${i.id}',1)">+</button>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="qty-ctrl" style="gap:8px">
+            <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',-1)">−</button>
+            <span class="qty-num" style="font-size:16px;min-width:24px">${i.qty}</span>
+            <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',1)">+</button>
+          </div>
+          <div style="text-align:right;min-width:50px">
+            <div class="cart-item-total" style="font-weight:800;font-size:15px;font-family:var(--fh)">₹${i.price*i.qty}</div>
+          </div>
+          <button style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;opacity:.6" onclick="chgQty('${i.id}',-${i.qty})" title="Remove">✕</button>
         </div>
-        <div class="cart-item-total">₹${i.price*i.qty}</div>
       </div>`).join('');
   }
   const sumEl = document.getElementById('cart-summary');
