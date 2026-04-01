@@ -2609,9 +2609,29 @@ function selPay(el, method) {
 // ═════════════════════════════════════
 async function placeOrder() {
   if (S.cart.length === 0) { toast('Your cart is empty!', 'error', '🛒'); return; }
-  if (S.selCanteen && !S.selCanteen.is_open) { toast('This canteen is currently closed!', 'error', '🚫'); return; }
   if (S.selPay === 'upi') { toast('UPI coming soon! Please use SLP Nexus Wallet.', 'warn', '📱'); return; }
   if (!sb) { toast('Database not connected!', 'error', '❌'); return; }
+
+  // Fetch fresh canteen status from DB before placing order
+  try {
+    const {data: freshCanteens} = await sb.from('canteens').select('id, is_open, name, icon');
+    if (freshCanteens?.length) {
+      freshCanteens.forEach(fc => { const c = S.canteens.find(x => x.id === fc.id); if (c) c.is_open = fc.is_open; });
+    }
+  } catch(e) {}
+
+  // Check ALL canteens that have items in cart
+  const cartCanteenIds = [...new Set(S.cart.map(i => {
+    const mi = S.menu.find(m => m.id === i.id);
+    return mi?.canteen_id || S.selCanteen?.id || 'c1';
+  }))];
+  const closedCanteens = cartCanteenIds.map(cid => S.canteens.find(c => c.id === cid)).filter(c => c && !c.is_open);
+  if (closedCanteens.length > 0) {
+    const names = closedCanteens.map(c => c.icon + ' ' + c.name).join(', ');
+    toast(`Cannot order — ${names} ${closedCanteens.length > 1 ? 'are' : 'is'} closed!`, 'error', '🚫');
+    renderCanteens();
+    return;
+  }
 
   // Quick client-side balance estimate before hitting server
   const estimatedTotal = S.cart.reduce((s,i) => s + i.price * i.qty, 0);
