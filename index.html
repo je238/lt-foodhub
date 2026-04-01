@@ -1822,7 +1822,7 @@ async function unifiedLogin() {
           const [ordRes, canRes, menuRes] = await Promise.all([
             sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200),
             sb.from('canteens').select('*').order('id'),
-            sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(1000)
+            sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(500)
           ]);
           if (ordRes.data?.length) S.allOrders = ordRes.data.map(o=>({...o, items:o.order_items||[]}));
           if (canRes.data?.length) S.canteens = canRes.data;
@@ -3783,7 +3783,7 @@ async function renderAdminMenu(el) {
   // Always fetch fresh from DB so all canteen items including c7 are present
   if (sb) {
     try {
-      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('name').limit(1000);
+      const {data} = await sb.from('menu_items').select('*').order('canteen_id').order('name').limit(500);
       if (data?.length) { S.menu = data; S.menu.forEach(m => { S.inventory[m.id] = m.stock ?? S.inventory[m.id] ?? 50; }); }
     } catch(e) {}
   }
@@ -4583,6 +4583,32 @@ async function exportRealReport() {
     const blob = new Blob([csv], {type:'text/csv'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'lt-foodhub-report-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
     toast('Report downloaded!', 'success', '📥');
+  } catch(e) { toast('Export failed: '+e.message, 'error', '❌'); }
+}
+
+async function exportDishReport() {
+  try {
+    if (!sb) return;
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+    const {data} = await sb.from('order_items')
+      .select('item_name, item_emoji, quantity, unit_price, order_id, orders!inner(status, created_at, canteen_name)')
+      .gte('orders.created_at', monthStart.toISOString())
+      .neq('orders.status', 'cancelled')
+      .limit(2000);
+    if (!data?.length) { toast('No data to export', 'warn', '📥'); return; }
+    const dishMap = {};
+    data.forEach(i => {
+      const name = i.item_name || 'Unknown';
+      if (!dishMap[name]) dishMap[name] = { name, qty: 0, revenue: 0 };
+      dishMap[name].qty += (i.quantity || 1);
+      dishMap[name].revenue += (i.unit_price || 0) * (i.quantity || 1);
+    });
+    const rows = Object.values(dishMap).sort((a,b) => b.qty - a.qty);
+    const csv = 'Dish,Orders,Revenue\n' + rows.map(d => `"${d.name}",${d.qty},${Math.round(d.revenue)}`).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'dish-report-' + new Date().toISOString().slice(0,7) + '.csv'; a.click();
+    toast('Dish report downloaded!', 'success', '📥');
   } catch(e) { toast('Export failed: '+e.message, 'error', '❌'); }
 }
 
@@ -6179,8 +6205,8 @@ renderKDS = function(){
 
 // Patch: renderAdmin — add new features to revenue + settings + employees tabs  
 const _origRenderAdminRevenue = renderAdminRevenue;
-renderAdminRevenue = function(el){
-  _origRenderAdminRevenue(el);
+renderAdminRevenue = async function(el){
+  await _origRenderAdminRevenue(el);
   // Prepend date range filter
   const dateFilter = document.createElement('div');
   dateFilter.innerHTML=`
@@ -6193,6 +6219,122 @@ renderAdminRevenue = function(el){
       <button class="btn btn-primary btn-full btn-sm" onclick="setRevenueRange()">Apply Filter</button>
     </div>`;
   el.insertBefore(dateFilter, el.firstChild);
+
+  // ── NEW: Top Selling Dishes + Per-Dish Orders + Date-wise Revenue ──
+  try {
+    if (!sb) return;
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+    const {data: monthOrdItems} = await sb.from('order_items')
+      .select('item_name, item_emoji, quantity, unit_price, order_id, orders!inner(status, created_at, canteen_name)')
+      .gte('orders.created_at', monthStart.toISOString())
+      .neq('orders.status', 'cancelled')
+      .limit(2000);
+
+    const items = monthOrdItems || [];
+
+    // ── Top Selling Dishes ──
+    const dishMap = {};
+    items.forEach(i => {
+      const name = i.item_name || 'Unknown';
+      if (!dishMap[name]) dishMap[name] = { name, emoji: i.item_emoji || '🍽️', qty: 0, revenue: 0 };
+      dishMap[name].qty += (i.quantity || 1);
+      dishMap[name].revenue += (i.unit_price || 0) * (i.quantity || 1);
+    });
+    const topDishes = Object.values(dishMap).sort((a,b) => b.qty - a.qty);
+    const maxQty = Math.max(1, topDishes[0]?.qty || 1);
+
+    const topCard = document.createElement('div');
+    topCard.className = 'card';
+    topCard.innerHTML = `
+      <div class="card-title">🏆 Top Selling Dishes — ${new Date().toLocaleString('en-IN',{month:'long',year:'numeric'})}</div>
+      ${topDishes.slice(0,10).map((d,i) => `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="width:24px;font-size:13px;font-weight:800;color:${i<3?'var(--brand)':'var(--muted)'}">${i+1}</div>
+          <div style="font-size:20px">${d.emoji}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.name}</div>
+            <div class="progress" style="height:6px;margin-top:4px"><div class="progress-fill" style="width:${Math.round(d.qty/maxQty*100)}%"></div></div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-family:var(--fh);font-weight:800;font-size:14px">${d.qty}</div>
+            <div style="font-size:10px;color:var(--muted)">₹${d.revenue>999?(d.revenue/1000).toFixed(1)+'K':Math.round(d.revenue)}</div>
+          </div>
+        </div>`).join('')}
+      ${topDishes.length === 0 ? '<div style="text-align:center;color:var(--muted);padding:16px">No orders this month</div>' : ''}
+      ${topDishes.length > 10 ? `<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px">Showing top 10 of ${topDishes.length} dishes</div>` : ''}`;
+    el.appendChild(topCard);
+
+    // ── Per-Dish Order Count (full table) ──
+    const dishTableCard = document.createElement('div');
+    dishTableCard.className = 'card';
+    dishTableCard.innerHTML = `
+      <div class="card-title">📋 Per-Dish Order Report — ${new Date().toLocaleString('en-IN',{month:'long',year:'numeric'})}</div>
+      <div style="max-height:300px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--light2);position:sticky;top:0">
+            <th style="text-align:left;padding:8px;font-weight:700">Dish</th>
+            <th style="text-align:center;padding:8px;font-weight:700">Orders</th>
+            <th style="text-align:right;padding:8px;font-weight:700">Revenue</th>
+          </tr></thead>
+          <tbody>
+            ${topDishes.map(d => `<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:7px 8px">${d.emoji} ${d.name}</td>
+              <td style="text-align:center;padding:7px 8px;font-weight:700">${d.qty}</td>
+              <td style="text-align:right;padding:7px 8px;font-weight:700;color:var(--brand)">₹${Math.round(d.revenue)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 8px;border-top:2px solid var(--dark);margin-top:4px;font-weight:800;font-size:13px">
+        <span>Total</span>
+        <span>${topDishes.reduce((s,d)=>s+d.qty,0)} orders · ₹${Math.round(topDishes.reduce((s,d)=>s+d.revenue,0)).toLocaleString('en-IN')}</span>
+      </div>
+      <button class="btn btn-ghost btn-full btn-sm" style="margin-top:8px" onclick="exportDishReport()">📥 Download Dish Report CSV</button>`;
+    el.appendChild(dishTableCard);
+
+    // ── Date-wise Revenue ──
+    const dateRevMap = {};
+    items.forEach(i => {
+      const dt = i.orders?.created_at?.slice(0,10);
+      if (!dt) return;
+      if (!dateRevMap[dt]) dateRevMap[dt] = { date: dt, orders: new Set(), revenue: 0, items: 0 };
+      dateRevMap[dt].orders.add(i.order_id);
+      dateRevMap[dt].revenue += (i.unit_price || 0) * (i.quantity || 1);
+      dateRevMap[dt].items += (i.quantity || 1);
+    });
+    const dateRows = Object.values(dateRevMap).sort((a,b) => b.date.localeCompare(a.date));
+    const maxDateRev = Math.max(1, ...dateRows.map(d => d.revenue));
+
+    const dateCard = document.createElement('div');
+    dateCard.className = 'card';
+    dateCard.innerHTML = `
+      <div class="card-title">📆 Date-wise Revenue — ${new Date().toLocaleString('en-IN',{month:'long',year:'numeric'})}</div>
+      ${dateRows.map(d => {
+        const dt = new Date(d.date);
+        const label = dt.toLocaleDateString('en-IN', { day:'numeric', month:'short', weekday:'short' });
+        const pct = Math.round(d.revenue / maxDateRev * 100);
+        return `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:12px;font-weight:700">${label}</span>
+            <span style="font-size:12px;font-weight:800;color:var(--brand)">₹${d.revenue>999?(d.revenue/1000).toFixed(1)+'K':Math.round(d.revenue)} <span style="font-weight:400;color:var(--muted)">(${d.orders.size} orders)</span></span>
+          </div>
+          <div class="progress" style="height:8px"><div class="progress-fill" style="width:${pct}%"></div></div>
+        </div>`;
+      }).join('')}
+      ${dateRows.length === 0 ? '<div style="text-align:center;color:var(--muted);padding:16px">No data this month</div>' : ''}
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px dashed var(--border);margin-top:8px;font-weight:800;font-size:13px">
+        <span>Month Total</span>
+        <span>₹${Math.round(dateRows.reduce((s,d)=>s+d.revenue,0)).toLocaleString('en-IN')}</span>
+      </div>`;
+    el.appendChild(dateCard);
+
+  } catch(e) {
+    const errCard = document.createElement('div');
+    errCard.className = 'card';
+    errCard.innerHTML = `<div style="color:var(--red);font-size:13px">Failed to load reports: ${e.message}</div>`;
+    el.appendChild(errCard);
+  }
 };
 
 const _origRenderAdminSettings = renderAdminSettings;
