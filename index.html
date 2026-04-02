@@ -1812,7 +1812,7 @@ async function unifiedLogin() {
         if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
         S.role = 'vendor';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
-        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(50); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
         // Sync canteen open state from DB
         try {
           const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
@@ -1825,7 +1825,7 @@ async function unifiedLogin() {
         if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
         S.role = 'kitchen';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
-        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(50); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
         // Fetch actual canteen open/close state from DB
         try {
           const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
@@ -1847,7 +1847,7 @@ async function unifiedLogin() {
         try {
           const todayStr = new Date().toISOString().slice(0,10);
           const [ordRes, canRes, menuRes] = await Promise.all([
-            sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200),
+            sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(100),
             sb.from('canteens').select('*').order('id'),
             sb.from('menu_items').select('*').order('canteen_id').order('category').order('name').limit(1000)
           ]);
@@ -2127,7 +2127,7 @@ async function doLogin() {
         S.role = 'vendor';
         S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try {
-          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(200);
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(50);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-vendor');
@@ -2139,7 +2139,7 @@ async function doLogin() {
         S.role = 'kitchen';
         S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try {
-          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(200);
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(50);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-kitchen');
@@ -2152,7 +2152,7 @@ async function doLogin() {
         S.user = { id: authResult.id, name: authResult.name, initials: 'CA' };
         try {
           const todayStr = new Date().toISOString().slice(0,10);
-          const { data } = await sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr + 'T00:00:00').order('created_at', { ascending: false }).limit(200);
+          const { data } = await sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr + 'T00:00:00').order('created_at', { ascending: false }).limit(100);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-admin');
@@ -3488,8 +3488,8 @@ async function fetchAllOrders() {
 function startPoll() {
   clearInterval(S.pollInterval);
   if (S.role === 'employee') {
-    // Poll every 30s — refresh menu_items + canteens so employee always sees latest
-    // Fast poll: canteen open/close every 5s (instant feedback)
+    // Canteen open/close poll every 30s as backup to Realtime
+    // Realtime handles instant updates — this is just a safety net
     S.pollInterval = setInterval(async () => {
       try {
         if (!sb || S.role !== 'employee') return;
@@ -3515,54 +3515,66 @@ function startPoll() {
           }
         }
       } catch(e) {}
-    }, 5000);
-    // Slow poll: menu items every 30s
+    }, 30000);
+    // Menu poll removed — Realtime UPDATE listener on menu_items handles it instantly
+    // Order status poll every 15s — only for active orders (minimal queries)
     S._menuPollInterval = setInterval(async () => {
       try {
-        if (!sb || S.role !== 'employee') return;
-        const cid = S.selCanteen?.id;
-        if (!cid) return;
-        const {data: menuData} = await sb.from('menu_items').select('id, is_available, stock, price, name').eq('canteen_id', cid);
-        if (menuData?.length) {
-          let menuChanged = false;
-          menuData.forEach(updated => {
-            const idx = S.menu.findIndex(m => m.id === updated.id);
-            if (idx !== -1) {
-              const cur = S.menu[idx];
-              if (cur.is_available !== updated.is_available || cur.stock !== updated.stock || cur.price !== updated.price) {
-                S.menu[idx] = { ...cur, ...updated };
-                S.inventory[updated.id] = updated.stock ?? S.inventory[updated.id];
-                menuChanged = true;
-              }
-            }
-          });
-          if (menuChanged) { renderMenu(); renderCats(); }
-        }
+        if (!sb || S.role !== 'employee' || !S.user) return;
+        const activeOrders = S.orders.filter(o => o.status === 'new' || o.status === 'preparing' || o.status === 'ready');
+        if (activeOrders.length === 0) return;
+        const ids = activeOrders.map(o => o.id);
+        const {data} = await sb.from('orders').select('id, status, token_number').in('id', ids);
+        if (!data?.length) return;
+        data.forEach(fresh => {
+          const local = S.orders.find(o => o.id === fresh.id);
+          if (!local || local.status === fresh.status) return;
+          const oldStatus = local.status;
+          local.status = fresh.status;
+          const ao = S.allOrders.find(o => o.id === fresh.id);
+          if (ao) ao.status = fresh.status;
+          if (fresh.status === 'preparing' && oldStatus === 'new') {
+            addNotif(`Order #${fresh.token_number} is being prepared 🍳`, '⏳');
+            toast(`Order #${fresh.token_number} is being prepared 🍳`, 'info', '⏳');
+          }
+          if (fresh.status === 'ready') {
+            addNotif(`Order #${fresh.token_number} is READY for pickup!`, '🔔');
+            toast(`Order #${fresh.token_number} is READY! Go collect 🎉`, 'success', '🔔');
+            try { playNewOrderAlert(); } catch(e) {}
+          }
+          if (fresh.status === 'done') {
+            addNotif(`Order #${fresh.token_number} collected! ✅`, '✅');
+            toast(`Order #${fresh.token_number} collected ✅`, 'success', '✅');
+          }
+          renderMyOrders();
+        });
       } catch(e) {}
-    }, 30000);
+    }, 15000);
     return;
   }
-  // Vendor/Kitchen: poll every 15s as backup to Realtime
+  // Vendor/Kitchen: poll every 30s as backup to Realtime (was 15s)
   S.pollInterval = setInterval(async () => {
     try {
       if (!sb) return;
-      let q = sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+      let q = sb.from('orders').select('id, status, token_number, canteen_id, employee_name, pickup_slot, created_at').order('created_at',{ascending:false}).limit(50);
       if (S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
+      const today = new Date().toISOString().slice(0,10);
+      q = q.gte('created_at', today + 'T00:00:00');
       const {data} = await q;
       if (data?.length) {
         let changed = false;
         data.forEach(o => {
           const ex = S.allOrders.find(ex => ex.id===o.id);
-          if (!ex) { S.allOrders.unshift({...o, items:o.order_items||[]}); changed = true; }
-          else if (ex.status !== o.status) { ex.status = o.status; ex.items = o.order_items||ex.items; changed = true; }
+          if (!ex) { S.allOrders.unshift({...o, items:[]}); changed = true; }
+          else if (ex.status !== o.status) { ex.status = o.status; changed = true; }
         });
         if (changed) {
           if (S.role === 'vendor') renderVendor();
           if (S.role === 'kitchen') renderKDS();
         }
       }
-    } catch(e) { toast('Poll failed — check connection', 'warn', '⚠️'); }
-  }, 15000);
+    } catch(e) {}
+  }, 30000);
 }
 
 // ═════════════════════════════════════
@@ -3596,28 +3608,28 @@ function renderAdmin(tab) {
 
 async function renderAdminOverview(el) {
   el.innerHTML = '<div class="loader"></div>';
-  // Fetch real data from Supabase
-  let totalEmployees = 0, todayOrderCount = 0, todayRevenue = 0, todaySubsidy = 0;
+  let totalEmployees = 0, todayOrderCount = 0, todayRevenue = 0;
   const today = new Date().toISOString().slice(0,10);
+  var canteenRevMap = {};
+  var hourMap = {};
   try {
     if (sb) {
-      const [empRes, ordRes] = await Promise.all([
-        sb.from('employees').select('id', {count:'exact', head:true}),
-        sb.from('orders').select('id, item_total, subsidy_applied, gst_amount, amount_paid, canteen_id, status, created_at').gte('created_at', today + 'T00:00:00')
-      ]);
+      // Use head:true + count for employees (no row data transferred)
+      const empRes = await sb.from('employees').select('id', {count:'exact', head:true});
       totalEmployees = empRes.count || 0;
-      const todayOrders = (ordRes.data || []).filter(o => o.status !== 'cancelled');
-      const allTodayOrders = ordRes.data || [];
-      todayOrderCount = todayOrders.length;
-      todayRevenue = todayOrders.reduce((s,o) => s + (parseFloat(o.amount_paid)||0), 0);
-      todayRevenue = Math.round(todayRevenue * 100) / 100;
-      todaySubsidy = todayOrders.reduce((s,o) => s + (o.subsidy_applied||0), 0);
-      // Canteen-wise revenue (exclude cancelled)
-      var canteenRevMap = {};
-      todayOrders.forEach(o => { canteenRevMap[o.canteen_id] = (canteenRevMap[o.canteen_id]||0) + (parseFloat(o.amount_paid)||0); });
-      // Hourly distribution
-      var hourMap = {};
-      todayOrders.forEach(o => {
+
+      // Fetch only needed columns, filter cancelled on server
+      const {data: todayOrders} = await sb.from('orders')
+        .select('amount_paid, canteen_id, created_at')
+        .gte('created_at', today + 'T00:00:00')
+        .neq('status', 'cancelled')
+        .limit(5000);
+
+      const orders = todayOrders || [];
+      todayOrderCount = orders.length;
+      todayRevenue = Math.round(orders.reduce((s,o) => s + (parseFloat(o.amount_paid)||0), 0) * 100) / 100;
+      orders.forEach(o => { canteenRevMap[o.canteen_id] = (canteenRevMap[o.canteen_id]||0) + (parseFloat(o.amount_paid)||0); });
+      orders.forEach(o => {
         const h = new Date(o.created_at).getHours();
         const label = h < 12 ? h + '–' + (h+1) + ' AM' : (h===12?'12–1 PM':(h-12)+'–'+(h-11)+' PM');
         hourMap[label] = (hourMap[label]||0) + 1;
@@ -3699,27 +3711,26 @@ async function renderAdminOverview(el) {
 
 async function renderAdminOrders(el) {
   el.innerHTML = '<div class="loader"></div>';
-  // Always fetch fresh from DB for admin
   let orders = [];
   try {
     if (sb) {
       const today = new Date().toISOString().slice(0,10);
+      // Light query: only fetch order metadata, NOT order_items (saves ~80% bandwidth)
       const { data } = await sb.from('orders')
-        .select('*, order_items(*)')
+        .select('id, token_number, employee_name, canteen_id, canteen_name, canteen_icon, status, amount_paid, item_total, gst_amount, pickup_slot, created_at')
         .gte('created_at', today + 'T00:00:00')
         .order('created_at', { ascending: false })
-        .limit(300);
+        .limit(200);
       if (data?.length) {
-        orders = data.map(o => ({ ...o, items: o.order_items || [] }));
-        // Also keep allOrders in sync
+        orders = data.map(o => ({ ...o, items: [] }));
         orders.forEach(o => {
           const ex = S.allOrders.find(e => e.id === o.id);
           if (!ex) S.allOrders.unshift(o);
-          else { ex.status = o.status; ex.items = o.items; }
+          else { ex.status = o.status; }
         });
       }
     }
-  } catch(e) { orders = S.allOrders; }
+  } catch(e) { orders = S.allOrders.slice(0, 200); }
 
   // Status filter state
   const _filt = window._adminOrderStatusFilter || 'all';
@@ -5315,7 +5326,7 @@ function startRealtime() {
           if (S.role === 'vendor') { renderVendor(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
           if (S.role === 'kitchen') { renderKDS(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
           if (S.role === 'admin') {
-            S.allOrders.unshift({...o, items:[]});
+            // Order already added to S.allOrders above (line 5315) — just fetch items
             if (sb) sb.from('order_items').select('*').eq('order_id', o.id).then(({data}) => {
               const ord = S.allOrders.find(ex => ex.id === o.id);
               if (ord && data) ord.items = data;
