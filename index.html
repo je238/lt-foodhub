@@ -1316,7 +1316,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div class="admin-tab" onclick="adminTab('employees',this)">👥 Employees</div>
     <div class="admin-tab" onclick="adminTab('topups',this)">💳 Top-ups</div>
     <div class="admin-tab" onclick="adminTab('revenue',this)">💰 Revenue</div>
-    <div class="admin-tab" onclick="adminTab('complaints',this)">⚠️ Complaints</div>
+    <div class="admin-tab" onclick="adminTab('complaints',this)">📝 Feedback</div>
     <div class="admin-tab" onclick="adminTab('settings',this)">⚙️ Settings</div>
   </div>
   <div class="scroll page-wide" id="admin-body" style="flex:1;padding:14px 14px 24px;max-width:560px;width:100%;margin:0 auto">
@@ -6156,7 +6156,7 @@ renderMyOrders = async function(){
         ${canCancel?`<button class="btn btn-danger btn-sm" onclick="showCancelOrder('${o.id}')">✕ Cancel</button>`:''}
         ${o.status==='done'||o.status==='cancelled'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="reorder('${o.id}')">🔄 Reorder</button>`:''}
         ${o.status==='done'&&!o.rating?`<button class="btn btn-ghost btn-sm" onclick="rateOrderById('${o.id}')">⭐ Rate</button>`:''}
-        ${o.status==='done'?`<button class="btn btn-danger btn-sm" onclick="showComplaint('${o.id}')">⚠️ Complaint</button>`:''}
+        ${o.status==='done'?`<button class="btn btn-danger btn-sm" onclick="showComplaint('${o.id}')">📝 Feedback</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -6835,7 +6835,7 @@ async function showComplaint(orderId) {
   }
   showModal(`
     <div class="modal-head">
-      <span class="modal-title">⚠️ File a Complaint</span>
+      <span class="modal-title">📝 Share Feedback</span>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
@@ -6845,7 +6845,7 @@ async function showComplaint(orderId) {
         <div style="font-size:12px;margin-top:6px">${(o.items || []).map(i => (i.emoji || '') + ' ' + (i.item_name || i.name) + ' ×' + (i.quantity || i.qty)).join(', ')}</div>
       </div>
       <div class="form-group">
-        <label class="form-label">Complaint Type</label>
+        <label class="form-label">Feedback Type</label>
         <select class="form-input form-select" id="complaint-type">
           <option value="not_delivered">🚫 Order not delivered</option>
           <option value="wrong_item">🔄 Wrong item received</option>
@@ -6865,9 +6865,9 @@ async function showComplaint(orderId) {
         <div class="form-hint">Take a photo at the counter showing the issue — this speeds up refund approval</div>
       </div>
       <div style="background:var(--amber-l);border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--amber)">
-        <strong>How it works:</strong> Your complaint goes to the admin team. If approved, ₹${o.amount_paid || 0} will be refunded to your wallet within 24 hours. Photo proof significantly speeds up the process.
+        <strong>How it works:</strong> Your feedback goes to the admin team. If approved, ₹${o.amount_paid || 0} will be refunded to your wallet within 24 hours. Photo proof significantly speeds up the process.
       </div>
-      <button class="btn btn-primary btn-full" onclick="submitComplaint('${orderId}')">Submit Complaint</button>
+      <button class="btn btn-primary btn-full" onclick="submitComplaint('${orderId}')">Submit Feedback</button>
     </div>`);
 }
 
@@ -6908,8 +6908,8 @@ async function submitComplaint(orderId) {
     }]);
     if (error) { toast('Failed to submit: ' + error.message, 'error', '❌'); return; }
     closeModal();
-    toast('Complaint submitted! Admin will review within 24 hours.', 'success', '✅');
-    addNotif('Your complaint for Order #' + o.token_number + ' has been submitted', '⚠️');
+    toast('Feedback submitted! Admin will review within 24 hours.', 'success', '✅');
+    addNotif('Your feedback for Order #' + o.token_number + ' has been submitted', '⚠️');
   } catch(e) { toast('Error: ' + e.message, 'error', '❌'); }
 }
 
@@ -6919,7 +6919,7 @@ async function renderAdminComplaints(el) {
   try {
     if (!sb) return;
     const { data: complaints } = await sb.from('complaints').select('*').order('created_at', { ascending: false }).limit(50);
-    if (!complaints?.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No complaints</div><div class="empty-sub">All clear!</div></div>'; return; }
+    if (!complaints?.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No feedback yet</div><div class="empty-sub">All clear!</div></div>'; return; }
     const openCount = complaints.filter(c => c.status === 'open').length;
     el.innerHTML = `
       <div class="stats-grid" style="margin-bottom:14px">
@@ -6951,7 +6951,7 @@ async function renderAdminComplaints(el) {
           ` : ''}
         </div>`;
       }).join('')}`;
-  } catch(e) { el.innerHTML = '<div class="empty"><div class="empty-title">Failed to load complaints</div></div>'; }
+  } catch(e) { el.innerHTML = '<div class="empty"><div class="empty-title">Failed to load feedback</div></div>'; }
 }
 
 async function resolveComplaint(complaintId, action, amount) {
@@ -6973,7 +6973,7 @@ async function resolveComplaint(complaintId, action, amount) {
       p_refund_amount: amount
     });
     if (error || !result?.success) { toast(result?.error || error?.message || 'Failed', 'error', '❌'); return; }
-    toast(`Complaint ${result.action}${result.amount ? ' — ₹' + result.amount + ' refunded' : ''}`, 'success', '✅');
+    toast(`Feedback ${result.action}${result.amount ? ' — ₹' + result.amount + ' refunded' : ''}`, 'success', '✅');
     renderAdmin('complaints');
   } catch(e) { toast('Error: ' + e.message, 'error', '❌'); }
 }
@@ -7440,7 +7440,7 @@ function showRefundPolicy(){
       <p style="margin-bottom:12px">Wallet top-ups are non-refundable to bank account. The balance remains in your SLP Nexus Wallet and can be used for future orders.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. Wrong or Missing Items</p>
-      <p style="margin-bottom:12px">If you receive a wrong or incomplete order, raise a complaint via the Orders tab. Our team will review and process a refund to your wallet within 24-48 hours.</p>
+      <p style="margin-bottom:12px">If you receive a wrong or incomplete order, share feedback via the Orders tab. Our team will review and process a refund to your wallet within 24-48 hours.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Contact</p>
       <p>For refund queries contact: <strong>info@slphospitality.com</strong></p>
