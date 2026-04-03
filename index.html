@@ -5245,22 +5245,37 @@ let audioCtx = null;
 function playNewOrderAlert(){
   try {
     if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-    // Play 3 beeps
-    [0,0.3,0.6].forEach(delay=>{
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain); gain.connect(audioCtx.destination);
-      osc.frequency.value = 880;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0,audioCtx.currentTime+delay);
-      gain.gain.linearRampToValueAtTime(0.5,audioCtx.currentTime+delay+0.05);
-      gain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+delay+0.25);
-      osc.start(audioCtx.currentTime+delay);
-      osc.stop(audioCtx.currentTime+delay+0.3);
-    });
-    // Vibration
-    if(navigator.vibrate) navigator.vibrate([200,100,200]);
-  } catch(e){}
+    // Resume if browser suspended it (happens after idle time)
+    if(audioCtx.state === 'suspended') {
+      audioCtx.resume().then(()=>_doBeep()).catch(()=>{});
+      return;
+    }
+    _doBeep();
+  } catch(e){
+    // Fallback: try HTML5 Audio beep if AudioContext fails
+    try {
+      const fallback = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH+Jk5KNgoF5dHN7hI+VlZCJgnx2c3R8hpCWl5SLg3x2c3V9h5GXmJWMhHx2c3Z+iJKYmZaNhX13dHd/iZOZmpePhn54dXiAipSam5iQiH95dnmBi5WbnJmRiX97d3qCjJacnZqSkYB8eHuDjZednpuTkYF9enuEjpifn5yUkoJ+e3yFj5mgoJ2VlIN/fH2Gj5qhoZ6Wl4SAfn6HkJuhop+XmIWBf3+IkZyio6CYmYaCgICJkp2jpKGam4eDgYGKk56kpKKbnIiEgoKLlJ+lpqOcnYmFg4OMlaClp6SdnouGhISNlqGmqKWenoqHhYWOl6Knqaafn4uIhoaPmKOoqqigooqIh4eQmaSpq6mho4yJiIiRmqWqrKqipI2KiYmSm6arramjpY6LioqTnKesr6mkpo+MiouUnainr6qlp5CMi4yVn6mwsaulqJGNjI2Woaqxs6ymqZKOjY6Xoau0tq2nqpOPjpCYo6y1t66oq5WQj5GZpa22uLCprJaRkJKapq63urarrZeSj5OcqK+5vLisrpiTkZSdrLC6vrmtr5qUkpad');
+      fallback.volume = 0.5;
+      fallback.play().catch(()=>{});
+    } catch(e2) {}
+  }
+  // Vibration
+  if(navigator.vibrate) navigator.vibrate([200,100,200,100,200]);
+}
+function _doBeep(){
+  // Play 4 loud beeps (was 3, now louder + extra)
+  [0, 0.25, 0.5, 0.75].forEach(delay=>{
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.frequency.value = 1000; // Higher pitch = more noticeable (was 880)
+    osc.type = 'square'; // Harsher = louder (was sine)
+    gain.gain.setValueAtTime(0,audioCtx.currentTime+delay);
+    gain.gain.linearRampToValueAtTime(0.7,audioCtx.currentTime+delay+0.03); // Louder (was 0.5)
+    gain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+delay+0.2);
+    osc.start(audioCtx.currentTime+delay);
+    osc.stop(audioCtx.currentTime+delay+0.25);
+  });
 }
 // ── Supabase Realtime channel ──
 let _realtimeChannel = null;
