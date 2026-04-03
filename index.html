@@ -3268,10 +3268,27 @@ function renderProfile() {
   setEl('p-name', S.user.name);
   setEl('p-id', S.user.id);
   setEl('p-dept', (S.user.department||'L&T') + ' — ' + (S.user.campus||'Vadodara Campus'));
-  setEl('st-orders', S.orders.filter(o => o.status !== 'cancelled').length);
-  const activeOrders = S.orders.filter(o => o.status !== 'cancelled');
-  const avgOrder = activeOrders.length > 0 ? Math.round(activeOrders.reduce((s,o) => s+(parseFloat(o.amount_paid)||0), 0) / activeOrders.length) : 0;
-  setEl('st-saved', '₹'+avgOrder);
+  // Fetch this month's orders from DB for accurate count
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  if (sb) {
+    sb.from('orders').select('id, amount_paid', {count:'exact'})
+      .eq('employee_id', S.user.id)
+      .neq('status', 'cancelled')
+      .gte('created_at', monthStart.toISOString())
+      .then(({data, count}) => {
+        setEl('st-orders', count || 0);
+        const orders = data || [];
+        const avgOrder = orders.length > 0 ? Math.round(orders.reduce((s,o) => s+(parseFloat(o.amount_paid)||0), 0) / orders.length) : 0;
+        setEl('st-saved', '₹'+avgOrder);
+      }).catch(() => {
+        setEl('st-orders', S.orders.filter(o => o.status !== 'cancelled').length);
+      });
+  } else {
+    setEl('st-orders', S.orders.filter(o => o.status !== 'cancelled').length);
+    const activeOrders = S.orders.filter(o => o.status !== 'cancelled');
+    const avgOrder = activeOrders.length > 0 ? Math.round(activeOrders.reduce((s,o) => s+(parseFloat(o.amount_paid)||0), 0) / activeOrders.length) : 0;
+    setEl('st-saved', '₹'+avgOrder);
+  }
   // Favorite items
   const itemCounts = {};
   S.orders.forEach(o => (o.items||[]).forEach(i => { itemCounts[i.item_name||i.name] = (itemCounts[i.item_name||i.name]||0)+1; }));
@@ -5326,7 +5343,7 @@ function startRealtime() {
           if (S.role === 'vendor') { renderVendor(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
           if (S.role === 'kitchen') { renderKDS(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
           if (S.role === 'admin') {
-            // Order already added to S.allOrders above (line 5315) — just fetch items
+            S.allOrders.unshift({...o, items:[]});
             if (sb) sb.from('order_items').select('*').eq('order_id', o.id).then(({data}) => {
               const ord = S.allOrders.find(ex => ex.id === o.id);
               if (ord && data) ord.items = data;
