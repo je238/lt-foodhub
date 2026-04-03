@@ -5134,6 +5134,13 @@ async function confirmCancelOrder(orderId){
       }
     }
     S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:parseFloat(o.amount_paid)||0});
+    // Force refresh balance from DB (APK may have stale cached value)
+    try {
+      if (sb) {
+        const {data: freshEmp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+        if (freshEmp) S.user.wallet_balance = parseFloat(freshEmp.wallet_balance) || 0;
+      }
+    } catch(e) {}
     setEl('nav-bal','₹'+Math.round(S.user.wallet_balance));
     setEl('w-bal','₹'+Math.round(S.user.wallet_balance));
   }
