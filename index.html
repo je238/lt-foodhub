@@ -4582,21 +4582,28 @@ async function renderAdminRevenue(el) {
   el.innerHTML = '<div class="loader"></div>';
   try {
     if (!sb) { el.innerHTML = '<div class="empty"><div class="empty-title">Database not connected</div></div>'; return; }
-    // Fetch last 7 days of orders
-    const weekAgo = new Date(Date.now() - 7*86400000).toISOString();
-    const {data: weekOrders} = await sb.from('orders').select('item_total, gst_amount, amount_paid, subsidy_applied, canteen_id, created_at, status').gte('created_at', weekAgo).neq('status', 'cancelled');
+    // Use date range filter if set, otherwise last 7 days
+    const hasRange = revenueRange.from && revenueRange.to;
+    const fromDate = hasRange ? revenueRange.from + 'T00:00:00' : new Date(Date.now() - 7*86400000).toISOString();
+    const toDate = hasRange ? revenueRange.to + 'T23:59:59' : new Date().toISOString();
+    const rangeLabel = hasRange ? `${revenueRange.from} to ${revenueRange.to}` : 'Last 7 Days';
+
+    const {data: weekOrders} = await sb.from('orders').select('amount_paid, canteen_id, created_at').gte('created_at', fromDate).lte('created_at', toDate).neq('status', 'cancelled');
     const orders = weekOrders || [];
     // Group by day
     const dayMap = {};
     const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(Date.now() - i*86400000);
+    // Build day slots for the range
+    const startMs = new Date(hasRange ? revenueRange.from : Date.now() - 6*86400000).getTime();
+    const endMs = new Date(hasRange ? revenueRange.to : Date.now()).getTime();
+    for (let ms = startMs; ms <= endMs; ms += 86400000) {
+      const d = new Date(ms);
       const key = d.toISOString().slice(0,10);
-      dayMap[key] = { label: dayNames[d.getDay()]+' '+d.getDate(), rev: 0, orders: 0, subsidy: 0 };
+      dayMap[key] = { label: dayNames[d.getDay()]+' '+d.getDate(), rev: 0, orders: 0 };
     }
     orders.forEach(o => {
       const key = o.created_at?.slice(0,10);
-      if (dayMap[key]) { dayMap[key].rev += (parseFloat(o.amount_paid)||0); dayMap[key].orders++; dayMap[key].subsidy += (o.subsidy_applied||0); }
+      if (dayMap[key]) { dayMap[key].rev += (parseFloat(o.amount_paid)||0); dayMap[key].orders++; }
     });
     const days = Object.values(dayMap);
     const maxRev = Math.max(1, ...days.map(d=>d.rev));
@@ -4605,15 +4612,14 @@ async function renderAdminRevenue(el) {
     const bestDay = days.reduce((best,d) => d.rev > best.rev ? d : best, days[0]);
     // Group by canteen (this month)
     const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-    const {data: monthOrders} = await sb.from('orders').select('item_total, gst_amount, amount_paid, subsidy_applied, canteen_id, status').gte('created_at', monthStart.toISOString()).neq('status', 'cancelled');
+    const {data: monthOrders} = await sb.from('orders').select('amount_paid, canteen_id').gte('created_at', monthStart.toISOString()).neq('status', 'cancelled');
     const canRevMap = {};
-    let monthSubsidy = 0;
-    (monthOrders||[]).forEach(o => { canRevMap[o.canteen_id] = (canRevMap[o.canteen_id]||0) + (parseFloat(o.amount_paid)||0); monthSubsidy += (o.subsidy_applied||0); });
+    (monthOrders||[]).forEach(o => { canRevMap[o.canteen_id] = (canRevMap[o.canteen_id]||0) + (parseFloat(o.amount_paid)||0); });
     const maxCanRev = Math.max(1, ...Object.values(canRevMap));
 
     el.innerHTML = `
     <div class="card">
-      <div class="card-title">💰 Daily Revenue — Last 7 Days</div>
+      <div class="card-title">💰 Daily Revenue — ${rangeLabel}</div>
       <div class="bar-chart">
         ${days.map(d => `<div class="bar-row"><div class="bar-label">${d.label}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(d.rev/maxRev*100)}%"></div></div><div class="bar-val">₹${d.rev>999?(d.rev/1000).toFixed(1)+'K':Math.round(d.rev)}</div></div>`).join('')}
       </div>
