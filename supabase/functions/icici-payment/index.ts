@@ -7,7 +7,8 @@ const AID=Deno.env.get("ICICI_AGGREGATOR_ID")||"A100000000007164";
 const SECK=Deno.env.get("ICICI_SECURE_KEY")||"db06cca0-838b-4e01-8b20-6ac446ffb6bd";
 const SU=Deno.env.get("SUPABASE_URL")||"https://lorgclscnjdbngqurdsw.supabase.co";
 const SK=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
-const APP_URL="https://slp-nexus.vercel.app";
+const WEB_URL="https://slp-nexus.vercel.app";
+const APP_SCHEME="slpnexus";
 async function hm(msg,key){const e=new TextEncoder();const k=await crypto.subtle.importKey("raw",e.encode(key),{name:"HMAC",hash:"SHA-256"},false,["sign"]);const s=await crypto.subtle.sign("HMAC",k,e.encode(msg));return Array.from(new Uint8Array(s)).map(b=>b.toString(16).padStart(2,"0")).join("");}
 function fd(){const n=new Date();return n.getFullYear()+String(n.getMonth()+1).padStart(2,"0")+String(n.getDate()).padStart(2,"0")+String(n.getHours()).padStart(2,"0")+String(n.getMinutes()).padStart(2,"0")+String(n.getSeconds()).padStart(2,"0");}
 serve(async(req)=>{
@@ -46,7 +47,17 @@ console.log("CREDITED:",emp,"+",amt,"=",nb);
 }else{
 console.log("NOT crediting — payment failed or missing data");
 }
-return new Response(null,{status:302,headers:{"Location":APP_URL+"?payment="+(isSuccess?"success":"failed")+"&txnNo="+txn+"&amt="+amt}});
+const status=isSuccess?"success":"failed";
+const params="payment="+status+"&txnNo="+txn+"&amt="+amt;
+const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment ${status}</title>
+<script>
+// Try custom scheme first (opens app), fallback to web after 2s
+var appUrl="${APP_SCHEME}://payment?${params}";
+var webUrl="${WEB_URL}?${params}";
+window.location.href=appUrl;
+setTimeout(function(){window.location.href=webUrl;},2000);
+</script></head><body><p>Redirecting...</p></body></html>`;
+return new Response(html,{status:200,headers:{"Content-Type":"text/html"}});
 }
 const action=bp.action;
 if(action==="initiate"){

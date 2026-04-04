@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#1E3A5F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>SLP Nexus — Campus Cafeteria</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://browser.sentry-cdn.com/7.99.0/bundle.min.js" crossorigin="anonymous"></script>
@@ -31,6 +36,29 @@
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 <style>
+
+/* ===== CAPACITOR / NATIVE APP FIXES ===== */
+html {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+body.capacitor-app {
+  padding-top: var(--sat);
+  padding-bottom: var(--sab);
+}
+body.capacitor-app .login-hero,
+body.capacitor-app .vendor-header,
+body.capacitor-app .admin-header,
+body.capacitor-app .kds-filterbar:first-of-type {
+  padding-top: calc(var(--sat) + 8px);
+}
+body.capacitor-app .bottom-nav {
+  padding-bottom: var(--sab);
+}
+/* Hide service worker registration in native app */
+/* ===== END CAPACITOR FIXES ===== */
 
 /* ===== MOBILE SCROLL NUCLEAR FIX ===== */
 html, body {
@@ -731,6 +759,88 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
   .stats-grid{grid-template-columns:1fr 1fr 1fr}
 }
 </style>
+
+<!-- Capacitor Integration -->
+<script>
+// Capacitor bridge detection and native features
+(function() {
+  'use strict';
+  
+  // Detect if running in Capacitor
+  window.isCapacitor = function() {
+    return window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+  };
+  
+  // Initialize after DOM ready
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.isCapacitor()) {
+      document.body.classList.add('capacitor-app');
+      console.log('[Capacitor] Running as native app');
+      
+      // Handle Android back button
+      document.addEventListener('backbutton', function(e) {
+        e.preventDefault();
+        // Trigger the existing popstate/back handler
+        if (typeof handleBackButton === 'function') {
+          handleBackButton();
+        } else {
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }
+      });
+      
+      // Handle app resume (refresh data when app comes to foreground)
+      document.addEventListener('resume', function() {
+        console.log('[Capacitor] App resumed');
+        // Refresh active screen data
+        if (typeof S !== 'undefined' && S.user) {
+          // Soft refresh — reload menu or orders if on those screens
+          const active = document.querySelector('.screen.active');
+          if (active && active.id === 's-home') {
+            if (typeof loadCanteens === 'function') loadCanteens();
+          }
+        }
+      });
+      
+      // Handle deep links for payment callbacks
+      if (window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+        window.Capacitor.Plugins.App.addListener('appUrlOpen', function(data) {
+          console.log('[Capacitor] Deep link:', data.url);
+          if (data.url && data.url.includes('payment')) {
+            // Parse payment callback params
+            const url = new URL(data.url);
+            const params = new URLSearchParams(url.search);
+            if (typeof handlePaymentCallback === 'function') {
+              handlePaymentCallback(params);
+            }
+          }
+        });
+      }
+      
+      // Override window.location.href for payment redirects to use in-app browser
+      const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
+      
+      // Patch the payment redirect to use Capacitor Browser plugin
+      window.openPaymentUrl = function(url) {
+        if (window.isCapacitor() && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
+          window.Capacitor.Plugins.Browser.open({ url: url, presentationStyle: 'fullscreen' });
+        } else {
+          window.location.href = url;
+        }
+      };
+      
+      // Disable service worker in native (Capacitor handles caching)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          registrations.forEach(function(reg) { reg.unregister(); });
+        });
+      }
+      
+    } else {
+      console.log('[Capacitor] Running as web app');
+    }
+  });
+})();
+</script>
 </head>
 <body>
 
@@ -3102,7 +3212,12 @@ async function processTopUp(amount) {
       
       // Redirect to ICICI payment page
       setTimeout(() => {
-        window.location.href = data.redirectUrl;
+        // Use Capacitor in-app browser for payment in native app
+        if (window.isCapacitor && window.isCapacitor()) {
+          window.openPaymentUrl(data.redirectUrl);
+        } else {
+          window.location.href = data.redirectUrl;
+        }
       }, 500);
     } else {
       toast('Payment initiation failed: ' + (data.error || 'Unknown error'), 'error', '❌');
@@ -5134,13 +5249,6 @@ async function confirmCancelOrder(orderId){
       }
     }
     S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:parseFloat(o.amount_paid)||0});
-    // Force refresh balance from DB (APK may have stale cached value)
-    try {
-      if (sb) {
-        const {data: freshEmp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-        if (freshEmp) S.user.wallet_balance = parseFloat(freshEmp.wallet_balance) || 0;
-      }
-    } catch(e) {}
     setEl('nav-bal','₹'+Math.round(S.user.wallet_balance));
     setEl('w-bal','₹'+Math.round(S.user.wallet_balance));
   }
@@ -7483,71 +7591,49 @@ function showRefundPolicy(){
     </div>
     <div class="modal-body" style="font-size:13px;color:var(--mid);line-height:1.7">
       <p style="font-weight:700;color:var(--dark);margin-bottom:8px">SLP Hospitality — Refund Policy</p>
-      <p style="margin-bottom:12px">Last updated: April 2026</p>
+      <p style="margin-bottom:12px">Last updated: March 2026</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">1. Order Cancellation</p>
-      <p style="margin-bottom:12px">You may cancel your order only if its status is <strong>New</strong>. Once the kitchen has accepted or started preparing your order, cancellation is not possible.</p>
+      <p style="margin-bottom:12px">You may cancel your order only if its status is <strong>New</strong>. Once the order is being prepared or ready, cancellation is not possible.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">2. Refund on Cancellation</p>
-      <p style="margin-bottom:12px">Upon successful cancellation, the full amount paid (including GST) will be refunded to your SLP Nexus Wallet <strong>instantly</strong>. No deductions are made on cancellation refunds.</p>
+      <p style="margin-bottom:12px">Upon successful cancellation, the full amount paid (including GST) will be refunded to your SLP Nexus Wallet instantly. No deductions are made.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">3. Wallet Top-up Refunds</p>
-      <p style="margin-bottom:12px">Wallet top-ups are <strong>non-refundable</strong> to your bank account. The balance remains in your SLP Nexus Wallet and can be used for future orders. This is because payment gateway charges (for Debit Card, Credit Card, and Net Banking) are borne by the employee at the time of top-up and cannot be reversed.</p>
+      <p style="margin-bottom:12px">Wallet top-ups are non-refundable to bank account. The balance remains in your SLP Nexus Wallet and can be used for future orders.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. UPI Top-ups</p>
-      <p style="margin-bottom:12px">UPI transactions (Google Pay, PhonePe, Paytm, etc.) carry <strong>zero service charges</strong>. We recommend using UPI for wallet top-ups to avoid any bank charges.</p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. Wrong or Missing Items</p>
+      <p style="margin-bottom:12px">If you receive a wrong or incomplete order, share feedback via the Orders tab. Our team will review and process a refund to your wallet within 24-48 hours.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Wrong or Missing Items</p>
-      <p style="margin-bottom:12px">If you receive a wrong, incomplete, or unsatisfactory order, submit feedback via the Orders tab. Our team will review your request and process a full refund to your wallet within 24-48 hours.</p>
-
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">6. Failed Transactions</p>
-      <p style="margin-bottom:12px">If money is debited from your bank account but the wallet is not credited, please wait 24 hours for automatic reconciliation. If the issue persists, contact us with your transaction reference number.</p>
-
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">7. Contact</p>
-      <p>For refund queries or payment issues, contact: <strong>info@slphospitality.com</strong></p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Contact</p>
+      <p>For refund queries contact: <strong>info@slphospitality.com</strong></p>
     </div>`);
 }
 
 function showPrivacyPolicy(){
   showModal(`
     <div class="modal-head">
-      <span class="modal-title">Privacy Policy & Terms</span>
+      <span class="modal-title">Privacy Policy</span>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body" style="font-size:13px;color:var(--mid);line-height:1.7">
-      <p style="font-weight:700;color:var(--dark);margin-bottom:8px">SLP Hospitality — Privacy Policy & Terms of Use</p>
-      <p style="margin-bottom:12px">Last updated: April 2026</p>
+      <p style="font-weight:700;color:var(--dark);margin-bottom:8px">SLP Hospitality — Privacy Policy</p>
+      <p style="margin-bottom:12px">Last updated: March 2026</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">1. Data We Collect</p>
-      <p style="margin-bottom:12px">We collect your name, employee ID, company email, phone number, department, order history, and wallet transaction details to provide the SLP Nexus canteen ordering service.</p>
+      <p style="margin-bottom:12px">We collect your name, employee ID, company email, department, and order history to provide the SLP Nexus service.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">2. How We Use Your Data</p>
-      <p style="margin-bottom:12px">Your data is used solely to process food orders, manage your digital wallet, generate order tokens, and improve the canteen service. We do not sell, share, or rent your personal data to any third parties.</p>
+      <p style="margin-bottom:12px">Your data is used solely to process orders, manage your wallet, and improve the canteen service. We do not sell your data to third parties.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">3. Data Storage & Security</p>
-      <p style="margin-bottom:12px">All data is stored securely on encrypted cloud servers with row-level security policies. Only you and authorised canteen staff can access your order data. Passwords are stored using industry-standard hashing.</p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">3. Data Storage</p>
+      <p style="margin-bottom:12px">All data is stored securely on Supabase servers with row-level security. Only you and authorised canteen staff can access your order data.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. Pricing & GST</p>
-      <p style="margin-bottom:12px">All food items are charged at the listed menu price plus 5% GST. There are no hidden charges, platform fees, or service fees on food orders. The total payable amount is always displayed before you place the order.</p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. Data Retention</p>
+      <p style="margin-bottom:12px">Order and transaction data is retained for 1 year for accounting purposes. You may request deletion of your account by contacting us.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Wallet Top-up — Payment Gateway Charges</p>
-      <p style="margin-bottom:12px">When you add money to your SLP Nexus Wallet via the ICICI payment gateway, the following charges may apply:</p>
-      <div style="background:var(--light2);border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px">
-        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>UPI (Google Pay, PhonePe, Paytm)</span><strong style="color:var(--green2)">FREE — No charges</strong></div>
-        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>Debit Card</span><strong>Bank service charges may apply</strong></div>
-        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>Credit Card</span><strong>Bank service charges may apply</strong></div>
-        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Net Banking</span><strong>Bank service charges may apply</strong></div>
-      </div>
-      <p style="margin-bottom:12px;font-size:12px;color:var(--muted)">Note: Payment gateway service charges (if any) are levied by your bank and/or the payment processor — SLP Hospitality does not charge any additional fees for wallet top-ups. UPI transactions are completely free of charge.</p>
-
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">6. Data Retention</p>
-      <p style="margin-bottom:12px">Order and transaction data is retained for 1 year for accounting and audit purposes. You may request deletion of your account and associated data by contacting us.</p>
-
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">7. Your Rights</p>
-      <p style="margin-bottom:12px">You have the right to access, correct, or delete your personal data at any time. You can view your order history, transaction history, and profile details within the app.</p>
-
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">8. Contact</p>
-      <p>For privacy queries, account deletion requests, or grievances, contact: <strong>info@slphospitality.com</strong></p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Contact</p>
+      <p>For privacy queries contact: <strong>info@slphospitality.com</strong></p>
     </div>`);
 }
 </script>

@@ -1,0 +1,30 @@
+{
+  "name": "slp-nexus",
+  "version": "1.0.0",
+  "description": "SLP Nexus — L&T Campus Cafeteria Ordering App",
+  "main": "index.html",
+  "scripts": {
+    "build": "echo 'Static HTML — no build needed' && cp index.html www/index.html",
+    "cap:sync": "npx cap sync",
+    "cap:open": "npx cap open android",
+    "cap:run": "npx cap run android",
+    "android:build": "cd android && ./gradlew assembleDebug",
+    "android:release": "cd android && ./gradlew assembleRelease",
+    "apk:copy": "cp android/app/build/outputs/apk/debug/app-debug.apk SLP-Nexus.apk",
+    "icons:copy": "node scripts/copy-icons.js"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/browser": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/keyboard": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0",
+    "@capacitor/network": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "typescript": "^5.0.0"
+  }
+}
