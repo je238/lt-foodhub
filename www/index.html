@@ -2207,6 +2207,7 @@ async function doLogin() {
 function logout() {
   clearInterval(S.pollInterval);
   clearInterval(S._menuPollInterval);
+  clearInterval(S._orderPollInterval);
   stopRealtime(); // CRITICAL: prevents old channel pushing orders after re-login
   S.cart = []; S.user = null; S.orders = []; S.allOrders = [];
   S.txns = []; S.notifs = []; S.role = null;
@@ -2226,7 +2227,8 @@ function renderHome() {
   try {
   if (!S.user) return;
   const hr = new Date().getHours();
-  setElInner('h-name', 'Hey ' + (S.user.name||'').split(' ')[0] + ',<br><span style="font-weight:800">kya khaoge aaj? 😋</span>');
+  const _safeName = (S.user.name||'').split(' ')[0].replace(/[<>"'&]/g, '');
+  setElInner('h-name', 'Hey ' + _safeName + ',<br><span style="font-weight:800">kya khaoge aaj? 😋</span>');
   setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance || 0));
   setEl('nav-av', S.user.initials || initials(S.user.name || ''));
   const _todayStr = new Date().toISOString().slice(0,10);
@@ -5606,6 +5608,26 @@ function startRealtime() {
           }
         }
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'complaints' }, payload => {
+        // Admin responded to employee's feedback
+        if (S.role === 'employee' && S.user && payload.new.employee_id === S.user.id) {
+          const c = payload.new;
+          const oldStatus = payload.old?.status;
+          if (c.status !== oldStatus && c.status !== 'open') {
+            const note = c.admin_note ? ` — "${c.admin_note}"` : '';
+            if (c.status === 'refunded') {
+              addNotif(`Your feedback was reviewed — refund processed! 💚${note}`, '💚');
+              toast(`Feedback reviewed — refund credited to wallet! 💚${note}`, 'success', '💚');
+            } else if (c.status === 'resolved') {
+              addNotif(`Your feedback has been resolved ✅${note}`, '✅');
+              toast(`Your feedback has been resolved ✅${note}`, 'success', '✅');
+            } else if (c.status === 'rejected') {
+              addNotif(`Feedback update${note}`, '📝');
+              toast(`Feedback update from admin${note}`, 'info', '📝');
+            }
+          }
+        }
+      })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'employees' }, payload => {
         // Employee wallet balance updated (e.g. admin manual refund / topup)
         if (S.role === 'employee' && S.user && payload.new.id === S.user.id) {
@@ -7211,7 +7233,25 @@ async function resolveComplaint(complaintId, action, amount) {
     if (!refundAmt || isNaN(refundAmt) || parseFloat(refundAmt) <= 0) return;
     amount = parseFloat(refundAmt);
   }
-  const note = prompt('Add a note (optional):', '') || '';
+  // Admin note — show proper modal instead of browser prompt
+  showModal(`
+    <div class="modal-head">
+      <span class="modal-title">${action === 'refund' ? '💚 Refund' : action === 'resolve' ? '✅ Resolve' : '✕ Reject'} Feedback</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Admin Note to Employee</label>
+        <textarea class="form-input" id="feedback-admin-note" rows="3" placeholder="e.g. Sorry for the inconvenience. Refund processed. / We've spoken to the kitchen team. / Issue noted, will improve.">${action === 'refund' ? 'Refund of ₹' + amount + ' has been processed to your wallet. Sorry for the inconvenience.' : action === 'resolve' ? 'Thank you for your feedback. We have addressed this with the kitchen team.' : 'After review, we could not verify this issue. Please contact us if you have more details.'}</textarea>
+      </div>
+      ${action === 'refund' ? `<div style="background:var(--green-l);border-radius:8px;padding:10px;font-size:12px;margin-bottom:12px">💚 Refund of <strong>₹${amount}</strong> will be credited to employee wallet</div>` : ''}
+      <button class="btn btn-primary btn-full" onclick="confirmResolveComplaint(${complaintId}, '${action}', ${amount})">Confirm & Notify Employee</button>
+    </div>`);
+}
+
+async function confirmResolveComplaint(complaintId, action, amount) {
+  const note = document.getElementById('feedback-admin-note')?.value || '';
+  closeModal();
   try {
     const { data: result, error } = await sb.rpc('resolve_complaint', {
       p_admin_id: S._staffAuth.id,
@@ -7222,7 +7262,40 @@ async function resolveComplaint(complaintId, action, amount) {
       p_refund_amount: amount
     });
     if (error || !result?.success) { toast(result?.error || error?.message || 'Failed', 'error', '❌'); return; }
-    toast(`Feedback ${result.action}${result.amount ? ' — ₹' + result.amount + ' refunded' : ''}`, 'success', '✅');
+
+    // Save admin note to complaint record
+    try {
+      await sb.from('complaints').update({ admin_note: note }).eq('id', complaintId);
+    } catch(e) {}
+
+    // Send notification to employee via wallet_transactions description (employee will see it in their transaction history + Realtime fires)
+    if (action === 'refund' && result.amount > 0) {
+      // Refund already handled by RPC — employee gets wallet credit notification via Realtime
+    }
+
+    // Also store a notification record the employee will see
+    try {
+      const {data: complaint} = await sb.from('complaints').select('employee_id, type, order_id').eq('id', complaintId).single();
+      if (complaint?.employee_id) {
+        const notifMsg = action === 'refund' 
+          ? `Your feedback has been reviewed. ₹${amount} refunded to your wallet. Admin note: ${note}`
+          : action === 'resolve'
+          ? `Your feedback has been resolved. Admin note: ${note}`
+          : `Your feedback has been reviewed. Admin note: ${note}`;
+        // Insert a wallet transaction as notification carrier (₹0 credit = just a notification)
+        if (action !== 'refund') {
+          await sb.from('wallet_transactions').insert({
+            employee_id: complaint.employee_id,
+            type: 'credit',
+            amount: 0,
+            description: 'Feedback Update: ' + notifMsg,
+            balance_after: 0
+          });
+        }
+      }
+    } catch(e) {}
+
+    toast(`Feedback ${result.action}${result.amount ? ' — ₹' + result.amount + ' refunded' : ''}. Employee notified.`, 'success', '✅');
     renderAdmin('complaints');
   } catch(e) { toast('Error: ' + e.message, 'error', '❌'); }
 }
