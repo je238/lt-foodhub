@@ -215,10 +215,10 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* ─── TOP NAV ─── */
 .tnav{background:rgba(20,6,0,.72);backdrop-filter:blur(20px) saturate(1.8);-webkit-backdrop-filter:blur(20px) saturate(1.8);border-bottom:1px solid rgba(255,255,255,.08);height:60px;display:flex;align-items:center;padding:0 16px;gap:10px;position:sticky;top:0;z-index:100}
-.nav-logo{display:flex;align-items:center;gap:9px}
+.nav-logo{display:flex;align-items:center;gap:9px;flex-shrink:0;min-width:0}
 .nav-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--brand),#FF6B1A);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0}
-.nav-title{font-family:var(--fh);font-weight:700;font-size:15px;color:#fff}
-.nav-sub{font-size:10px;color:rgba(255,200,150,.55);margin-top:-1px}
+.nav-title{font-family:var(--fh);font-weight:700;font-size:15px;color:#fff;white-space:nowrap;line-height:1.2}
+.nav-sub{font-size:10px;color:rgba(255,200,150,.55);margin-top:-1px;white-space:nowrap;line-height:1.2}
 .nsp{flex:1}
 .wallet-chip{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:22px;padding:6px 14px;cursor:pointer;transition:all .25s var(--ease);backdrop-filter:blur(8px)}
 .wallet-chip:hover{background:rgba(255,255,255,.2);transform:scale(1.03)}
@@ -963,7 +963,7 @@ body{min-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
       <!-- Search -->
       <div class="search-bar" id="menu-search-bar">
         <span class="search-icon" style="font-size:18px">🔍</span>
-        <input type="text" placeholder="Search pizza, dosa, chai... 😋" id="menu-search" oninput="searchMenu()">
+        <input type="text" placeholder="Search pizza, dosa, tea... 😋" id="menu-search" oninput="searchMenu()">
         <span style="font-size:18px;opacity:.5;cursor:pointer" onclick="toggleVegFilter(document.getElementById('veg-toggle'))">🎛️</span>
       </div>
 
@@ -1812,8 +1812,7 @@ async function unifiedLogin() {
         if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
         S.role = 'vendor';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
-        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(50); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
-        // Sync canteen open state from DB
+        try { const todayStr = new Date().toISOString().slice(0,10); const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
         try {
           const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
           if (canRow) { _kitchenOpen = canRow.is_open; const c = S.canteens.find(x=>x.id===counter.id); if(c) c.is_open = canRow.is_open; }
@@ -1825,7 +1824,7 @@ async function unifiedLogin() {
         if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
         S.role = 'kitchen';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
-        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(50); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        try { const todayStr = new Date().toISOString().slice(0,10); const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
         // Fetch actual canteen open/close state from DB
         try {
           const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
@@ -2127,7 +2126,8 @@ async function doLogin() {
         S.role = 'vendor';
         S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try {
-          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(50);
+          const todayStr = new Date().toISOString().slice(0,10);
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at', { ascending: false }).limit(200);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-vendor');
@@ -2139,7 +2139,8 @@ async function doLogin() {
         S.role = 'kitchen';
         S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try {
-          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(50);
+          const todayStr = new Date().toISOString().slice(0,10);
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at', { ascending: false }).limit(200);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-kitchen');
@@ -2258,7 +2259,6 @@ function renderCanteens() {
         <div class="canteen-name">${c.name.replace(' Counter','').replace(' Canteen','')}</div>
         <div class="canteen-meta">⭐ ${rating} · ${wait} min</div>
         <div class="canteen-loc">
-          <span>${c.location||'Campus'}</span>
           <div class="canteen-check">${c.is_open?'✓':'✕'}</div>
         </div>
       </div>
@@ -2439,6 +2439,114 @@ function toggleVegFilter(el) {
 // ═════════════════════════════════════
 // CART
 // ═════════════════════════════════════
+
+// Add-on pricing for countable items (per extra piece)
+const ADDON_MAP = {
+  // South Indian
+  'idli': { label: 'Extra Idli', price: 10, emoji: '🥣', unit: 'pc' },
+  'vada': { label: 'Extra Vada', price: 12, emoji: '🍩', unit: 'pc' },
+  'dosa': { label: 'Extra Dosa', price: 20, emoji: '🫓', unit: 'pc' },
+  'uttapam': { label: 'Extra Uttapam', price: 20, emoji: '🫓', unit: 'pc' },
+  'medu vada': { label: 'Extra Medu Vada', price: 12, emoji: '🍩', unit: 'pc' },
+  // North Indian
+  'roti': { label: 'Extra Roti', price: 8, emoji: '🫓', unit: 'pc' },
+  'chapati': { label: 'Extra Chapati', price: 8, emoji: '🫓', unit: 'pc' },
+  'naan': { label: 'Extra Naan', price: 15, emoji: '🫓', unit: 'pc' },
+  'butter naan': { label: 'Extra Butter Naan', price: 20, emoji: '🫓', unit: 'pc' },
+  'garlic naan': { label: 'Extra Garlic Naan', price: 25, emoji: '🫓', unit: 'pc' },
+  'paratha': { label: 'Extra Paratha', price: 15, emoji: '🫓', unit: 'pc' },
+  'puri': { label: 'Extra Puri', price: 8, emoji: '🫓', unit: 'pc' },
+  'bhatura': { label: 'Extra Bhatura', price: 15, emoji: '🫓', unit: 'pc' },
+  'kulcha': { label: 'Extra Kulcha', price: 15, emoji: '🫓', unit: 'pc' },
+  'rice': { label: 'Extra Rice', price: 20, emoji: '🍚', unit: 'bowl' },
+  'jeera rice': { label: 'Extra Jeera Rice', price: 25, emoji: '🍚', unit: 'bowl' },
+  // Egg
+  'egg': { label: 'Extra Egg', price: 10, emoji: '🥚', unit: 'pc' },
+  'omelette': { label: 'Extra Omelette', price: 15, emoji: '🥚', unit: 'pc' },
+  'boiled egg': { label: 'Extra Boiled Egg', price: 8, emoji: '🥚', unit: 'pc' },
+  // Chaat
+  'pani puri': { label: 'Extra Pani Puri', price: 15, emoji: '🥟', unit: '6 pcs' },
+  'samosa': { label: 'Extra Samosa', price: 12, emoji: '🥟', unit: 'pc' },
+  'kachori': { label: 'Extra Kachori', price: 12, emoji: '🥟', unit: 'pc' },
+  // Sides
+  'papad': { label: 'Extra Papad', price: 5, emoji: '🫓', unit: 'pc' },
+  'raita': { label: 'Extra Raita', price: 15, emoji: '🥛', unit: 'bowl' },
+  'dal': { label: 'Extra Dal', price: 20, emoji: '🍲', unit: 'bowl' },
+  'curd': { label: 'Extra Curd', price: 10, emoji: '🥛', unit: 'bowl' },
+  'pickle': { label: 'Extra Pickle', price: 5, emoji: '🫙', unit: 'cup' },
+  'salad': { label: 'Extra Salad', price: 10, emoji: '🥗', unit: 'plate' },
+  'pav': { label: 'Extra Pav', price: 5, emoji: '🍞', unit: 'pc' },
+  'bhaji': { label: 'Extra Bhaji', price: 20, emoji: '🍲', unit: 'bowl' },
+  'pav bhaji': { label: 'Extra Pav', price: 5, emoji: '🍞', unit: 'pc' },
+  'gulab jamun': { label: 'Extra Gulab Jamun', price: 10, emoji: '🍮', unit: 'pc' },
+  'jalebi': { label: 'Extra Jalebi', price: 15, emoji: '🍮', unit: 'plate' },
+  'sweet': { label: 'Extra Sweet', price: 15, emoji: '🍬', unit: 'pc' },
+  // Beverages
+  'chai': { label: 'Extra Chai', price: 10, emoji: '☕', unit: 'cup' },
+  'tea': { label: 'Extra Tea', price: 10, emoji: '☕', unit: 'cup' },
+  'coffee': { label: 'Extra Coffee', price: 15, emoji: '☕', unit: 'cup' },
+  'buttermilk': { label: 'Extra Buttermilk', price: 10, emoji: '🥛', unit: 'glass' },
+  'lassi': { label: 'Extra Lassi', price: 20, emoji: '🥛', unit: 'glass' },
+};
+
+function getAddonsForItem(itemName) {
+  if (!itemName) return [];
+  const lower = itemName.toLowerCase();
+  const addons = [];
+  for (const [key, addon] of Object.entries(ADDON_MAP)) {
+    if (lower.includes(key)) {
+      addons.push({ ...addon, addonKey: key });
+    }
+  }
+  // Always offer common sides for meal combos
+  if (lower.includes('combo') || lower.includes('thali') || lower.includes('meal')) {
+    if (!addons.find(a => a.addonKey === 'roti')) addons.push({ ...ADDON_MAP['roti'], addonKey: 'roti' });
+    if (!addons.find(a => a.addonKey === 'rice')) addons.push({ ...ADDON_MAP['rice'], addonKey: 'rice' });
+    if (!addons.find(a => a.addonKey === 'papad')) addons.push({ ...ADDON_MAP['papad'], addonKey: 'papad' });
+    if (!addons.find(a => a.addonKey === 'raita')) addons.push({ ...ADDON_MAP['raita'], addonKey: 'raita' });
+  }
+  // Always offer common sides
+  if (!addons.find(a => a.addonKey === 'papad') && !lower.includes('beverage') && !lower.includes('tea') && !lower.includes('coffee') && !lower.includes('juice') && !lower.includes('milkshake') && !lower.includes('lassi') && !lower.includes('smoothie')) {
+    addons.push({ ...ADDON_MAP['papad'], addonKey: 'papad' });
+  }
+  return addons;
+}
+
+function addAddonToCart(parentId, addonKey) {
+  const addon = ADDON_MAP[addonKey];
+  if (!addon) return;
+  const parent = S.cart.find(c => c.id === parentId);
+  if (!parent) return;
+  const addonId = parentId + '__addon__' + addonKey;
+  const ex = S.cart.find(c => c.id === addonId);
+  if (ex) {
+    if (ex.qty >= 10) { toast('Max 10 add-ons', 'warn', '⚠️'); return; }
+    ex.qty++;
+  } else {
+    S.cart.push({
+      id: addonId,
+      name: addon.label,
+      emoji: addon.emoji,
+      price: addon.price,
+      qty: 1,
+      canteen_id: parent.canteen_id,
+      is_addon: true,
+      parent_id: parentId
+    });
+  }
+  updateCartFloat();
+  renderCart();
+}
+
+function addonQty(addonId, delta) {
+  const i = S.cart.findIndex(c => c.id === addonId);
+  if (i === -1) return;
+  S.cart[i].qty += delta;
+  if (S.cart[i].qty <= 0) S.cart.splice(i, 1);
+  if (S.cart[i]?.qty > 10) S.cart[i].qty = 10;
+  updateCartFloat();
+  renderCart();
+}
 function addCart(id) {
   const item = S.menu.find(m => m.id === id);
   if (!item) return;
@@ -2460,9 +2568,14 @@ function chgQty(id, d) {
   const i = S.cart.findIndex(c => c.id === id);
   if (i === -1) return;
   const newQty = S.cart[i].qty + d;
-  if (newQty > 5) { toast('Max 5 of same item allowed', 'warn', '⚠️'); return; }
+  if (newQty > 5 && !S.cart[i].is_addon) { toast('Max 5 of same item allowed', 'warn', '⚠️'); return; }
   S.cart[i].qty = newQty;
-  if (S.cart[i].qty <= 0) S.cart.splice(i, 1);
+  if (S.cart[i].qty <= 0) {
+    const removedId = S.cart[i].id;
+    S.cart.splice(i, 1);
+    // Also remove child add-ons
+    S.cart = S.cart.filter(c => c.parent_id !== removedId);
+  }
   updateCartFloat();
   renderMenuItemCtrl(id);
   const cs = document.getElementById('s-cart');
@@ -2519,25 +2632,50 @@ function renderCart() {
   if (S.cart.length === 0) {
     if(cartList) cartList.innerHTML = '<div class="empty"><div class="empty-icon">🛒</div><div class="empty-title">Cart is empty</div><div class="empty-sub">Add items from the menu</div></div>';
   } else {
-    if(cartList) cartList.innerHTML = S.cart.map(i => `
-      <div class="cart-item" style="padding:14px;margin-bottom:10px;border-radius:14px;border:1.5px solid var(--border)">
-        <div class="cart-emoji" style="font-size:28px">${i.emoji||'🍽️'}</div>
-        <div class="cart-item-body" style="flex:1;min-width:0">
-          <div class="cart-item-name" style="font-size:14px;font-weight:700">${i.name}</div>
-          <div class="cart-item-price" style="font-size:12px;color:var(--muted)">₹${i.price} each</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="qty-ctrl" style="gap:8px">
-            <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',-1)">−</button>
-            <span class="qty-num" style="font-size:16px;min-width:24px">${i.qty}</span>
-            <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',1)">+</button>
+    if(cartList) cartList.innerHTML = S.cart.filter(i => !i.is_addon).map(i => {
+      const addons = getAddonsForItem(i.name);
+      const itemAddons = S.cart.filter(a => a.is_addon && a.parent_id === i.id);
+      return `
+      <div style="margin-bottom:12px;border:1.5px solid var(--border);border-radius:14px;overflow:hidden">
+        <div class="cart-item" style="padding:14px">
+          <div class="cart-emoji" style="font-size:28px">${i.emoji||'🍽️'}</div>
+          <div class="cart-item-body" style="flex:1;min-width:0">
+            <div class="cart-item-name" style="font-size:14px;font-weight:700">${i.name}</div>
+            <div class="cart-item-price" style="font-size:12px;color:var(--muted)">₹${i.price} each</div>
           </div>
-          <div style="text-align:right;min-width:50px">
-            <div class="cart-item-total" style="font-weight:800;font-size:15px;font-family:var(--fh)">₹${i.price*i.qty}</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="qty-ctrl" style="gap:8px">
+              <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',-1)">−</button>
+              <span class="qty-num" style="font-size:16px;min-width:24px">${i.qty}</span>
+              <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',1)">+</button>
+            </div>
+            <div style="text-align:right;min-width:50px">
+              <div class="cart-item-total" style="font-weight:800;font-size:15px;font-family:var(--fh)">₹${i.price*i.qty}</div>
+            </div>
+            <button style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;opacity:.6" onclick="chgQty('${i.id}',-${i.qty})" title="Remove">✕</button>
           </div>
-          <button style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;opacity:.6" onclick="chgQty('${i.id}',-${i.qty})" title="Remove">✕</button>
         </div>
-      </div>`).join('');
+        ${itemAddons.length > 0 ? `<div style="padding:0 14px 8px;display:flex;flex-direction:column;gap:6px">
+          ${itemAddons.map(a => `
+            <div style="display:flex;align-items:center;gap:8px;background:var(--light2);border-radius:8px;padding:6px 10px">
+              <span style="font-size:14px">${a.emoji}</span>
+              <div style="flex:1;font-size:12px;font-weight:600">${a.name} <span style="color:var(--muted)">₹${a.price}/${ADDON_MAP[a.id.split('__addon__')[1]]?.unit||'pc'}</span></div>
+              <div style="display:flex;align-items:center;gap:4px">
+                <button style="width:22px;height:22px;border:1px solid var(--border);border-radius:6px;background:var(--white);cursor:pointer;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center" onclick="addonQty('${a.id}',-1)">−</button>
+                <span style="font-size:12px;font-weight:800;min-width:16px;text-align:center">${a.qty}</span>
+                <button style="width:22px;height:22px;border:1px solid var(--border);border-radius:6px;background:var(--white);cursor:pointer;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center" onclick="addonQty('${a.id}',1)">+</button>
+              </div>
+              <span style="font-size:12px;font-weight:700;min-width:35px;text-align:right">₹${a.price*a.qty}</span>
+            </div>`).join('')}
+        </div>` : ''}
+        ${addons.length > 0 ? `<div style="padding:6px 14px 10px;border-top:1px dashed var(--border);display:flex;gap:6px;flex-wrap:wrap">
+          ${addons.map(a => {
+            const already = S.cart.find(c => c.id === i.id + '__addon__' + a.addonKey);
+            return `<button style="padding:4px 10px;font-size:11px;border-radius:8px;border:1px solid ${already?'var(--brand)':'var(--border)'};background:${already?'#FFF7ED':'var(--light2)'};cursor:pointer;font-weight:600;color:${already?'var(--brand)':'var(--mid)'}" onclick="addAddonToCart('${i.id}','${a.addonKey}')">+ ${a.label} ₹${a.price}</button>`;
+          }).join('')}
+        </div>` : ''}
+      </div>`;
+    }).join('');
   }
   const sumEl = document.getElementById('cart-summary');
   if(sumEl) sumEl.innerHTML = `
@@ -2782,7 +2920,7 @@ async function placeOrder() {
       setEl('inv-date', now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
       setEl('inv-orderid', 'Order #' + splitOrders.map(o => o.token_number).join('/'));
       setEl('inv-emp', S.user.name);
-      setEl('inv-empid', S.user.id + ' · ' + (S.user.department || 'L&T'));
+      setEl('inv-empid', S.user.id + ' · ' + (S.user.department || 'SLP'));
       setEl('inv-slot', S.selSlot);
     } catch(e) {}
 
@@ -2827,13 +2965,35 @@ async function placeOrder() {
     console.error('[placeOrder] Fatal error:', err.message, err.stack);
     logError('[placeOrder] Fatal: ' + err.message, { stack: err.stack, cart: S.cart?.length });
     btn.classList.remove('btn-loading'); btn.disabled = false;
-    // Order may have gone through — check before showing error
+    // Order may have gone through — check server before showing error
     if (splitOrders && splitOrders.length > 0) {
       toast('Order placed but display error occurred. Check My Orders tab.', 'warn', '⚠️');
       S.cart = []; updateCartFloat();
       goScreen('s-home');
     } else {
-      toast('Something went wrong. Please try again.', 'error', '❌');
+      // Network may have dropped AFTER server processed — check if order exists
+      try {
+        if (sb && S.user?.id) {
+          const {data: recentOrds} = await sb.from('orders').select('id, token_number, amount_paid, status, created_at')
+            .eq('employee_id', S.user.id).order('created_at',{ascending:false}).limit(1);
+          if (recentOrds?.length) {
+            const latest = recentOrds[0];
+            const age = Date.now() - new Date(latest.created_at).getTime();
+            if (age < 60000) { // placed within last 60 seconds
+              toast(`Order was placed! Token #${latest.token_number}. Check My Orders.`, 'success', '✅');
+              S.cart = []; updateCartFloat();
+              // Refresh balance from DB
+              try {
+                const {data:empFresh} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+                if(empFresh) { S.user.wallet_balance = parseFloat(empFresh.wallet_balance)||0; setEl('nav-bal','₹'+Math.round(S.user.wallet_balance)); }
+              } catch(e){}
+              goScreen('s-home');
+              return;
+            }
+          }
+        }
+      } catch(e) {}
+      toast('Order failed — check your internet and try again.', 'error', '❌');
     }
   }
 }
@@ -3267,11 +3427,28 @@ function renderProfile() {
   setEl('p-av', S.user.initials || initials(S.user.name));
   setEl('p-name', S.user.name);
   setEl('p-id', S.user.id);
-  setEl('p-dept', (S.user.department||'L&T') + ' — ' + (S.user.campus||'Vadodara Campus'));
-  setEl('st-orders', S.orders.filter(o => o.status !== 'cancelled').length);
-  const activeOrders = S.orders.filter(o => o.status !== 'cancelled');
-  const avgOrder = activeOrders.length > 0 ? Math.round(activeOrders.reduce((s,o) => s+(parseFloat(o.amount_paid)||0), 0) / activeOrders.length) : 0;
-  setEl('st-saved', '₹'+avgOrder);
+  setEl('p-dept', (S.user.department||'SLP') + ' — ' + (S.user.campus||'Vadodara Campus'));
+  // Fetch this month's orders from DB for accurate count
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  if (sb) {
+    sb.from('orders').select('id, amount_paid', {count:'exact'})
+      .eq('employee_id', S.user.id)
+      .neq('status', 'cancelled')
+      .gte('created_at', monthStart.toISOString())
+      .then(({data, count}) => {
+        setEl('st-orders', count || 0);
+        const orders = data || [];
+        const avgOrder = orders.length > 0 ? Math.round(orders.reduce((s,o) => s+(parseFloat(o.amount_paid)||0), 0) / orders.length) : 0;
+        setEl('st-saved', '₹'+avgOrder);
+      }).catch(() => {
+        setEl('st-orders', S.orders.filter(o => o.status !== 'cancelled').length);
+      });
+  } else {
+    setEl('st-orders', S.orders.filter(o => o.status !== 'cancelled').length);
+    const activeOrders = S.orders.filter(o => o.status !== 'cancelled');
+    const avgOrder = activeOrders.length > 0 ? Math.round(activeOrders.reduce((s,o) => s+(parseFloat(o.amount_paid)||0), 0) / activeOrders.length) : 0;
+    setEl('st-saved', '₹'+avgOrder);
+  }
   // Favorite items
   const itemCounts = {};
   S.orders.forEach(o => (o.items||[]).forEach(i => { itemCounts[i.item_name||i.name] = (itemCounts[i.item_name||i.name]||0)+1; }));
@@ -3467,20 +3644,16 @@ async function updateOrderStatus(id, status) {
 async function fetchAllOrders() {
   try {
     if (!sb) return;
-    let query = sb.from('orders').select('*, order_items(*)').order('created_at', {ascending: false}).limit(200);
+    const todayStr = new Date().toISOString().slice(0,10);
+    let query = sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr+'T00:00:00').order('created_at', {ascending: false}).limit(300);
     if ((S.role === 'vendor' || S.role === 'kitchen') && S.user?.canteen_id) {
       query = query.eq('canteen_id', S.user.canteen_id);
     }
     const {data, error} = await query;
     if (error) { toast('Failed to load orders', 'warn', '⚠️'); return; }
     if (data?.length) {
-      data.forEach(o => {
-        const ex = S.allOrders.find(e => e.id === o.id);
-        if (!ex) S.allOrders.unshift({...o, items: o.order_items||[]});
-        else { ex.status = o.status; ex.items = o.order_items||ex.items; }
-      });
-      // Cap at 500 to prevent memory issues with high traffic
-      if (S.allOrders.length > 500) S.allOrders.length = 500;
+      // Replace allOrders with fresh today data instead of merging stale
+      S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
     }
   } catch(e) { console.warn('fetchAllOrders error:', e); }
 }
@@ -3552,29 +3725,31 @@ function startPoll() {
     }, 15000);
     return;
   }
-  // Vendor/Kitchen: poll every 30s as backup to Realtime (was 15s)
+  // Vendor/Kitchen: poll every 15s as backup to Realtime
   S.pollInterval = setInterval(async () => {
     try {
       if (!sb) return;
-      let q = sb.from('orders').select('id, status, token_number, canteen_id, employee_name, pickup_slot, created_at').order('created_at',{ascending:false}).limit(50);
-      if (S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
       const today = new Date().toISOString().slice(0,10);
+      let q = sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+      if (S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
       q = q.gte('created_at', today + 'T00:00:00');
       const {data} = await q;
       if (data?.length) {
         let changed = false;
+        let newCount = 0;
         data.forEach(o => {
           const ex = S.allOrders.find(ex => ex.id===o.id);
-          if (!ex) { S.allOrders.unshift({...o, items:[]}); changed = true; }
-          else if (ex.status !== o.status) { ex.status = o.status; changed = true; }
+          if (!ex) { S.allOrders.unshift({...o, items:o.order_items||[]}); changed = true; newCount++; }
+          else if (ex.status !== o.status) { ex.status = o.status; ex.items = o.order_items||ex.items; changed = true; }
         });
         if (changed) {
+          if (newCount > 0) { try { playNewOrderAlert(); } catch(e){} }
           if (S.role === 'vendor') renderVendor();
           if (S.role === 'kitchen') renderKDS();
         }
       }
     } catch(e) {}
-  }, 30000);
+  }, 15000);
 }
 
 // ═════════════════════════════════════
@@ -4374,7 +4549,7 @@ async function renderAdminEmployees(el) {
           <div class="emp-av">${e.initials||initials(e.name)}</div>
           <div class="emp-body">
             <div class="emp-name">${e.name}</div>
-            <div class="emp-detail">${e.id} · ${e.email||''} · ${e.department||'L&T'}</div>
+            <div class="emp-detail">${e.id} · ${e.email||''} · ${e.department||'SLP'}</div>
           </div>
           <div>
             <div class="emp-balance">₹${Math.round(e.wallet_balance||0)}</div>
@@ -4397,7 +4572,7 @@ async function searchAdminEmployees(q) {
           <div class="emp-av">${e.initials||initials(e.name)}</div>
           <div class="emp-body">
             <div class="emp-name">${e.name}</div>
-            <div class="emp-detail">${e.id} · ${e.email||''} · ${e.department||'L&T'}</div>
+            <div class="emp-detail">${e.id} · ${e.email||''} · ${e.department||'SLP'}</div>
           </div>
           <div>
             <div class="emp-balance">₹${Math.round(e.wallet_balance||0)}</div>
@@ -4421,7 +4596,7 @@ async function searchAdminEmployees(q) {
         <div class="emp-av">${e.initials||initials(e.name)}</div>
         <div class="emp-body">
           <div class="emp-name">${e.name}</div>
-          <div class="emp-detail">${e.id} · ${e.email||''} · ${e.department||'L&T'}</div>
+          <div class="emp-detail">${e.id} · ${e.email||''} · ${e.department||'SLP'}</div>
         </div>
         <div>
           <div class="emp-balance">₹${Math.round(e.wallet_balance||0)}</div>
@@ -4565,21 +4740,28 @@ async function renderAdminRevenue(el) {
   el.innerHTML = '<div class="loader"></div>';
   try {
     if (!sb) { el.innerHTML = '<div class="empty"><div class="empty-title">Database not connected</div></div>'; return; }
-    // Fetch last 7 days of orders
-    const weekAgo = new Date(Date.now() - 7*86400000).toISOString();
-    const {data: weekOrders} = await sb.from('orders').select('item_total, gst_amount, amount_paid, subsidy_applied, canteen_id, created_at, status').gte('created_at', weekAgo).neq('status', 'cancelled');
+    // Use date range filter if set, otherwise last 7 days
+    const hasRange = revenueRange.from && revenueRange.to;
+    const fromDate = hasRange ? revenueRange.from + 'T00:00:00' : new Date(Date.now() - 7*86400000).toISOString();
+    const toDate = hasRange ? revenueRange.to + 'T23:59:59' : new Date().toISOString();
+    const rangeLabel = hasRange ? `${revenueRange.from} to ${revenueRange.to}` : 'Last 7 Days';
+
+    const {data: weekOrders} = await sb.from('orders').select('amount_paid, canteen_id, created_at').gte('created_at', fromDate).lte('created_at', toDate).neq('status', 'cancelled');
     const orders = weekOrders || [];
     // Group by day
     const dayMap = {};
     const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(Date.now() - i*86400000);
+    // Build day slots for the range
+    const startMs = new Date(hasRange ? revenueRange.from : Date.now() - 6*86400000).getTime();
+    const endMs = new Date(hasRange ? revenueRange.to : Date.now()).getTime();
+    for (let ms = startMs; ms <= endMs; ms += 86400000) {
+      const d = new Date(ms);
       const key = d.toISOString().slice(0,10);
-      dayMap[key] = { label: dayNames[d.getDay()]+' '+d.getDate(), rev: 0, orders: 0, subsidy: 0 };
+      dayMap[key] = { label: dayNames[d.getDay()]+' '+d.getDate(), rev: 0, orders: 0 };
     }
     orders.forEach(o => {
       const key = o.created_at?.slice(0,10);
-      if (dayMap[key]) { dayMap[key].rev += (parseFloat(o.amount_paid)||0); dayMap[key].orders++; dayMap[key].subsidy += (o.subsidy_applied||0); }
+      if (dayMap[key]) { dayMap[key].rev += (parseFloat(o.amount_paid)||0); dayMap[key].orders++; }
     });
     const days = Object.values(dayMap);
     const maxRev = Math.max(1, ...days.map(d=>d.rev));
@@ -4588,15 +4770,14 @@ async function renderAdminRevenue(el) {
     const bestDay = days.reduce((best,d) => d.rev > best.rev ? d : best, days[0]);
     // Group by canteen (this month)
     const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-    const {data: monthOrders} = await sb.from('orders').select('item_total, gst_amount, amount_paid, subsidy_applied, canteen_id, status').gte('created_at', monthStart.toISOString()).neq('status', 'cancelled');
+    const {data: monthOrders} = await sb.from('orders').select('amount_paid, canteen_id').gte('created_at', monthStart.toISOString()).neq('status', 'cancelled');
     const canRevMap = {};
-    let monthSubsidy = 0;
-    (monthOrders||[]).forEach(o => { canRevMap[o.canteen_id] = (canRevMap[o.canteen_id]||0) + (parseFloat(o.amount_paid)||0); monthSubsidy += (o.subsidy_applied||0); });
+    (monthOrders||[]).forEach(o => { canRevMap[o.canteen_id] = (canRevMap[o.canteen_id]||0) + (parseFloat(o.amount_paid)||0); });
     const maxCanRev = Math.max(1, ...Object.values(canRevMap));
 
     el.innerHTML = `
     <div class="card">
-      <div class="card-title">💰 Daily Revenue — Last 7 Days</div>
+      <div class="card-title">💰 Daily Revenue — ${rangeLabel}</div>
       <div class="bar-chart">
         ${days.map(d => `<div class="bar-row"><div class="bar-label">${d.label}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(d.rev/maxRev*100)}%"></div></div><div class="bar-val">₹${d.rev>999?(d.rev/1000).toFixed(1)+'K':Math.round(d.rev)}</div></div>`).join('')}
       </div>
@@ -5112,6 +5293,13 @@ async function confirmCancelOrder(orderId){
       }
     }
     S.txns.unshift({type:'credit',icon:'↩️',name:`Refund — Cancelled Order #${o.token_number}`,date:'Just now',amount:parseFloat(o.amount_paid)||0});
+    // Force refresh balance from DB (APK may have stale cached value)
+    try {
+      if (sb) {
+        const {data: freshEmp} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+        if (freshEmp) S.user.wallet_balance = parseFloat(freshEmp.wallet_balance) || 0;
+      }
+    } catch(e) {}
     setEl('nav-bal','₹'+Math.round(S.user.wallet_balance));
     setEl('w-bal','₹'+Math.round(S.user.wallet_balance));
   }
@@ -5222,22 +5410,37 @@ let audioCtx = null;
 function playNewOrderAlert(){
   try {
     if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-    // Play 3 beeps
-    [0,0.3,0.6].forEach(delay=>{
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain); gain.connect(audioCtx.destination);
-      osc.frequency.value = 880;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0,audioCtx.currentTime+delay);
-      gain.gain.linearRampToValueAtTime(0.5,audioCtx.currentTime+delay+0.05);
-      gain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+delay+0.25);
-      osc.start(audioCtx.currentTime+delay);
-      osc.stop(audioCtx.currentTime+delay+0.3);
-    });
-    // Vibration
-    if(navigator.vibrate) navigator.vibrate([200,100,200]);
-  } catch(e){}
+    // Resume if browser suspended it (happens after idle time)
+    if(audioCtx.state === 'suspended') {
+      audioCtx.resume().then(()=>_doBeep()).catch(()=>{});
+      return;
+    }
+    _doBeep();
+  } catch(e){
+    // Fallback: try HTML5 Audio beep if AudioContext fails
+    try {
+      const fallback = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH+Jk5KNgoF5dHN7hI+VlZCJgnx2c3R8hpCWl5SLg3x2c3V9h5GXmJWMhHx2c3Z+iJKYmZaNhX13dHd/iZOZmpePhn54dXiAipSam5iQiH95dnmBi5WbnJmRiX97d3qCjJacnZqSkYB8eHuDjZednpuTkYF9enuEjpifn5yUkoJ+e3yFj5mgoJ2VlIN/fH2Gj5qhoZ6Wl4SAfn6HkJuhop+XmIWBf3+IkZyio6CYmYaCgICJkp2jpKGam4eDgYGKk56kpKKbnIiEgoKLlJ+lpqOcnYmFg4OMlaClp6SdnouGhISNlqGmqKWenoqHhYWOl6Knqaafn4uIhoaPmKOoqqigooqIh4eQmaSpq6mho4yJiIiRmqWqrKqipI2KiYmSm6arramjpY6LioqTnKesr6mkpo+MiouUnainr6qlp5CMi4yVn6mwsaulqJGNjI2Woaqxs6ymqZKOjY6Xoau0tq2nqpOPjpCYo6y1t66oq5WQj5GZpa22uLCprJaRkJKapq63urarrZeSj5OcqK+5vLisrpiTkZSdrLC6vrmtr5qUkpad');
+      fallback.volume = 0.5;
+      fallback.play().catch(()=>{});
+    } catch(e2) {}
+  }
+  // Vibration
+  if(navigator.vibrate) navigator.vibrate([200,100,200,100,200]);
+}
+function _doBeep(){
+  // Play 4 loud beeps (was 3, now louder + extra)
+  [0, 0.25, 0.5, 0.75].forEach(delay=>{
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.frequency.value = 1000; // Higher pitch = more noticeable (was 880)
+    osc.type = 'square'; // Harsher = louder (was sine)
+    gain.gain.setValueAtTime(0,audioCtx.currentTime+delay);
+    gain.gain.linearRampToValueAtTime(0.7,audioCtx.currentTime+delay+0.03); // Louder (was 0.5)
+    gain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+delay+0.2);
+    osc.start(audioCtx.currentTime+delay);
+    osc.stop(audioCtx.currentTime+delay+0.25);
+  });
 }
 // ── Supabase Realtime channel ──
 let _realtimeChannel = null;
@@ -5326,7 +5529,7 @@ function startRealtime() {
           if (S.role === 'vendor') { renderVendor(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
           if (S.role === 'kitchen') { renderKDS(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
           if (S.role === 'admin') {
-            // Order already added to S.allOrders above (line 5315) — just fetch items
+            S.allOrders.unshift({...o, items:[]});
             if (sb) sb.from('order_items').select('*').eq('order_id', o.id).then(({data}) => {
               const ord = S.allOrders.find(ex => ex.id === o.id);
               if (ord && data) ord.items = data;
@@ -5402,8 +5605,25 @@ function startRealtime() {
         }
       })
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') // // removed debug log
-        if (status === 'CHANNEL_ERROR') console.warn('[FoodHub] Realtime error — falling back to polling');
+        if (status === 'SUBSCRIBED') {
+          // Connection recovered — refetch orders to catch anything missed
+          if (S.role === 'vendor' || S.role === 'kitchen') {
+            fetchAllOrders().then(() => {
+              if (S.role === 'vendor') renderVendor();
+              if (S.role === 'kitchen') renderKDS();
+            });
+          }
+        }
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('[FoodHub] Realtime error — falling back to polling');
+          // Force a poll immediately to not miss orders
+          if (S.role === 'vendor' || S.role === 'kitchen') {
+            fetchAllOrders().then(() => {
+              if (S.role === 'vendor') renderVendor();
+              if (S.role === 'kitchen') renderKDS();
+            });
+          }
+        }
       });
   } catch(e) {}
 }
@@ -5765,7 +5985,7 @@ function previewImport(input){
       const name = parts[nameIdx >= 0 ? nameIdx : 1] || '';
       const email = parts[emailIdx >= 0 ? emailIdx : 2] || '';
       const id = parts[idIdx >= 0 ? idIdx : 0] || ('LT-EMP-' + String(Date.now()).slice(-5) + String(lineNum).padStart(3,'0'));
-      const dept = parts[deptIdx >= 0 ? deptIdx : 3] || 'L&T';
+      const dept = parts[deptIdx >= 0 ? deptIdx : 3] || 'SLP';
       const phone = parts[phoneIdx >= 0 ? phoneIdx : 4] || '';
       const wallet = parseFloat(parts[walletIdx >= 0 ? walletIdx : 5]) || 500;
 
@@ -5825,7 +6045,7 @@ async function importEmployees(){
       name: r.name,
       email: r.email,
       phone: r.phone || null,
-      department: r.dept || 'L&T',
+      department: r.dept || 'SLP',
       campus: 'Vadodara Campus',
       wallet_balance: r.wallet || 500,
       points_balance: 0,
@@ -7439,49 +7659,71 @@ function showRefundPolicy(){
     </div>
     <div class="modal-body" style="font-size:13px;color:var(--mid);line-height:1.7">
       <p style="font-weight:700;color:var(--dark);margin-bottom:8px">SLP Hospitality — Refund Policy</p>
-      <p style="margin-bottom:12px">Last updated: March 2026</p>
+      <p style="margin-bottom:12px">Last updated: April 2026</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">1. Order Cancellation</p>
-      <p style="margin-bottom:12px">You may cancel your order only if its status is <strong>New</strong>. Once the order is being prepared or ready, cancellation is not possible.</p>
+      <p style="margin-bottom:12px">You may cancel your order only if its status is <strong>New</strong>. Once the kitchen has accepted or started preparing your order, cancellation is not possible.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">2. Refund on Cancellation</p>
-      <p style="margin-bottom:12px">Upon successful cancellation, the full amount paid (including GST) will be refunded to your SLP Nexus Wallet instantly. No deductions are made.</p>
+      <p style="margin-bottom:12px">Upon successful cancellation, the full amount paid (including GST) will be refunded to your SLP Nexus Wallet <strong>instantly</strong>. No deductions are made on cancellation refunds.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">3. Wallet Top-up Refunds</p>
-      <p style="margin-bottom:12px">Wallet top-ups are non-refundable to bank account. The balance remains in your SLP Nexus Wallet and can be used for future orders.</p>
+      <p style="margin-bottom:12px">Wallet top-ups are <strong>non-refundable</strong> to your bank account. The balance remains in your SLP Nexus Wallet and can be used for future orders. This is because payment gateway charges (for Debit Card, Credit Card, and Net Banking) are borne by the employee at the time of top-up and cannot be reversed.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. Wrong or Missing Items</p>
-      <p style="margin-bottom:12px">If you receive a wrong or incomplete order, share feedback via the Orders tab. Our team will review and process a refund to your wallet within 24-48 hours.</p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. UPI Top-ups</p>
+      <p style="margin-bottom:12px">UPI transactions (Google Pay, PhonePe, Paytm, etc.) carry <strong>zero service charges</strong>. We recommend using UPI for wallet top-ups to avoid any bank charges.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Contact</p>
-      <p>For refund queries contact: <strong>info@slphospitality.com</strong></p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Wrong or Missing Items</p>
+      <p style="margin-bottom:12px">If you receive a wrong, incomplete, or unsatisfactory order, submit feedback via the Orders tab. Our team will review your request and process a full refund to your wallet within 24-48 hours.</p>
+
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">6. Failed Transactions</p>
+      <p style="margin-bottom:12px">If money is debited from your bank account but the wallet is not credited, please wait 24 hours for automatic reconciliation. If the issue persists, contact us with your transaction reference number.</p>
+
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">7. Contact</p>
+      <p>For refund queries or payment issues, contact: <strong>info@slphospitality.com</strong></p>
     </div>`);
 }
 
 function showPrivacyPolicy(){
   showModal(`
     <div class="modal-head">
-      <span class="modal-title">Privacy Policy</span>
+      <span class="modal-title">Privacy Policy & Terms</span>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body" style="font-size:13px;color:var(--mid);line-height:1.7">
-      <p style="font-weight:700;color:var(--dark);margin-bottom:8px">SLP Hospitality — Privacy Policy</p>
-      <p style="margin-bottom:12px">Last updated: March 2026</p>
+      <p style="font-weight:700;color:var(--dark);margin-bottom:8px">SLP Hospitality — Privacy Policy & Terms of Use</p>
+      <p style="margin-bottom:12px">Last updated: April 2026</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">1. Data We Collect</p>
-      <p style="margin-bottom:12px">We collect your name, employee ID, company email, department, and order history to provide the SLP Nexus service.</p>
+      <p style="margin-bottom:12px">We collect your name, employee ID, company email, phone number, department, order history, and wallet transaction details to provide the SLP Nexus canteen ordering service.</p>
 
       <p style="font-weight:600;color:var(--dark);margin-bottom:4px">2. How We Use Your Data</p>
-      <p style="margin-bottom:12px">Your data is used solely to process orders, manage your wallet, and improve the canteen service. We do not sell your data to third parties.</p>
+      <p style="margin-bottom:12px">Your data is used solely to process food orders, manage your digital wallet, generate order tokens, and improve the canteen service. We do not sell, share, or rent your personal data to any third parties.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">3. Data Storage</p>
-      <p style="margin-bottom:12px">All data is stored securely on Supabase servers with row-level security. Only you and authorised canteen staff can access your order data.</p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">3. Data Storage & Security</p>
+      <p style="margin-bottom:12px">All data is stored securely on encrypted cloud servers with row-level security policies. Only you and authorised canteen staff can access your order data. Passwords are stored using industry-standard hashing.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. Data Retention</p>
-      <p style="margin-bottom:12px">Order and transaction data is retained for 1 year for accounting purposes. You may request deletion of your account by contacting us.</p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">4. Pricing & GST</p>
+      <p style="margin-bottom:12px">All food items are charged at the listed menu price plus 5% GST. There are no hidden charges, platform fees, or service fees on food orders. The total payable amount is always displayed before you place the order.</p>
 
-      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Contact</p>
-      <p>For privacy queries contact: <strong>info@slphospitality.com</strong></p>
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">5. Wallet Top-up — Payment Gateway Charges</p>
+      <p style="margin-bottom:12px">When you add money to your SLP Nexus Wallet via the ICICI payment gateway, the following charges may apply:</p>
+      <div style="background:var(--light2);border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px">
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>UPI (Google Pay, PhonePe, Paytm)</span><strong style="color:var(--green2)">FREE — No charges</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>Debit Card</span><strong>Bank service charges may apply</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>Credit Card</span><strong>Bank service charges may apply</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Net Banking</span><strong>Bank service charges may apply</strong></div>
+      </div>
+      <p style="margin-bottom:12px;font-size:12px;color:var(--muted)">Note: Payment gateway service charges (if any) are levied by your bank and/or the payment processor — SLP Hospitality does not charge any additional fees for wallet top-ups. UPI transactions are completely free of charge.</p>
+
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">6. Data Retention</p>
+      <p style="margin-bottom:12px">Order and transaction data is retained for 1 year for accounting and audit purposes. You may request deletion of your account and associated data by contacting us.</p>
+
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">7. Your Rights</p>
+      <p style="margin-bottom:12px">You have the right to access, correct, or delete your personal data at any time. You can view your order history, transaction history, and profile details within the app.</p>
+
+      <p style="font-weight:600;color:var(--dark);margin-bottom:4px">8. Contact</p>
+      <p>For privacy queries, account deletion requests, or grievances, contact: <strong>info@slphospitality.com</strong></p>
     </div>`);
 }
 </script>
