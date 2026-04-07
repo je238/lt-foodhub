@@ -3,3 +3,4 @@ android/capacitor/build/
 android/app/build/
 .gradle/
 *.dex
+.env
