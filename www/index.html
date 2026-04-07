@@ -1812,8 +1812,7 @@ async function unifiedLogin() {
         if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
         S.role = 'vendor';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
-        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(50); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
-        // Sync canteen open state from DB
+        try { const todayStr = new Date().toISOString().slice(0,10); const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
         try {
           const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
           if (canRow) { _kitchenOpen = canRow.is_open; const c = S.canteens.find(x=>x.id===counter.id); if(c) c.is_open = canRow.is_open; }
@@ -1825,7 +1824,7 @@ async function unifiedLogin() {
         if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
         S.role = 'kitchen';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
-        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(50); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        try { const todayStr = new Date().toISOString().slice(0,10); const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
         // Fetch actual canteen open/close state from DB
         try {
           const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
@@ -2127,7 +2126,8 @@ async function doLogin() {
         S.role = 'vendor';
         S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try {
-          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(50);
+          const todayStr = new Date().toISOString().slice(0,10);
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at', { ascending: false }).limit(200);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-vendor');
@@ -2139,7 +2139,8 @@ async function doLogin() {
         S.role = 'kitchen';
         S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try {
-          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(50);
+          const todayStr = new Date().toISOString().slice(0,10);
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at', { ascending: false }).limit(200);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-kitchen');
@@ -2438,6 +2439,114 @@ function toggleVegFilter(el) {
 // ═════════════════════════════════════
 // CART
 // ═════════════════════════════════════
+
+// Add-on pricing for countable items (per extra piece)
+const ADDON_MAP = {
+  // South Indian
+  'idli': { label: 'Extra Idli', price: 10, emoji: '🥣', unit: 'pc' },
+  'vada': { label: 'Extra Vada', price: 12, emoji: '🍩', unit: 'pc' },
+  'dosa': { label: 'Extra Dosa', price: 20, emoji: '🫓', unit: 'pc' },
+  'uttapam': { label: 'Extra Uttapam', price: 20, emoji: '🫓', unit: 'pc' },
+  'medu vada': { label: 'Extra Medu Vada', price: 12, emoji: '🍩', unit: 'pc' },
+  // North Indian
+  'roti': { label: 'Extra Roti', price: 8, emoji: '🫓', unit: 'pc' },
+  'chapati': { label: 'Extra Chapati', price: 8, emoji: '🫓', unit: 'pc' },
+  'naan': { label: 'Extra Naan', price: 15, emoji: '🫓', unit: 'pc' },
+  'butter naan': { label: 'Extra Butter Naan', price: 20, emoji: '🫓', unit: 'pc' },
+  'garlic naan': { label: 'Extra Garlic Naan', price: 25, emoji: '🫓', unit: 'pc' },
+  'paratha': { label: 'Extra Paratha', price: 15, emoji: '🫓', unit: 'pc' },
+  'puri': { label: 'Extra Puri', price: 8, emoji: '🫓', unit: 'pc' },
+  'bhatura': { label: 'Extra Bhatura', price: 15, emoji: '🫓', unit: 'pc' },
+  'kulcha': { label: 'Extra Kulcha', price: 15, emoji: '🫓', unit: 'pc' },
+  'rice': { label: 'Extra Rice', price: 20, emoji: '🍚', unit: 'bowl' },
+  'jeera rice': { label: 'Extra Jeera Rice', price: 25, emoji: '🍚', unit: 'bowl' },
+  // Egg
+  'egg': { label: 'Extra Egg', price: 10, emoji: '🥚', unit: 'pc' },
+  'omelette': { label: 'Extra Omelette', price: 15, emoji: '🥚', unit: 'pc' },
+  'boiled egg': { label: 'Extra Boiled Egg', price: 8, emoji: '🥚', unit: 'pc' },
+  // Chaat
+  'pani puri': { label: 'Extra Pani Puri', price: 15, emoji: '🥟', unit: '6 pcs' },
+  'samosa': { label: 'Extra Samosa', price: 12, emoji: '🥟', unit: 'pc' },
+  'kachori': { label: 'Extra Kachori', price: 12, emoji: '🥟', unit: 'pc' },
+  // Sides
+  'papad': { label: 'Extra Papad', price: 5, emoji: '🫓', unit: 'pc' },
+  'raita': { label: 'Extra Raita', price: 15, emoji: '🥛', unit: 'bowl' },
+  'dal': { label: 'Extra Dal', price: 20, emoji: '🍲', unit: 'bowl' },
+  'curd': { label: 'Extra Curd', price: 10, emoji: '🥛', unit: 'bowl' },
+  'pickle': { label: 'Extra Pickle', price: 5, emoji: '🫙', unit: 'cup' },
+  'salad': { label: 'Extra Salad', price: 10, emoji: '🥗', unit: 'plate' },
+  'pav': { label: 'Extra Pav', price: 5, emoji: '🍞', unit: 'pc' },
+  'bhaji': { label: 'Extra Bhaji', price: 20, emoji: '🍲', unit: 'bowl' },
+  'pav bhaji': { label: 'Extra Pav', price: 5, emoji: '🍞', unit: 'pc' },
+  'gulab jamun': { label: 'Extra Gulab Jamun', price: 10, emoji: '🍮', unit: 'pc' },
+  'jalebi': { label: 'Extra Jalebi', price: 15, emoji: '🍮', unit: 'plate' },
+  'sweet': { label: 'Extra Sweet', price: 15, emoji: '🍬', unit: 'pc' },
+  // Beverages
+  'chai': { label: 'Extra Chai', price: 10, emoji: '☕', unit: 'cup' },
+  'tea': { label: 'Extra Tea', price: 10, emoji: '☕', unit: 'cup' },
+  'coffee': { label: 'Extra Coffee', price: 15, emoji: '☕', unit: 'cup' },
+  'buttermilk': { label: 'Extra Buttermilk', price: 10, emoji: '🥛', unit: 'glass' },
+  'lassi': { label: 'Extra Lassi', price: 20, emoji: '🥛', unit: 'glass' },
+};
+
+function getAddonsForItem(itemName) {
+  if (!itemName) return [];
+  const lower = itemName.toLowerCase();
+  const addons = [];
+  for (const [key, addon] of Object.entries(ADDON_MAP)) {
+    if (lower.includes(key)) {
+      addons.push({ ...addon, addonKey: key });
+    }
+  }
+  // Always offer common sides for meal combos
+  if (lower.includes('combo') || lower.includes('thali') || lower.includes('meal')) {
+    if (!addons.find(a => a.addonKey === 'roti')) addons.push({ ...ADDON_MAP['roti'], addonKey: 'roti' });
+    if (!addons.find(a => a.addonKey === 'rice')) addons.push({ ...ADDON_MAP['rice'], addonKey: 'rice' });
+    if (!addons.find(a => a.addonKey === 'papad')) addons.push({ ...ADDON_MAP['papad'], addonKey: 'papad' });
+    if (!addons.find(a => a.addonKey === 'raita')) addons.push({ ...ADDON_MAP['raita'], addonKey: 'raita' });
+  }
+  // Always offer common sides
+  if (!addons.find(a => a.addonKey === 'papad') && !lower.includes('beverage') && !lower.includes('tea') && !lower.includes('coffee') && !lower.includes('juice') && !lower.includes('milkshake') && !lower.includes('lassi') && !lower.includes('smoothie')) {
+    addons.push({ ...ADDON_MAP['papad'], addonKey: 'papad' });
+  }
+  return addons;
+}
+
+function addAddonToCart(parentId, addonKey) {
+  const addon = ADDON_MAP[addonKey];
+  if (!addon) return;
+  const parent = S.cart.find(c => c.id === parentId);
+  if (!parent) return;
+  const addonId = parentId + '__addon__' + addonKey;
+  const ex = S.cart.find(c => c.id === addonId);
+  if (ex) {
+    if (ex.qty >= 10) { toast('Max 10 add-ons', 'warn', '⚠️'); return; }
+    ex.qty++;
+  } else {
+    S.cart.push({
+      id: addonId,
+      name: addon.label,
+      emoji: addon.emoji,
+      price: addon.price,
+      qty: 1,
+      canteen_id: parent.canteen_id,
+      is_addon: true,
+      parent_id: parentId
+    });
+  }
+  updateCartFloat();
+  renderCart();
+}
+
+function addonQty(addonId, delta) {
+  const i = S.cart.findIndex(c => c.id === addonId);
+  if (i === -1) return;
+  S.cart[i].qty += delta;
+  if (S.cart[i].qty <= 0) S.cart.splice(i, 1);
+  if (S.cart[i]?.qty > 10) S.cart[i].qty = 10;
+  updateCartFloat();
+  renderCart();
+}
 function addCart(id) {
   const item = S.menu.find(m => m.id === id);
   if (!item) return;
@@ -2459,9 +2568,14 @@ function chgQty(id, d) {
   const i = S.cart.findIndex(c => c.id === id);
   if (i === -1) return;
   const newQty = S.cart[i].qty + d;
-  if (newQty > 5) { toast('Max 5 of same item allowed', 'warn', '⚠️'); return; }
+  if (newQty > 5 && !S.cart[i].is_addon) { toast('Max 5 of same item allowed', 'warn', '⚠️'); return; }
   S.cart[i].qty = newQty;
-  if (S.cart[i].qty <= 0) S.cart.splice(i, 1);
+  if (S.cart[i].qty <= 0) {
+    const removedId = S.cart[i].id;
+    S.cart.splice(i, 1);
+    // Also remove child add-ons
+    S.cart = S.cart.filter(c => c.parent_id !== removedId);
+  }
   updateCartFloat();
   renderMenuItemCtrl(id);
   const cs = document.getElementById('s-cart');
@@ -2518,25 +2632,50 @@ function renderCart() {
   if (S.cart.length === 0) {
     if(cartList) cartList.innerHTML = '<div class="empty"><div class="empty-icon">🛒</div><div class="empty-title">Cart is empty</div><div class="empty-sub">Add items from the menu</div></div>';
   } else {
-    if(cartList) cartList.innerHTML = S.cart.map(i => `
-      <div class="cart-item" style="padding:14px;margin-bottom:10px;border-radius:14px;border:1.5px solid var(--border)">
-        <div class="cart-emoji" style="font-size:28px">${i.emoji||'🍽️'}</div>
-        <div class="cart-item-body" style="flex:1;min-width:0">
-          <div class="cart-item-name" style="font-size:14px;font-weight:700">${i.name}</div>
-          <div class="cart-item-price" style="font-size:12px;color:var(--muted)">₹${i.price} each</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="qty-ctrl" style="gap:8px">
-            <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',-1)">−</button>
-            <span class="qty-num" style="font-size:16px;min-width:24px">${i.qty}</span>
-            <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',1)">+</button>
+    if(cartList) cartList.innerHTML = S.cart.filter(i => !i.is_addon).map(i => {
+      const addons = getAddonsForItem(i.name);
+      const itemAddons = S.cart.filter(a => a.is_addon && a.parent_id === i.id);
+      return `
+      <div style="margin-bottom:12px;border:1.5px solid var(--border);border-radius:14px;overflow:hidden">
+        <div class="cart-item" style="padding:14px">
+          <div class="cart-emoji" style="font-size:28px">${i.emoji||'🍽️'}</div>
+          <div class="cart-item-body" style="flex:1;min-width:0">
+            <div class="cart-item-name" style="font-size:14px;font-weight:700">${i.name}</div>
+            <div class="cart-item-price" style="font-size:12px;color:var(--muted)">₹${i.price} each</div>
           </div>
-          <div style="text-align:right;min-width:50px">
-            <div class="cart-item-total" style="font-weight:800;font-size:15px;font-family:var(--fh)">₹${i.price*i.qty}</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="qty-ctrl" style="gap:8px">
+              <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',-1)">−</button>
+              <span class="qty-num" style="font-size:16px;min-width:24px">${i.qty}</span>
+              <button class="qty-btn" style="width:34px;height:34px;font-size:18px;border-radius:10px" onclick="chgQty('${i.id}',1)">+</button>
+            </div>
+            <div style="text-align:right;min-width:50px">
+              <div class="cart-item-total" style="font-weight:800;font-size:15px;font-family:var(--fh)">₹${i.price*i.qty}</div>
+            </div>
+            <button style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;opacity:.6" onclick="chgQty('${i.id}',-${i.qty})" title="Remove">✕</button>
           </div>
-          <button style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;opacity:.6" onclick="chgQty('${i.id}',-${i.qty})" title="Remove">✕</button>
         </div>
-      </div>`).join('');
+        ${itemAddons.length > 0 ? `<div style="padding:0 14px 8px;display:flex;flex-direction:column;gap:6px">
+          ${itemAddons.map(a => `
+            <div style="display:flex;align-items:center;gap:8px;background:var(--light2);border-radius:8px;padding:6px 10px">
+              <span style="font-size:14px">${a.emoji}</span>
+              <div style="flex:1;font-size:12px;font-weight:600">${a.name} <span style="color:var(--muted)">₹${a.price}/${ADDON_MAP[a.id.split('__addon__')[1]]?.unit||'pc'}</span></div>
+              <div style="display:flex;align-items:center;gap:4px">
+                <button style="width:22px;height:22px;border:1px solid var(--border);border-radius:6px;background:var(--white);cursor:pointer;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center" onclick="addonQty('${a.id}',-1)">−</button>
+                <span style="font-size:12px;font-weight:800;min-width:16px;text-align:center">${a.qty}</span>
+                <button style="width:22px;height:22px;border:1px solid var(--border);border-radius:6px;background:var(--white);cursor:pointer;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center" onclick="addonQty('${a.id}',1)">+</button>
+              </div>
+              <span style="font-size:12px;font-weight:700;min-width:35px;text-align:right">₹${a.price*a.qty}</span>
+            </div>`).join('')}
+        </div>` : ''}
+        ${addons.length > 0 ? `<div style="padding:6px 14px 10px;border-top:1px dashed var(--border);display:flex;gap:6px;flex-wrap:wrap">
+          ${addons.map(a => {
+            const already = S.cart.find(c => c.id === i.id + '__addon__' + a.addonKey);
+            return `<button style="padding:4px 10px;font-size:11px;border-radius:8px;border:1px solid ${already?'var(--brand)':'var(--border)'};background:${already?'#FFF7ED':'var(--light2)'};cursor:pointer;font-weight:600;color:${already?'var(--brand)':'var(--mid)'}" onclick="addAddonToCart('${i.id}','${a.addonKey}')">+ ${a.label} ₹${a.price}</button>`;
+          }).join('')}
+        </div>` : ''}
+      </div>`;
+    }).join('');
   }
   const sumEl = document.getElementById('cart-summary');
   if(sumEl) sumEl.innerHTML = `
@@ -2826,13 +2965,35 @@ async function placeOrder() {
     console.error('[placeOrder] Fatal error:', err.message, err.stack);
     logError('[placeOrder] Fatal: ' + err.message, { stack: err.stack, cart: S.cart?.length });
     btn.classList.remove('btn-loading'); btn.disabled = false;
-    // Order may have gone through — check before showing error
+    // Order may have gone through — check server before showing error
     if (splitOrders && splitOrders.length > 0) {
       toast('Order placed but display error occurred. Check My Orders tab.', 'warn', '⚠️');
       S.cart = []; updateCartFloat();
       goScreen('s-home');
     } else {
-      toast('Something went wrong. Please try again.', 'error', '❌');
+      // Network may have dropped AFTER server processed — check if order exists
+      try {
+        if (sb && S.user?.id) {
+          const {data: recentOrds} = await sb.from('orders').select('id, token_number, amount_paid, status, created_at')
+            .eq('employee_id', S.user.id).order('created_at',{ascending:false}).limit(1);
+          if (recentOrds?.length) {
+            const latest = recentOrds[0];
+            const age = Date.now() - new Date(latest.created_at).getTime();
+            if (age < 60000) { // placed within last 60 seconds
+              toast(`Order was placed! Token #${latest.token_number}. Check My Orders.`, 'success', '✅');
+              S.cart = []; updateCartFloat();
+              // Refresh balance from DB
+              try {
+                const {data:empFresh} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+                if(empFresh) { S.user.wallet_balance = parseFloat(empFresh.wallet_balance)||0; setEl('nav-bal','₹'+Math.round(S.user.wallet_balance)); }
+              } catch(e){}
+              goScreen('s-home');
+              return;
+            }
+          }
+        }
+      } catch(e) {}
+      toast('Order failed — check your internet and try again.', 'error', '❌');
     }
   }
 }
@@ -3483,20 +3644,16 @@ async function updateOrderStatus(id, status) {
 async function fetchAllOrders() {
   try {
     if (!sb) return;
-    let query = sb.from('orders').select('*, order_items(*)').order('created_at', {ascending: false}).limit(200);
+    const todayStr = new Date().toISOString().slice(0,10);
+    let query = sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr+'T00:00:00').order('created_at', {ascending: false}).limit(300);
     if ((S.role === 'vendor' || S.role === 'kitchen') && S.user?.canteen_id) {
       query = query.eq('canteen_id', S.user.canteen_id);
     }
     const {data, error} = await query;
     if (error) { toast('Failed to load orders', 'warn', '⚠️'); return; }
     if (data?.length) {
-      data.forEach(o => {
-        const ex = S.allOrders.find(e => e.id === o.id);
-        if (!ex) S.allOrders.unshift({...o, items: o.order_items||[]});
-        else { ex.status = o.status; ex.items = o.order_items||ex.items; }
-      });
-      // Cap at 500 to prevent memory issues with high traffic
-      if (S.allOrders.length > 500) S.allOrders.length = 500;
+      // Replace allOrders with fresh today data instead of merging stale
+      S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
     }
   } catch(e) { console.warn('fetchAllOrders error:', e); }
 }
@@ -3568,29 +3725,31 @@ function startPoll() {
     }, 15000);
     return;
   }
-  // Vendor/Kitchen: poll every 30s as backup to Realtime (was 15s)
+  // Vendor/Kitchen: poll every 15s as backup to Realtime
   S.pollInterval = setInterval(async () => {
     try {
       if (!sb) return;
-      let q = sb.from('orders').select('id, status, token_number, canteen_id, employee_name, pickup_slot, created_at').order('created_at',{ascending:false}).limit(50);
-      if (S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
       const today = new Date().toISOString().slice(0,10);
+      let q = sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+      if (S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
       q = q.gte('created_at', today + 'T00:00:00');
       const {data} = await q;
       if (data?.length) {
         let changed = false;
+        let newCount = 0;
         data.forEach(o => {
           const ex = S.allOrders.find(ex => ex.id===o.id);
-          if (!ex) { S.allOrders.unshift({...o, items:[]}); changed = true; }
-          else if (ex.status !== o.status) { ex.status = o.status; changed = true; }
+          if (!ex) { S.allOrders.unshift({...o, items:o.order_items||[]}); changed = true; newCount++; }
+          else if (ex.status !== o.status) { ex.status = o.status; ex.items = o.order_items||ex.items; changed = true; }
         });
         if (changed) {
+          if (newCount > 0) { try { playNewOrderAlert(); } catch(e){} }
           if (S.role === 'vendor') renderVendor();
           if (S.role === 'kitchen') renderKDS();
         }
       }
     } catch(e) {}
-  }, 30000);
+  }, 15000);
 }
 
 // ═════════════════════════════════════
@@ -5446,8 +5605,25 @@ function startRealtime() {
         }
       })
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') // // removed debug log
-        if (status === 'CHANNEL_ERROR') console.warn('[FoodHub] Realtime error — falling back to polling');
+        if (status === 'SUBSCRIBED') {
+          // Connection recovered — refetch orders to catch anything missed
+          if (S.role === 'vendor' || S.role === 'kitchen') {
+            fetchAllOrders().then(() => {
+              if (S.role === 'vendor') renderVendor();
+              if (S.role === 'kitchen') renderKDS();
+            });
+          }
+        }
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('[FoodHub] Realtime error — falling back to polling');
+          // Force a poll immediately to not miss orders
+          if (S.role === 'vendor' || S.role === 'kitchen') {
+            fetchAllOrders().then(() => {
+              if (S.role === 'vendor') renderVendor();
+              if (S.role === 'kitchen') renderKDS();
+            });
+          }
+        }
       });
   } catch(e) {}
 }
