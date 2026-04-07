@@ -1866,6 +1866,13 @@ async function unifiedLogin() {
     } else if (isEmail) {
       // ── Employee login via email + password ──
       loginRole = 'employee';
+      // Domain whitelist check
+      const ALLOWED_DOMAINS_LOGIN = ['larsentoubro.com', 'lntecc.com', 'lntinfotech.com', 'ltimindtree.com'];
+      const loginDomain = input.split('@')[1]?.toLowerCase();
+      if (!ALLOWED_DOMAINS_LOGIN.includes(loginDomain)) {
+        err.textContent = 'Only L&T employees can login. Use your @larsentoubro.com email.';
+        btn.classList.remove('btn-loading'); btn.disabled = false; return;
+      }
       const { data: emp, error: empErr } = await sb.from('employees').select('*').eq('email', input).single();
       if (empErr || !emp) { err.textContent = 'Email not found. Please register first.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
       if (!emp.password_hash) { err.textContent = 'No password set. Click "Register here" to set your password.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
@@ -2054,6 +2061,13 @@ async function registerEmployeeEmail() {
   err.textContent = '';
   if (!name || name.length < 2) { err.textContent = 'Enter your full name'; return; }
   if (!email || !email.includes('@')) { err.textContent = 'Enter a valid email address'; return; }
+  // Domain whitelist — only L&T employees can register
+  const ALLOWED_DOMAINS = ['larsentoubro.com', 'lntecc.com', 'lntinfotech.com', 'ltimindtree.com'];
+  const emailDomain = email.split('@')[1]?.toLowerCase();
+  if (!ALLOWED_DOMAINS.includes(emailDomain)) {
+    err.textContent = 'Only L&T employees can register. Use your @larsentoubro.com email.';
+    return;
+  }
   btn.classList.add('btn-loading'); btn.disabled = true;
   try {
     if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
@@ -2377,7 +2391,24 @@ function renderMenu(searchQuery) {
   if (S.vegOnly) items = items.filter(m => m.is_veg);
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
-    items = S.menu.filter(m => m.name.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q));
+    // Smart fuzzy search — handles typos, partial matches, Hindi transliterations
+    items = S.menu.filter(m => {
+      if (!m.is_available) return false;
+      const name = m.name.toLowerCase();
+      const desc = (m.description || '').toLowerCase();
+      const cat = (m.category || '').toLowerCase();
+      // Exact substring match
+      if (name.includes(q) || desc.includes(q) || cat.includes(q)) return true;
+      // Fuzzy match — check if query letters appear in order (handles typos)
+      if (q.length >= 3 && _fuzzyMatch(q, name)) return true;
+      // Word-start match — "pan" matches "Paneer Butter Masala"
+      const words = name.split(/\s+/);
+      if (words.some(w => w.startsWith(q))) return true;
+      // Common misspelling map
+      const fixed = _fixSpelling(q);
+      if (fixed !== q && (name.includes(fixed) || cat.includes(fixed))) return true;
+      return false;
+    });
   }
   const el = document.getElementById('menu-list');
   if (!el) return;
@@ -2430,6 +2461,77 @@ function renderMenu(searchQuery) {
       </div>
     </div>`;
   }).join('');
+}
+
+// Fuzzy search helpers
+function _fuzzyMatch(query, target) {
+  // Returns true if all chars of query appear in target in order (allows gaps)
+  // "chikn" matches "chicken", "briyni" matches "biryani"
+  let qi = 0;
+  for (let i = 0; i < target.length && qi < query.length; i++) {
+    if (target[i] === query[qi]) qi++;
+  }
+  // Match if at least 70% of query chars found in order
+  return qi >= query.length * 0.7;
+}
+
+function _fixSpelling(q) {
+  // Common Indian food misspellings and transliterations
+  const fixes = {
+    'chiken':'chicken','chikken':'chicken','chickan':'chicken','chikin':'chicken',
+    'briyani':'biryani','biriyani':'biryani','biryni':'biryani','briani':'biryani','bryani':'biryani',
+    'panneer':'paneer','paner':'paneer','panir':'paneer','pneer':'paneer',
+    'chappati':'chapati','chapathi':'chapati','chapti':'chapati','rotti':'roti',
+    'parata':'paratha','partha':'paratha','pratha':'paratha','paratta':'paratha',
+    'dosai':'dosa','dhosa':'dosa','dossa':'dosa',
+    'idly':'idli','iddli':'idli','iddly':'idli',
+    'sambhar':'sambar','samber':'sambar','sambr':'sambar',
+    'piza':'pizza','pizaa':'pizza',
+    'coffe':'coffee','cofee':'coffee','koffee':'coffee',
+    'chay':'chai','tee':'tea','cha':'chai',
+    'naan':'naan','nan':'naan',
+    'pulav':'pulao','pullao':'pulao','pilav':'pulao','pilaf':'pulao',
+    'kabab':'kebab','kabeb':'kebab',
+    'gulaab':'gulab','jamoon':'jamun',
+    'bhaji':'bhaji','bhaaji':'bhaji',
+    'chhole':'chole','choley':'chole','chola':'chole',
+    'rajmah':'rajma','rajmaa':'rajma',
+    'gobi':'gobi','gobhi':'gobi',
+    'aaloo':'aloo','alu':'aloo',
+    'matar':'mutter','mattar':'mutter','muter':'mutter',
+    'panner':'paneer','panear':'paneer',
+    'masla':'masala','masalla':'masala',
+    'korma':'korma','kurma':'korma',
+    'sabji':'sabzi','subzi':'sabzi','subji':'sabzi',
+    'thali':'thali','thaali':'thali',
+    'lassi':'lassi','lasi':'lassi',
+    'milkshake':'milkshake','milkshek':'milkshake','milkshk':'milkshake',
+    'smothie':'smoothie','smoothi':'smoothie',
+    'omelete':'omelette','omlet':'omelette','omelet':'omelette',
+    'fride':'fried','fied':'fried','frd':'fried',
+    'rise':'rice','rics':'rice',
+    'past':'pasta','psta':'pasta',
+    'sandwch':'sandwich','sandwhich':'sandwich','sanwich':'sandwich',
+    'burgr':'burger','burgar':'burger','berger':'burger',
+    'momos':'momos','momo':'momos',
+    'manchurian':'manchurian','manchurin':'manchurian','munchurian':'manchurian',
+    'noodls':'noodles','nodles':'noodles','nudles':'noodles',
+    'uttapam':'uttapam','utpam':'uttapam','uthappam':'uttapam',
+    'vadaa':'vada','wada':'vada','bada':'vada',
+    'samosa':'samosa','samsa':'samosa',
+    'pakoda':'pakora','pakoda':'pakora','bhajia':'pakora',
+    'puri':'puri','poori':'puri',
+    'bhatura':'bhatura','batura':'bhatura',
+    'kulcha':'kulcha','kulca':'kulcha',
+    'tikka':'tikka','tika':'tikka',
+  };
+  // Check exact match first
+  if (fixes[q]) return fixes[q];
+  // Check if query starts with a known misspelling
+  for (const [wrong, right] of Object.entries(fixes)) {
+    if (q.startsWith(wrong) || wrong.startsWith(q)) return right;
+  }
+  return q;
 }
 
 function searchMenu() {
@@ -5168,6 +5270,12 @@ async function sendForgotOTP(){
   const btn = document.getElementById('fp-btn');
   err.textContent = '';
   if (!email || !email.includes('@')) { err.textContent = 'Enter a valid email'; return; }
+  const ALLOWED_DOMAINS_FP = ['larsentoubro.com', 'lntecc.com', 'lntinfotech.com', 'ltimindtree.com'];
+  const fpDomain = email.split('@')[1]?.toLowerCase();
+  if (!ALLOWED_DOMAINS_FP.includes(fpDomain)) {
+    err.textContent = 'Only L&T employee emails are allowed.';
+    return;
+  }
   btn.classList.add('btn-loading'); btn.disabled = true;
   try {
     if (!sb) { err.textContent = 'Database not connected'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
@@ -6032,6 +6140,8 @@ function previewImport(input){
       // Validate
       if (!name || name.length < 2) { errors.push(`Row ${lineNum+2}: Name missing or too short`); return; }
       if (!email || !email.includes('@')) { errors.push(`Row ${lineNum+2}: Invalid email for "${name}"`); return; }
+      const csvDomain = email.split('@')[1]?.toLowerCase();
+      if (!['larsentoubro.com','lntecc.com','lntinfotech.com','ltimindtree.com'].includes(csvDomain)) { errors.push(`Row ${lineNum+2}: Non-L&T email "${email}" — only @larsentoubro.com allowed`); return; }
       if (phone && (phone.length < 10 || !/^\d+$/.test(phone.replace(/[+\-\s]/g,'')))) { errors.push(`Row ${lineNum+2}: Invalid phone for "${name}" (skipping phone)`); }
 
       const cleanPhone = phone.replace(/[+\-\s]/g,'').slice(-10);
