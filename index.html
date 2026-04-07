@@ -1812,8 +1812,7 @@ async function unifiedLogin() {
         if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
         S.role = 'vendor';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
-        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(50); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
-        // Sync canteen open state from DB
+        try { const todayStr = new Date().toISOString().slice(0,10); const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
         try {
           const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
           if (canRow) { _kitchenOpen = canRow.is_open; const c = S.canteens.find(x=>x.id===counter.id); if(c) c.is_open = canRow.is_open; }
@@ -1825,7 +1824,7 @@ async function unifiedLogin() {
         if (!counter) { err.textContent = 'No canteen assigned.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
         S.role = 'kitchen';
         S.user = { id: staffId, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
-        try { const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at',{ascending:false}).limit(50); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
+        try { const todayStr = new Date().toISOString().slice(0,10); const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at',{ascending:false}).limit(200); if(data?.length) S.allOrders = data.map(o=>({...o, items:o.order_items||[]})); } catch(e){}
         // Fetch actual canteen open/close state from DB
         try {
           const {data: canRow} = await sb.from('canteens').select('is_open').eq('id', counter.id).single();
@@ -2127,7 +2126,8 @@ async function doLogin() {
         S.role = 'vendor';
         S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try {
-          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(50);
+          const todayStr = new Date().toISOString().slice(0,10);
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at', { ascending: false }).limit(200);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-vendor');
@@ -2139,7 +2139,8 @@ async function doLogin() {
         S.role = 'kitchen';
         S.user = { id, name: authResult.name, initials: counter.icon, canteen_id: counter.id };
         try {
-          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).order('created_at', { ascending: false }).limit(50);
+          const todayStr = new Date().toISOString().slice(0,10);
+          const { data } = await sb.from('orders').select('*, order_items(*)').eq('canteen_id', counter.id).gte('created_at', todayStr+'T00:00:00').order('created_at', { ascending: false }).limit(200);
           if (data?.length) S.allOrders = data.map(o => ({ ...o, items: o.order_items || [] }));
         } catch (e) { }
         goScreen('s-kitchen');
