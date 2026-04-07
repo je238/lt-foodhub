@@ -2,8 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>SLP Nexus — Campus Cafeteria</title>
+<script>
+// Capacitor crash prevention — must run before anything else
+window._isCapacitor = (typeof window.Capacitor !== 'undefined') || navigator.userAgent.includes('SLPNexus');
+// Prevent WebView crash on uncaught errors
+window.addEventListener('error', function(e) { e.preventDefault(); return true; }, true);
+window.addEventListener('unhandledrejection', function(e) { e.preventDefault(); }, true);
+// Memory cleanup — garbage collect every 60s on mobile
+if (window._isCapacitor) {
+  setInterval(function() {
+    try { if (window.gc) window.gc(); } catch(e) {}
+    // Trim old orders from memory (keep last 100)
+    try { if (window.S && window.S.allOrders && window.S.allOrders.length > 100) window.S.allOrders.length = 100; } catch(e) {}
+    try { if (window.S && window.S.orders && window.S.orders.length > 50) window.S.orders.length = 50; } catch(e) {}
+  }, 60000);
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://browser.sentry-cdn.com/7.99.0/bundle.min.js" crossorigin="anonymous"></script>
 <script>
@@ -31,6 +50,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 <style>
+
+/* ===== CAPACITOR SAFE AREA ===== */
+body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+.bnav { padding-bottom: env(safe-area-inset-bottom); }
 
 /* ===== MOBILE SCROLL NUCLEAR FIX ===== */
 html, body {
@@ -2200,18 +2223,20 @@ function logout() {
 // HOME / MENU
 // ═════════════════════════════════════
 function renderHome() {
+  try {
   if (!S.user) return;
   const hr = new Date().getHours();
   setElInner('h-name', 'Hey ' + (S.user.name||'').split(' ')[0] + ',<br><span style="font-weight:800">kya khaoge aaj? 😋</span>');
-  setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
-  setEl('nav-av', S.user.initials || initials(S.user.name));
+  setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance || 0));
+  setEl('nav-av', S.user.initials || initials(S.user.name || ''));
   const _todayStr = new Date().toISOString().slice(0,10);
-  const _todayOrders = S.orders.filter(o => o.created_at && String(o.created_at).slice(0,10) === _todayStr);
+  const _todayOrders = (S.orders||[]).filter(o => o.created_at && String(o.created_at).slice(0,10) === _todayStr);
   setEl('h-orders-count', `📋 ${_todayOrders.length} orders today`);
   renderCanteens();
   renderCats();
   renderMenu();
   generateSlots();
+  } catch(e) { console.error('[renderHome crash]', e); }
 }
 
 // Canteen background images by canteen id
@@ -5084,22 +5109,33 @@ function loadSession(){
   } catch(e){ return false; }
 }
 function clearSession(){ try{ localStorage.removeItem('fh-session'); }catch(e){} stopRealtime(); }
-// Refresh session timestamp on any tap so active users never get logged out
-document.addEventListener('click', () => { if(S.user && S.role==='employee') saveSession(); }, { passive: true });
+// Refresh session timestamp every 5 minutes (not every click — saves battery + prevents crash)
+let _lastSessionSave = 0;
+document.addEventListener('click', () => { 
+  if(S.user && S.role==='employee' && Date.now() - _lastSessionSave > 300000) { 
+    _lastSessionSave = Date.now(); saveSession(); 
+  } 
+}, { passive: true });
 
 // ══════════════════════════════════════════════════════
 // ④ GLOBAL ERROR HANDLER
 // ══════════════════════════════════════════════════════
 window.onerror = function(msg, src, line, col, err){
   console.error('[FoodHub Error]', msg, src, line, col, err);
-  // Don't show toast for minor errors — only critical ones
-  if(msg && msg.includes('Cannot read') || msg && msg.includes('is not a function')){
-    toast('Something went wrong. Please refresh.','error','⚠️');
+  if(msg && (msg.includes('Cannot read') || msg.includes('is not a function') || msg.includes('null'))){
+    // Try to recover silently — don't crash the whole app
+    try {
+      if (S.role === 'employee' && document.getElementById('s-home')?.classList.contains('active')) {
+        setTimeout(() => { try { renderHome(); } catch(e){} }, 500);
+      }
+    } catch(e){}
   }
-  return false;
+  return true; // Suppress error from propagating (prevents APK crash)
 };
 window.onunhandledrejection = function(e){
-  // warn removed
+  console.warn('[FoodHub] Unhandled promise:', e?.reason?.message || e);
+  // Prevent crash — swallow unhandled rejections from Supabase/network
+  e.preventDefault?.();
 };
 
 // ══════════════════════════════════════════════════════
@@ -7216,11 +7252,9 @@ async function showDailyMenuSelector() {
     try {
       const {data} = await sb.from('menu_items').select('*').eq('canteen_id', cid).order('category').order('name');
       if (data?.length) {
-        data.forEach(dbItem => {
-          const existing = S.menu.find(m => m.id === dbItem.id);
-          if (existing) Object.assign(existing, dbItem);
-          else S.menu.push(dbItem);
-        });
+        // Remove old items for this canteen, then add fresh from DB
+        S.menu = S.menu.filter(m => m.canteen_id !== cid);
+        data.forEach(dbItem => S.menu.push(dbItem));
       }
     } catch(e) {}
   }
