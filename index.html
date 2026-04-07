@@ -2827,13 +2827,35 @@ async function placeOrder() {
     console.error('[placeOrder] Fatal error:', err.message, err.stack);
     logError('[placeOrder] Fatal: ' + err.message, { stack: err.stack, cart: S.cart?.length });
     btn.classList.remove('btn-loading'); btn.disabled = false;
-    // Order may have gone through — check before showing error
+    // Order may have gone through — check server before showing error
     if (splitOrders && splitOrders.length > 0) {
       toast('Order placed but display error occurred. Check My Orders tab.', 'warn', '⚠️');
       S.cart = []; updateCartFloat();
       goScreen('s-home');
     } else {
-      toast('Something went wrong. Please try again.', 'error', '❌');
+      // Network may have dropped AFTER server processed — check if order exists
+      try {
+        if (sb && S.user?.id) {
+          const {data: recentOrds} = await sb.from('orders').select('id, token_number, amount_paid, status, created_at')
+            .eq('employee_id', S.user.id).order('created_at',{ascending:false}).limit(1);
+          if (recentOrds?.length) {
+            const latest = recentOrds[0];
+            const age = Date.now() - new Date(latest.created_at).getTime();
+            if (age < 60000) { // placed within last 60 seconds
+              toast(`Order was placed! Token #${latest.token_number}. Check My Orders.`, 'success', '✅');
+              S.cart = []; updateCartFloat();
+              // Refresh balance from DB
+              try {
+                const {data:empFresh} = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+                if(empFresh) { S.user.wallet_balance = parseFloat(empFresh.wallet_balance)||0; setEl('nav-bal','₹'+Math.round(S.user.wallet_balance)); }
+              } catch(e){}
+              goScreen('s-home');
+              return;
+            }
+          }
+        }
+      } catch(e) {}
+      toast('Order failed — check your internet and try again.', 'error', '❌');
     }
   }
 }
@@ -3565,29 +3587,31 @@ function startPoll() {
     }, 15000);
     return;
   }
-  // Vendor/Kitchen: poll every 30s as backup to Realtime (was 15s)
+  // Vendor/Kitchen: poll every 15s as backup to Realtime
   S.pollInterval = setInterval(async () => {
     try {
       if (!sb) return;
-      let q = sb.from('orders').select('id, status, token_number, canteen_id, employee_name, pickup_slot, created_at').order('created_at',{ascending:false}).limit(50);
-      if (S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
       const today = new Date().toISOString().slice(0,10);
+      let q = sb.from('orders').select('*, order_items(*)').order('created_at',{ascending:false}).limit(100);
+      if (S.user?.canteen_id) q = q.eq('canteen_id', S.user.canteen_id);
       q = q.gte('created_at', today + 'T00:00:00');
       const {data} = await q;
       if (data?.length) {
         let changed = false;
+        let newCount = 0;
         data.forEach(o => {
           const ex = S.allOrders.find(ex => ex.id===o.id);
-          if (!ex) { S.allOrders.unshift({...o, items:[]}); changed = true; }
-          else if (ex.status !== o.status) { ex.status = o.status; changed = true; }
+          if (!ex) { S.allOrders.unshift({...o, items:o.order_items||[]}); changed = true; newCount++; }
+          else if (ex.status !== o.status) { ex.status = o.status; ex.items = o.order_items||ex.items; changed = true; }
         });
         if (changed) {
+          if (newCount > 0) { try { playNewOrderAlert(); } catch(e){} }
           if (S.role === 'vendor') renderVendor();
           if (S.role === 'kitchen') renderKDS();
         }
       }
     } catch(e) {}
-  }, 30000);
+  }, 15000);
 }
 
 // ═════════════════════════════════════
@@ -5443,8 +5467,25 @@ function startRealtime() {
         }
       })
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') // // removed debug log
-        if (status === 'CHANNEL_ERROR') console.warn('[FoodHub] Realtime error — falling back to polling');
+        if (status === 'SUBSCRIBED') {
+          // Connection recovered — refetch orders to catch anything missed
+          if (S.role === 'vendor' || S.role === 'kitchen') {
+            fetchAllOrders().then(() => {
+              if (S.role === 'vendor') renderVendor();
+              if (S.role === 'kitchen') renderKDS();
+            });
+          }
+        }
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('[FoodHub] Realtime error — falling back to polling');
+          // Force a poll immediately to not miss orders
+          if (S.role === 'vendor' || S.role === 'kitchen') {
+            fetchAllOrders().then(() => {
+              if (S.role === 'vendor') renderVendor();
+              if (S.role === 'kitchen') renderKDS();
+            });
+          }
+        }
       });
   } catch(e) {}
 }
