@@ -1,10 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS, GET"};
-const ICICI_URL="https://pgpayuat.icicibank.com/tsp/pg/api/v2/initiateSale";
-const MID=Deno.env.get("ICICI_MERCHANT_ID")||"100000000007164";
-const AID=Deno.env.get("ICICI_AGGREGATOR_ID")||"A100000000007164";
-const SECK=Deno.env.get("ICICI_SECURE_KEY")||"db06cca0-838b-4e01-8b20-6ac446ffb6bd";
+const ICICI_URL="https://pgpay.icicibank.com/tsp/pg/api/v2/initiateSale";
+const MID=Deno.env.get("ICICI_MERCHANT_ID")||"100000000417983";
+const AID=Deno.env.get("ICICI_AGGREGATOR_ID")||"A100000000417983";
+const SECK=Deno.env.get("ICICI_SECURE_KEY")||"X7p1JrAuzTI=:9WqQgU/bFUmX308dq7DYyZ3yBNpNvMe+BnZxXzJyPNdPAn3xgagg1yA7FIdSZZhznFxEIw==";
 const SU=Deno.env.get("SUPABASE_URL")||"https://lorgclscnjdbngqurdsw.supabase.co";
 const SK=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
 const WEB_URL="https://slp-nexus.vercel.app";
