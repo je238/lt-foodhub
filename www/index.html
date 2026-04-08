@@ -24,22 +24,24 @@ if (window._isCapacitor) {
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://browser.sentry-cdn.com/7.99.0/bundle.min.js" crossorigin="anonymous"></script>
 <script>
-  if(typeof Sentry !== 'undefined'){
-    const SENTRY_DSN = "https://7ca3473134de59566329c92055e105f6@o4511078990020608.ingest.us.sentry.io/4511079000440832";
-    if(SENTRY_DSN) {
-      Sentry.init({
-        dsn: SENTRY_DSN,
-        environment: location.hostname === 'localhost' ? 'development' : 'production',
-        tracesSampleRate: 0.2,
-        beforeSend(event){
-          if(event.exception?.values?.[0]?.type === 'NetworkError') return null;
-          return event;
-        }
-      });
-    }
-  }
+  // Defer Sentry — load 3s after boot (non-blocking for APK)
+  setTimeout(function(){
+    var s=document.createElement('script');
+    s.src='https://browser.sentry-cdn.com/7.99.0/bundle.min.js';
+    s.crossOrigin='anonymous';
+    s.onload=function(){
+      if(typeof Sentry!=='undefined'){
+        Sentry.init({
+          dsn:'https://7ca3473134de59566329c92055e105f6@o4511078990020608.ingest.us.sentry.io/4511079000440832',
+          environment:'production',
+          tracesSampleRate:0.05,
+          beforeSend:function(event){if(event.exception?.values?.[0]?.type==='NetworkError')return null;return event;}
+        });
+      }
+    };
+    document.head.appendChild(s);
+  }, 3000);
   window.logError = function(msg, extra){
     console.error(msg, extra);
     if(typeof Sentry !== 'undefined' && Sentry.captureException) Sentry.captureException(new Error(msg), { extra });
@@ -50,6 +52,25 @@ if (window._isCapacitor) {
 <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 <style>
+
+/* ===== CAPACITOR / MOBILE PERFORMANCE ===== */
+@media (max-width: 768px), (hover: none) {
+  /* Kill backdrop-filter on mobile — saves massive GPU */
+  .toast, .modal-bg, .tnav, .wallet-chip, .bnav, 
+  .hero-btn-secondary, .hero-chip, .profile-avatar, 
+  .vendor-stat, .unavail-badge { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  /* Solid backgrounds instead of translucent + blur */
+  .tnav { background: #140600 !important; }
+  .bnav { background: #fff !important; }
+  .modal-bg { background: rgba(15,23,42,.7) !important; }
+  .toast { background: #0F172A !important; }
+  /* Reduce animation durations */
+  *, *::before, *::after { animation-duration: 0.15s !important; transition-duration: 0.1s !important; }
+  /* Disable stagger animations */
+  .menu-item, .canteen-card, .order-card { animation: none !important; }
+  /* Hardware acceleration for scrolling */
+  .scroll, .page { -webkit-overflow-scrolling: touch; will-change: scroll-position; }
+}
 
 /* ===== CAPACITOR SAFE AREA ===== */
 body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
@@ -2375,12 +2396,21 @@ const _FOOD_IMG_MAP = {
   'cake':'photo-1578985545062-69928b1d9587','brownie':'photo-1578985545062-69928b1d9587',
   'cookie':'photo-1499636136210-6f4ee915583e','bread':'photo-1565557623262-b51c2513a641'
 };
+const _foodImgCache = {};
 function _getFoodImg(name, emoji) {
   if (!name) return '';
+  // Cache lookup
+  if (_foodImgCache[name] !== undefined) return _foodImgCache[name];
   const n = name.toLowerCase();
   for (const [key, photoId] of Object.entries(_FOOD_IMG_MAP)) {
-    if (n.includes(key)) return `https://images.unsplash.com/${photoId}?w=220&h=220&fit=crop&q=75`;
+    if (n.includes(key)) {
+      // Smaller images on APK for speed (120px vs 160px)
+      const size = window._isCapacitor ? 120 : 160;
+      _foodImgCache[name] = `https://images.unsplash.com/${photoId}?w=${size}&h=${size}&fit=crop&q=40`;
+      return _foodImgCache[name];
+    }
   }
+  _foodImgCache[name] = '';
   return '';
 }
 
@@ -2418,7 +2448,12 @@ function renderMenu(searchQuery) {
   }
   const canteenName = searchQuery ? '' : (S.selCanteen?.name || 'Canteen');
   setEl('menu-sec-title', searchQuery ? `Search results for "${searchQuery}"` : `${canteenName} Menu`);
-  el.innerHTML = items.map(m => {
+  // Render in batches for smooth scrolling on APK
+  const BATCH = window._isCapacitor ? 30 : 50;
+  const visible = items.slice(0, BATCH);
+  const remaining = items.length - BATCH;
+  window._pendingMenuItems = remaining > 0 ? items.slice(BATCH) : [];
+  el.innerHTML = visible.map(m => {
     const ci = S.cart.find(c => c.id === m.id);
     const qty = ci ? ci.qty : 0;
     const stock = S.inventory[m.id] ?? m.stock ?? 99;
@@ -2460,7 +2495,28 @@ function renderMenu(searchQuery) {
         </div>
       </div>
     </div>`;
+  }).join('') + (window._pendingMenuItems?.length > 0 ? `<div style="text-align:center;padding:16px"><button class="btn btn-ghost" onclick="loadMoreMenu()" style="font-size:13px">Show ${window._pendingMenuItems.length} more items ↓</button></div>` : '');
+}
+
+function loadMoreMenu() {
+  const el = document.getElementById('menu-list');
+  if (!el || !window._pendingMenuItems?.length) return;
+  const btn = el.querySelector('[onclick*="loadMoreMenu"]');
+  if (btn) btn.parentElement.remove();
+  const next = window._pendingMenuItems.splice(0, 30);
+  const fragment = next.map(m => {
+    const ci = S.cart.find(c => c.id === m.id);
+    const qty = ci ? ci.qty : 0;
+    const stock = S.inventory[m.id] ?? m.stock ?? 99;
+    const avail = m.is_available !== false && stock > 0;
+    const imgUrl = m.image_url || _getFoodImg(m.name, m.emoji);
+    return `<div class="menu-item${!avail?' unavailable':''}">
+      <div class="menu-img-wrap">${imgUrl?`<img src="${imgUrl}" alt="${m.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${m.emoji||'🍽️'}</div>'">`:`<div class="menu-img-emoji">${m.emoji||'🍽️'}</div>`}</div>
+      <div class="menu-body"><div><div class="menu-name"><div class="${m.is_veg?'veg-dot':'nveg-dot'}"></div>${m.name}</div></div>
+      <div class="menu-footer"><div><span class="menu-price">₹${m.price}</span></div>
+      <div class="mc" id="mc-${m.id}">${qty>0?`<div class="qty-ctrl"><button class="qty-btn" onclick="chgQty('${m.id}',-1)">−</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="chgQty('${m.id}',1)">+</button></div>`:`<button class="add-btn" onclick="addCart('${m.id}')">ADD</button>`}</div></div></div></div>`;
   }).join('');
+  el.insertAdjacentHTML('beforeend', fragment + (window._pendingMenuItems.length > 0 ? `<div style="text-align:center;padding:16px"><button class="btn btn-ghost" onclick="loadMoreMenu()" style="font-size:13px">Show ${window._pendingMenuItems.length} more ↓</button></div>` : ''));
 }
 
 // Fuzzy search helpers
@@ -3762,10 +3818,12 @@ async function fetchAllOrders() {
     }
     const {data, error} = await query;
     if (error) { toast('Failed to load orders', 'warn', '⚠️'); return; }
-    if (data?.length) {
-      // Replace allOrders with fresh today data instead of merging stale
-      S.allOrders = data.map(o => ({...o, items: o.order_items||[]}));
-    }
+    // Always replace with fresh data — even if empty (means no orders today)
+    S.allOrders = (data || []).map(o => ({...o, items: o.order_items||[]}));
+    // Sync _prevOrderCount so sound plays correctly for NEXT new order
+    const myCid = S.user?.canteen_id;
+    const relevant = myCid ? S.allOrders.filter(o => o.canteen_id === myCid) : S.allOrders;
+    _prevOrderCount = relevant.filter(o => o.status === 'new').length;
   } catch(e) { console.warn('fetchAllOrders error:', e); }
 }
 
@@ -4935,8 +4993,7 @@ async function exportRealReport() {
         const d = new Date(o.created_at);
         return `${d.toLocaleDateString('en-IN')},${d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})},#${o.token_number},${o.employee_name},${o.canteen_name},${o.item_total||0},${o.gst_amount||0},${o.amount_paid||0},${o.status}`;
       }).join('\n');
-    const blob = new Blob([csv], {type:'text/csv'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'lt-foodhub-report-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+    downloadCSV(csv, 'lt-foodhub-report-'+new Date().toISOString().slice(0,10)+'.csv');
     toast('Report downloaded!', 'success', '📥');
   } catch(e) { toast('Export failed: '+e.message, 'error', '❌'); }
 }
@@ -4960,9 +5017,7 @@ async function exportDishReport() {
     });
     const rows = Object.values(dishMap).sort((a,b) => b.qty - a.qty);
     const csv = 'Dish,Orders,Revenue\n' + rows.map(d => `"${d.name}",${d.qty},${Math.round(d.revenue)}`).join('\n');
-    const blob = new Blob([csv], {type:'text/csv'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'dish-report-' + new Date().toISOString().slice(0,7) + '.csv'; a.click();
+    downloadCSV(csv, 'dish-report-' + new Date().toISOString().slice(0,7) + '.csv');
     toast('Dish report downloaded!', 'success', '📥');
   } catch(e) { toast('Export failed: '+e.message, 'error', '❌'); }
 }
@@ -5078,6 +5133,35 @@ function setEl(id, text) {
 function setElInner(id, html) {
   const el = document.getElementById(id);
   if (el) el.innerHTML = html;
+}
+// Universal file download — works on both web (Blob) and APK (data URI)
+function downloadCSV(csv, filename) {
+  try {
+    if (window._isCapacitor || /android|mobile/i.test(navigator.userAgent)) {
+      // APK/mobile: use data URI — Blob downloads don't work in Capacitor WebView
+      const encoded = encodeURIComponent(csv);
+      const a = document.createElement('a');
+      a.href = 'data:text/csv;charset=utf-8,' + encoded;
+      a.download = filename;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => a.remove(), 100);
+    } else {
+      // Web: use Blob (faster for large files)
+      const blob = new Blob([csv], {type:'text/csv'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+  } catch(e) {
+    // Fallback: open in new tab
+    const win = window.open('', '_blank');
+    if (win) { win.document.write('<pre>' + csv.replace(/</g,'&lt;') + '</pre>'); win.document.title = filename; }
+    else toast('Download blocked — allow pop-ups', 'warn', '⚠️');
+  }
 }
 function initials(name) {
   return (name||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
@@ -5648,23 +5732,24 @@ function startRealtime() {
           if (sb) sb.from('order_items').select('*').eq('order_id', o.id).then(({ data }) => {
             const ord = S.allOrders.find(ex => ex.id === o.id);
             if (ord && data) { ord.items = data; }
-            // Force immediate re-render for kitchen/vendor
             if (S.role === 'vendor') renderVendor();
             if (S.role === 'kitchen') renderKDS();
           }).catch(() => {});
-          checkNewOrders();
-          // Immediate render — don't wait for debounce
-          if (S.role === 'vendor') { renderVendor(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
-          if (S.role === 'kitchen') { renderKDS(); toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕'); }
+          // Play sound + show toast IMMEDIATELY for kitchen/vendor
+          if (S.role === 'vendor' || S.role === 'kitchen') {
+            try { playNewOrderAlert(); } catch(e) {}
+            toast(`🔔 New order #${o.token_number||''}!`, 'info', '🆕');
+            renderVendor && S.role === 'vendor' && renderVendor();
+            renderKDS && S.role === 'kitchen' && renderKDS();
+          }
           if (S.role === 'admin') {
-            S.allOrders.unshift({...o, items:[]});
             if (sb) sb.from('order_items').select('*').eq('order_id', o.id).then(({data}) => {
               const ord = S.allOrders.find(ex => ex.id === o.id);
               if (ord && data) ord.items = data;
               renderAdmin(S.adminTab || 'orders');
             });
           }
-          // Employee: no toast — they already see their order on success screen
+          _prevOrderCount = S.allOrders.filter(o2 => o2.status === 'new').length;
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, payload => {
@@ -5734,6 +5819,18 @@ function startRealtime() {
               toast(`Feedback update from admin${note}`, 'info', '📝');
             }
           }
+        }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'broadcast_messages' }, payload => {
+        // Admin sent a broadcast message
+        if (S.role === 'employee') {
+          const bc = payload.new;
+          // Check if targeted to this canteen or all
+          if (bc.target_canteen && bc.target_canteen !== S.selCanteen?.id) return;
+          const icons = { info: '📢', warn: '⚠️', promo: '🎉', closed: '🔴' };
+          const icon = icons[bc.type] || '📢';
+          addNotif(`${icon} ${bc.message}`, icon);
+          toast(`${icon} ${bc.message}`, bc.type === 'warn' || bc.type === 'closed' ? 'warn' : 'success', icon, 8000);
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'employees' }, payload => {
@@ -6224,8 +6321,7 @@ async function importEmployees(){
 }
 function downloadSampleCSV(){
   const csv='EmployeeID,Name,Email,Department,Phone,WalletBalance\nLT-EMP-00001,Rahul Gupta,rahul@larsentoubro.com,Engineering,9876543210,500\nLT-EMP-00002,Priya Singh,priya@larsentoubro.com,Marketing,9876543211,500\nLT-EMP-00003,Amit Kumar,amit.k@larsentoubro.com,Finance,9876543212,500';
-  const blob=new Blob([csv],{type:'text/csv'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='lt-employees-template.csv'; a.click();
+  downloadCSV(csv, 'lt-employees-template.csv');
 }
 
 // ══════════════════════════════════════════════════════
@@ -6234,27 +6330,54 @@ function downloadSampleCSV(){
 function showBroadcastModal(){
   showModal(`
     <div class="modal-head">
-      <span class="modal-title">Broadcast Message</span>
+      <span class="modal-title">📢 Broadcast to All Employees</span>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div style="text-align:center;padding:24px 0">
-        <div style="font-size:40px;margin-bottom:12px">📢</div>
-        <div style="font-weight:700;font-size:16px;margin-bottom:8px">Push Notifications Coming Soon</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:20px">Real push notifications require Firebase Cloud Messaging (FCM) setup. This feature will be available after pilot launch.</div>
-        <div style="background:var(--light2);border-radius:12px;padding:16px;text-align:left;font-size:13px">
-          <div style="font-weight:600;margin-bottom:8px">In-app alerts work now:</div>
-          <div style="color:var(--muted)">Employees see notifications instantly when they have the app open — for order ready, stock updates, and announcements.</div>
-        </div>
+      <div style="background:var(--light2);border-radius:10px;padding:10px;font-size:12px;margin-bottom:14px;color:var(--muted)">
+        This message will appear as a notification on <strong>all employee screens</strong> who have the app open. It also stays in their notification bell.
       </div>
-      <button class="btn btn-ghost btn-full" onclick="closeModal()">Close</button>
+      <div class="form-group">
+        <label class="form-label">Message Type</label>
+        <select class="form-input form-select" id="bc-type">
+          <option value="info">📢 Announcement</option>
+          <option value="warn">⚠️ Alert / Warning</option>
+          <option value="promo">🎉 Offer / Promotion</option>
+          <option value="closed">🔴 Closure Notice</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Message</label>
+        <textarea class="form-input" id="bc-msg" rows="3" placeholder="e.g. All canteens will close early at 2 PM today due to maintenance."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Target</label>
+        <select class="form-input form-select" id="bc-target">
+          <option value="all">All Employees</option>
+          ${S.canteens.map(c => `<option value="${c.id}">${c.icon} ${c.name} only</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="sendBroadcast()">📢 Send Broadcast</button>
     </div>`);
 }
-function sendBroadcast(){
+async function sendBroadcast(){
   const msg = document.getElementById('bc-msg')?.value.trim();
+  const type = document.getElementById('bc-type')?.value || 'info';
+  const target = document.getElementById('bc-target')?.value || 'all';
   if(!msg){ toast('Please enter a message','error','⚠️'); return; }
-  closeModal();
-  toast('📢 Broadcast feature coming soon — notifications will be sent via push when ready', 'info', '📢');
+  if(!sb){ toast('Database not connected','error','❌'); return; }
+  try {
+    const { error } = await sb.from('broadcast_messages').insert({
+      message: msg,
+      type: type,
+      target_canteen: target === 'all' ? null : target,
+      sent_by: S.user?.id || 'admin',
+      created_at: new Date().toISOString()
+    });
+    if (error) { toast('Broadcast failed: ' + error.message, 'error', '❌'); return; }
+    closeModal();
+    toast('📢 Broadcast sent to ' + (target === 'all' ? 'all employees' : S.canteens.find(c=>c.id===target)?.name || target), 'success', '📢');
+  } catch(e) { toast('Error: ' + e.message, 'error', '❌'); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -6366,10 +6489,7 @@ function downloadWalletStatement(){
     return `"${t.date}","${t.type}","${t.name}","${t.type==='credit'?'+':'−'}${t.amount}","₹${Math.round(balance)}"`;
   }).join('\n');
   const csv = header+rows;
-  const blob = new Blob([csv],{type:'text/csv'});
-  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=`wallet-statement-${S.user.id}-${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
+  downloadCSV(csv, `wallet-statement-${S.user.id}-${new Date().toISOString().slice(0,10)}.csv`);
   toast('Wallet statement downloaded!','success','📥');
 }
 
