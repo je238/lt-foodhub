@@ -1558,8 +1558,8 @@ function goScreen(id) {
     document.getElementById('pay-opt-wallet')?.classList.add('active');
     renderCart();
   }
-  if (id === 's-vendor') { fetchAllOrders().then(() => renderVendor()); startPoll(); startRealtime(); }
-  if (id === 's-kitchen') { fetchAllOrders().then(() => renderKDS()); startPoll(); startRealtime(); }
+  if (id === 's-vendor') { fetchAllOrders().then(() => renderVendor()); startPoll(); startRealtime(); setTimeout(()=>{ fetchAllOrders().then(()=>renderVendor()); }, 2000); }
+  if (id === 's-kitchen') { fetchAllOrders().then(() => renderKDS()); startPoll(); startRealtime(); setTimeout(()=>{ fetchAllOrders().then(()=>renderKDS()); }, 2000); }
   if (id === 's-home') { startPoll(); startRealtime(); }
   if (id === 's-admin') { fetchAllOrders().then(() => renderAdmin('overview')); }
 }
@@ -3894,7 +3894,7 @@ function startPoll() {
     }, 15000);
     return;
   }
-  // Vendor/Kitchen: poll every 15s as backup to Realtime
+  // Vendor/Kitchen: poll every 8s as backup to Realtime
   S.pollInterval = setInterval(async () => {
     try {
       if (!sb) return;
@@ -3918,7 +3918,7 @@ function startPoll() {
         }
       }
     } catch(e) {}
-  }, 15000);
+  }, 8000);
 }
 
 // ═════════════════════════════════════
@@ -5664,7 +5664,7 @@ function debouncedRenderDashboard() {
     _renderDashboardTimer = null;
     if (S.role === 'vendor') renderVendor();
     if (S.role === 'kitchen') renderKDS();
-  }, 800); // Collect events for 800ms, then render once
+  }, 300); // 300ms — fast enough to feel instant
 }
 
 function startRealtime() {
