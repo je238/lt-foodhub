@@ -1568,8 +1568,8 @@ function goScreen(id) {
     document.getElementById('pay-opt-wallet')?.classList.add('active');
     renderCart();
   }
-  if (id === 's-vendor') { fetchAllOrders().then(() => renderVendor()); startPoll(); startRealtime(); setTimeout(()=>{ fetchAllOrders().then(()=>renderVendor()); }, 2000); }
-  if (id === 's-kitchen') { fetchAllOrders().then(() => renderKDS()); startPoll(); startRealtime(); setTimeout(()=>{ fetchAllOrders().then(()=>renderKDS()); }, 2000); }
+  if (id === 's-vendor') { fetchAllOrders().then(() => renderVendor()); startPoll(); startRealtime(); }
+  if (id === 's-kitchen') { fetchAllOrders().then(() => renderKDS()); startPoll(); startRealtime(); }
   if (id === 's-home') { startPoll(); startRealtime(); }
   if (id === 's-admin') { fetchAllOrders().then(() => renderAdmin('overview')); }
 }
@@ -3926,7 +3926,7 @@ function startPoll() {
           }
         }
       } catch(e) {}
-    }, 30000);
+    }, 15000);
     // Menu poll removed — Realtime UPDATE listener on menu_items handles it instantly
     // Order status poll every 15s — only for active orders (minimal queries)
     S._menuPollInterval = setInterval(async () => {
@@ -3960,7 +3960,7 @@ function startPoll() {
           renderMyOrders();
         });
       } catch(e) {}
-    }, 15000);
+    }, 10000);
     return;
   }
   // Vendor/Kitchen: poll every 8s as backup to Realtime
@@ -5828,8 +5828,10 @@ function startRealtime() {
         if (ex) { ex.status = o.status; ex.rating = o.rating; }
         const empOrd = S.orders.find(e => e.id === o.id);
         if (empOrd) { empOrd.status = o.status; }
+        // Render IMMEDIATELY — no debounce
         if (S.role === 'admin') renderAdmin(S.adminTab || 'orders');
-        else debouncedRenderDashboard();
+        if (S.role === 'vendor') renderVendor();
+        if (S.role === 'kitchen') renderKDS();
         if (S.role === 'employee') {
           const myOrd = S.orders.find(e => e.id === o.id);
           if (myOrd) {
@@ -5844,7 +5846,8 @@ function startRealtime() {
             }
             if (o.status === 'preparing') {
               myOrd.status = 'preparing';
-              addNotif(`Order #${myOrd.token_number} is being prepared`, '⏳');
+              addNotif(`Order #${myOrd.token_number} is being prepared 🍳`, '⏳');
+              toast(`Order #${myOrd.token_number} is being prepared 🍳`, 'info', '⏳');
               renderMyOrders();
             }
             if (o.status === 'done') {
