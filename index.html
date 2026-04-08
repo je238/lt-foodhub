@@ -1557,7 +1557,7 @@ function goScreen(id) {
   // Hide cart float unless on home
   const cf = document.getElementById('cart-float');
   if (id === 's-home') updateCartFloat();
-  else if(cf) cf.classList.add('gone');
+  else if(cf) { cf.classList.add('gone'); cf.style.display = 'none'; }
   // Close notif panel
   document.getElementById('notif-panel')?.classList.add('hidden');
   // Close any open modal
@@ -1593,7 +1593,7 @@ function goTab(tab, btn) {
   }
   const cf = document.getElementById('cart-float');
   if (tab === 'home') updateCartFloat();
-  else if(cf) cf.classList.add('gone');
+  else if(cf) { cf.classList.add('gone'); cf.style.display = 'none'; }
   document.getElementById('notif-panel')?.classList.add('hidden');
   if (tab === 'wallet') renderWallet();
   if (tab === 'orders') renderMyOrders();
@@ -2786,13 +2786,14 @@ function updateCartFloat() {
   const fees = calcFees(price);
   const cf = document.getElementById('cart-float');
   if (!cf) return;
-  if (tot === 0) {
-    cf.classList.add('gone');
+  // Check if we're on cart screen — never show float there
+  const onCartScreen = document.getElementById('s-cart')?.classList.contains('active');
+  if (tot === 0 || onCartScreen) {
     cf.style.display = 'none';
+    cf.classList.add('gone');
     return;
   }
   cf.classList.remove('gone');
-  // Force display for Android WebView compatibility
   cf.style.display = 'flex';
   cf.style.visibility = 'visible';
   cf.style.opacity = '1';
