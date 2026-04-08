@@ -5908,10 +5908,11 @@ function startRealtime() {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'employees' }, payload => {
         // Employee wallet balance updated (e.g. admin manual refund / topup)
-        if (S.role === 'employee' && S.user && payload.new.id === S.user.id) {
-          const newBal = parseFloat(payload.new.wallet_balance) || 0;
-          if (newBal !== S.user.wallet_balance) {
-            const diff = newBal - S.user.wallet_balance;
+        if (S.role === 'employee' && S.user && String(payload.new.id) === String(S.user.id)) {
+          const newBal = Math.round((parseFloat(payload.new.wallet_balance) || 0) * 100) / 100;
+          const oldBal = Math.round((parseFloat(S.user.wallet_balance) || 0) * 100) / 100;
+          if (Math.abs(newBal - oldBal) > 0.5) {
+            const diff = newBal - oldBal;
             S.user.wallet_balance = newBal;
             setEl('nav-bal', '₹' + Math.round(newBal));
             setEl('w-bal', '₹' + Math.round(newBal));
