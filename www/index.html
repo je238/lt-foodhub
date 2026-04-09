@@ -2437,16 +2437,16 @@ function renderMenu(searchQuery) {
       const name = m.name.toLowerCase();
       const desc = (m.description || '').toLowerCase();
       const cat = (m.category || '').toLowerCase();
-      // Exact substring match
+      // Exact substring match — works for all query lengths
       if (name.includes(q) || desc.includes(q) || cat.includes(q)) return true;
-      // Fuzzy match
-      if (q.length >= 3 && _fuzzyMatch(q, name)) return true;
-      // Word-start match
-      const words = name.split(/\s+/);
-      if (words.some(w => w.startsWith(q))) return true;
-      // Common misspelling map
+      // Common misspelling map — works for all lengths
       const fixed = _fixSpelling(q);
       if (fixed !== q && (name.includes(fixed) || cat.includes(fixed))) return true;
+      // Word-start match — "pan" matches "Paneer", "bir" matches "Biryani"
+      const words = name.split(/\s+/);
+      if (words.some(w => w.startsWith(q))) return true;
+      // Fuzzy match — ONLY for 5+ char queries to avoid false positives
+      if (q.length >= 5 && _fuzzyMatch(q, name)) return true;
       return false;
     });
   } else {
@@ -2535,14 +2535,14 @@ function loadMoreMenu() {
 
 // Fuzzy search helpers
 function _fuzzyMatch(query, target) {
-  // Returns true if all chars of query appear in target in order (allows gaps)
-  // "chikn" matches "chicken", "briyni" matches "biryani"
+  // Only use fuzzy for queries 5+ chars — short queries give false positives
+  if (query.length < 5) return false;
   let qi = 0;
   for (let i = 0; i < target.length && qi < query.length; i++) {
     if (target[i] === query[qi]) qi++;
   }
-  // Match if at least 70% of query chars found in order
-  return qi >= query.length * 0.7;
+  // Match if at least 85% of query chars found in order
+  return qi >= query.length * 0.85;
 }
 
 function _fixSpelling(q) {
