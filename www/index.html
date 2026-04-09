@@ -2428,22 +2428,20 @@ function _getFoodImg(name, emoji) {
 
 function renderMenu(searchQuery) {
   // Only show available items — hide unavailable from employee view entirely
-  let items = S.menu.filter(m => (!m.canteen_id || m.canteen_id === S.selCanteen?.id) && m.is_available !== false);
-  if (S.selCat !== 'All') items = items.filter(m => m.category === S.selCat);
-  if (S.vegOnly) items = items.filter(m => m.is_veg);
+  let items;
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
-    // Smart fuzzy search — handles typos, partial matches, Hindi transliterations
+    // Search ALL menu items across ALL canteens — ignore current canteen/category/veg filters
     items = S.menu.filter(m => {
-      if (!m.is_available) return false;
+      if (m.is_available === false) return false;
       const name = m.name.toLowerCase();
       const desc = (m.description || '').toLowerCase();
       const cat = (m.category || '').toLowerCase();
       // Exact substring match
       if (name.includes(q) || desc.includes(q) || cat.includes(q)) return true;
-      // Fuzzy match — check if query letters appear in order (handles typos)
+      // Fuzzy match
       if (q.length >= 3 && _fuzzyMatch(q, name)) return true;
-      // Word-start match — "pan" matches "Paneer Butter Masala"
+      // Word-start match
       const words = name.split(/\s+/);
       if (words.some(w => w.startsWith(q))) return true;
       // Common misspelling map
@@ -2451,6 +2449,10 @@ function renderMenu(searchQuery) {
       if (fixed !== q && (name.includes(fixed) || cat.includes(fixed))) return true;
       return false;
     });
+  } else {
+    items = S.menu.filter(m => (!m.canteen_id || m.canteen_id === S.selCanteen?.id) && m.is_available !== false);
+    if (S.selCat !== 'All') items = items.filter(m => m.category === S.selCat);
+    if (S.vegOnly) items = items.filter(m => m.is_veg);
   }
   const el = document.getElementById('menu-list');
   if (!el) return;
@@ -2488,7 +2490,7 @@ function renderMenu(searchQuery) {
             <div class="${m.is_veg?'veg-dot':'nveg-dot'}"></div>
             ${m.name}
           </div>
-          <div class="menu-desc">${m.description || (m.category ? m.category : '')}</div>
+          <div class="menu-desc">${searchQuery ? (S.canteens.find(c=>c.id===m.canteen_id)?.icon||'') + ' ' + (S.canteens.find(c=>c.id===m.canteen_id)?.name||'').replace(' Counter','') + (m.category ? ' · ' + m.category : '') : (m.description || (m.category ? m.category : ''))}</div>
         </div>
         <div class="menu-footer">
           <div>
