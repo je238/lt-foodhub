@@ -4756,6 +4756,7 @@
       <div class="chip" style="background:#ea580c;color:#fff;border-color:#ea580c" onclick="kdsFilter('scheduled',this)">🕒 Scheduled</div>
       <div class="chip" style="background:#065f46;color:#fff;border-color:#065f46" onclick="showDailyMenuSelector()">📋 Today's Menu</div>
       <div class="chip" style="background:#7C3AED;color:#fff;border-color:#7C3AED" onclick="showSoldOutPanel()">🚫 Stock</div>
+      <div class="chip" style="background:#b45309;color:#fff;border-color:#b45309" onclick="setSlotLimit()">⚙️ Slot Limit</div>
     </div>
     <div class="scroll" style="flex:1;padding:12px 14px 20px;max-width:520px;width:100%;margin:0 auto" id="kds-body">
       <div class="loader"></div>
@@ -6305,7 +6306,7 @@
       let rM = readyDate.getMinutes();
 
       // Count existing orders per slot (capacity check)
-      const MAX_PER_SLOT = 50;
+      const MAX_PER_SLOT = parseInt(localStorage.getItem('fh-slot-limit') || '50') || 50;
       const todayStr = new Date().toISOString().slice(0, 10);
       const todayOrders = (S.allOrders || S.orders || []).filter(o => o.created_at && String(o.created_at).slice(0, 10) === todayStr && o.status !== 'cancelled');
       const slotCounts = {};
@@ -7204,6 +7205,19 @@
     // ═════════════════════════════════════
     // KITCHEN DISPLAY SYSTEM
     // ═════════════════════════════════════
+    function setSlotLimit() {
+      const current = parseInt(localStorage.getItem('fh-slot-limit') || '50') || 50;
+      const val = prompt(`Set maximum orders per scheduled slot (current: ${current}):`, current);
+      if (val === null) return;
+      const num = parseInt(val);
+      if (isNaN(num) || num < 1 || num > 500) { toast('Enter a number between 1 and 500', 'error', '⚠️'); return; }
+      localStorage.setItem('fh-slot-limit', String(num));
+      toast(`Slot limit set to ${num} orders per slot`, 'success', '✅');
+      // Sync to database for all devices
+      if (sb && S.user?.canteen_id) {
+        sb.from('canteens').update({ slot_limit: num }).eq('id', S.user.canteen_id).then(() => {});
+      }
+    }
     // Helper: parse "10:30 AM" from slot string to Date
     function parseSlotStartTime(slotStr) {
       if (!slotStr || slotStr === 'ASAP') return null;

@@ -70,7 +70,7 @@ serve(async (req) => {
                 merchantId: String(MERCHANT_ID),
                 merchantTxnNo: String(txnRefNo),
                 payType: "0",
-                returnURL: 'https://lt-foodhub.vercel.app/?icicicallback=true',
+                returnURL: 'https://slp-nexus.vercel.app',
                 transactionType: "SALE",
                 txnDate: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)
             };
