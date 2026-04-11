@@ -6300,23 +6300,26 @@
       if (!el) return;
       
       const now = new Date();
-      // Prep time 20 mins buffer
       const readyDate = new Date(now.getTime() + 20 * 60000);
       let rH = readyDate.getHours();
       let rM = readyDate.getMinutes();
 
-      const slots = [];
-      slots.push({ label: 'Prepare ASAP (Est. 20 Mins)', val: 'ASAP', peak: false });
+      // Count existing orders per slot (capacity check)
+      const MAX_PER_SLOT = 50;
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayOrders = (S.allOrders || S.orders || []).filter(o => o.created_at && String(o.created_at).slice(0, 10) === todayStr && o.status !== 'cancelled');
+      const slotCounts = {};
+      todayOrders.forEach(o => { if (o.pickup_slot && o.pickup_slot !== 'ASAP') slotCounts[o.pickup_slot] = (slotCounts[o.pickup_slot] || 0) + 1; });
 
-      // Find the next strictly greater 30-min valid boundary that fits prep time
+      const slots = [];
+      slots.push({ label: 'Prepare ASAP (Est. 20 Mins)', val: 'ASAP', peak: false, full: false, count: 0 });
+
       let startH = rH;
       let startM = rM <= 30 ? 30 : 0;
       if (startM === 0) startH++; 
 
-      // Business boundary constraints: 10:00 AM to 4:00 PM
       if (startH < 10) { startH = 10; startM = 0; }
       
-      // Generate max 2 slots, ensuring we don't cross 4:00 PM (16:00)
       if (startH < 16) {
         for (let i = 0; i < 2; i++) {
           if (startH >= 16) break;
@@ -6332,18 +6335,19 @@
           };
           
           const slotStr = `${formatTime(startH, startM)} - ${formatTime(endH, endM)}`;
-          const isPeak = (startH >= 12 && startH < 14); // 12-2 PM is peak
-          slots.push({ label: slotStr, val: slotStr, peak: isPeak });
+          const isPeak = (startH >= 12 && startH < 14);
+          const cnt = slotCounts[slotStr] || 0;
+          const isFull = cnt >= MAX_PER_SLOT;
+          slots.push({ label: slotStr, val: slotStr, peak: isPeak, full: isFull, count: cnt });
           
           startH = endH;
           startM = endM;
         }
       }
 
-      // Maintain selection or default to ASAP
-      if (!S.selSlot || !slots.some(s => s.val === S.selSlot)) {
-        S.selSlot = 'ASAP';
-      }
+      if (!S.selSlot || !slots.some(s => s.val === S.selSlot)) S.selSlot = 'ASAP';
+      const selInfo = slots.find(s => s.val === S.selSlot);
+      if (selInfo && selInfo.full) S.selSlot = 'ASAP';
 
       el.style.display = 'grid';
       el.style.gridTemplateColumns = '1fr';
@@ -6351,11 +6355,17 @@
 
       el.innerHTML = slots.map(s => {
         const isActive = s.val === S.selSlot;
-        return `<div class="slot-item ${isActive ? 'active' : ''} ${s.peak && !isActive ? 'peak' : ''}" 
+        if (s.full) {
+          return `<div style="padding:12px;border:2px solid #e5e7eb;border-radius:10px;font-weight:700;text-align:center;background:#f3f4f6;font-size:14px;color:#9ca3af;cursor:not-allowed;opacity:0.6">
+            \u{1F552} ${s.label} <span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">FULL (${s.count}/${MAX_PER_SLOT})</span>
+          </div>`;
+        }
+        return `<div class="slot-item ${isActive ? 'active' : ''}" 
           onclick="selSlot(this,'${s.val}')"
-          style="padding:12px; border:2px solid ${isActive ? 'var(--brand)' : 'var(--border)'}; border-radius:10px; cursor:pointer; font-weight:700; text-align:center; background:${isActive ? '#FFF7ED' : '#FFF'}; font-size:14px; color:${isActive ? 'var(--brand)' : 'var(--dark)'}; transition:all 0.2s">
-          ${s.val === 'ASAP' ? s.label : `🕒 SCHEDULE: ${s.label}`}
-          ${s.peak ? '<div style="font-size:10px;color:#f59e0b;margin-top:2px;font-weight:800">🔥 PEAK HOUR</div>' : ''}
+          style="padding:12px;border:2px solid ${isActive ? 'var(--brand)' : 'var(--border)'};border-radius:10px;cursor:pointer;font-weight:700;text-align:center;background:${isActive ? '#FFF7ED' : '#FFF'};font-size:14px;color:${isActive ? 'var(--brand)' : 'var(--dark)'};transition:all 0.2s">
+          ${s.val === 'ASAP' ? s.label : `\u{1F552} SCHEDULE: ${s.label}`}
+          ${s.count > 0 ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${s.count}/${MAX_PER_SLOT} orders booked</div>` : ''}
+          ${s.peak ? '<div style="font-size:10px;color:#f59e0b;margin-top:2px;font-weight:800">\u{1F525} PEAK HOUR</div>' : ''}
         </div>`;
       }).join('');
     }
@@ -7194,18 +7204,44 @@
     // ═════════════════════════════════════
     // KITCHEN DISPLAY SYSTEM
     // ═════════════════════════════════════
+    // Helper: parse "10:30 AM" from slot string to Date
+    function parseSlotStartTime(slotStr) {
+      if (!slotStr || slotStr === 'ASAP') return null;
+      const startPart = slotStr.split(' - ')[0].trim();
+      const match = startPart.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (!match) return null;
+      let h = parseInt(match[1]), m = parseInt(match[2]);
+      const ampm = match[3].toUpperCase();
+      if (ampm === 'PM' && h !== 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      const d = new Date(); d.setHours(h, m, 0, 0);
+      return d;
+    }
+
     function renderKDS() {
       const myCid = S.user?.canteen_id;
-      // STRICT: never show other canteens' orders
       const myOrders = myCid ? S.allOrders.filter(o => o.canteen_id === myCid) : [];
+      const now = new Date();
+
       const activeOrders = myOrders.filter(o => {
-        if (S.kdsFilter === 'all') return ['new', 'preparing', 'ready'].includes(o.status);
+        if (o.status === 'done' || !['new', 'preparing', 'ready'].includes(o.status)) return false;
+
+        // Auto-hide: scheduled orders hidden until 30 mins before slot
+        if (o.pickup_slot && o.pickup_slot !== 'ASAP' && S.kdsFilter !== 'scheduled') {
+          const slotTime = parseSlotStartTime(o.pickup_slot);
+          if (slotTime) {
+            const showAt = new Date(slotTime.getTime() - 30 * 60000);
+            if (now < showAt) return false;
+          }
+        }
+
+        if (S.kdsFilter === 'all') return true;
         if (['new', 'preparing', 'ready'].includes(S.kdsFilter)) return o.status === S.kdsFilter;
-        if (S.kdsFilter === 'asap') return (!o.pickup_slot || o.pickup_slot === 'ASAP') && o.status !== 'done';
-        if (S.kdsFilter === 'scheduled') return o.pickup_slot && o.pickup_slot !== 'ASAP' && o.status !== 'done';
-        return o.pickup_slot === S.kdsFilter && o.status !== 'done';
+        if (S.kdsFilter === 'asap') return !o.pickup_slot || o.pickup_slot === 'ASAP';
+        if (S.kdsFilter === 'scheduled') return o.pickup_slot && o.pickup_slot !== 'ASAP';
+        return true;
       });
-      // Sort: ASAP first, then scheduled by nearest slot time
+
       activeOrders.sort((a, b) => {
         const aIsAsap = !a.pickup_slot || a.pickup_slot === 'ASAP';
         const bIsAsap = !b.pickup_slot || b.pickup_slot === 'ASAP';
@@ -7214,7 +7250,22 @@
         if (!aIsAsap && !bIsAsap) return (a.pickup_slot || '').localeCompare(b.pickup_slot || '');
         return new Date(a.created_at) - new Date(b.created_at);
       });
+
       const doneOrders = myOrders.filter(o => o.status === 'done').slice(0, 10);
+
+      // ── Slot Approaching Notification ──
+      if (!S._slotAlerted) S._slotAlerted = {};
+      myOrders.filter(o => o.pickup_slot && o.pickup_slot !== 'ASAP' && ['new', 'preparing'].includes(o.status)).forEach(o => {
+        const slotTime = parseSlotStartTime(o.pickup_slot);
+        if (slotTime) {
+          const minsUntil = (slotTime - now) / 60000;
+          if (minsUntil > 0 && minsUntil <= 15 && !S._slotAlerted[o.id]) {
+            S._slotAlerted[o.id] = true;
+            toast(`\u23f0 Token #${o.token_number} slot ${o.pickup_slot} in ${Math.ceil(minsUntil)} mins! Prepare now.`, 'warn', '\ud83d\udd14', 8000);
+          }
+        }
+      });
+
       const newCnt = myOrders.filter(o => o.status === 'new').length;
       const prepCnt = myOrders.filter(o => o.status === 'preparing').length;
       const readyCnt = myOrders.filter(o => o.status === 'ready').length;
@@ -7222,20 +7273,19 @@
       setEl('kds-prep', prepCnt);
       setEl('kds-ready', readyCnt);
       const elapsed = new Date() - (S._kdsStart || (S._kdsStart = new Date()));
-      setEl('kds-sub', `Active Orders · Refreshed ${Math.floor(elapsed / 1000)}s ago`);
+      setEl('kds-sub', `Active Orders \u00b7 Refreshed ${Math.floor(elapsed / 1000)}s ago`);
       const el = document.getElementById('kds-body');
       if (!el) return;
       let html = '';
       if (activeOrders.length === 0) {
-        html += '<div class="empty"><div class="empty-icon">🎉</div><div class="empty-title">All caught up!</div><div class="empty-sub">No active orders</div></div>';
+        html += '<div class="empty"><div class="empty-icon">\ud83c\udf89</div><div class="empty-title">All caught up!</div><div class="empty-sub">No active orders</div></div>';
       } else {
         html += activeOrders.map(o => renderKitchenCard(o, 'kitchen')).join('');
       }
       if (doneOrders.length > 0) {
-        html += `<div style="margin:20px 0 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">✅ Completed Today (${doneOrders.length})</div>`;
+        html += `<div style="margin:20px 0 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">\u2705 Completed Today (${doneOrders.length})</div>`;
         html += doneOrders.map(o => renderKitchenCard(o, 'kitchen')).join('');
       }
-      // Only update DOM if content changed (prevents scroll reset on TV displays)
       const hash = html.length + ':' + [...activeOrders, ...doneOrders].map(o => o.id + o.status).join(',');
       if (el.dataset.hash !== hash) {
         const scrollTop = el.scrollTop;
