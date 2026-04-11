@@ -6372,14 +6372,8 @@
     }
 
     function selSlot(el, slot) {
-      document.querySelectorAll('.slot-item').forEach(s => s.classList.remove('active'));
-      el.classList.add('active');
       S.selSlot = slot;
-      // Clear custom time selection
-      const customInput = document.getElementById('custom-pickup-time');
-      if (customInput) customInput.value = '';
-      const msg = document.getElementById('custom-time-msg');
-      if (msg) msg.style.display = 'none';
+      generateSlots(); // Re-render with new active state
     }
 
     function selectCustomTime(val) {
