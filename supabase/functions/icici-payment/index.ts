@@ -70,7 +70,7 @@ serve(async (req) => {
                 merchantId: String(MERCHANT_ID),
                 merchantTxnNo: String(txnRefNo),
                 payType: "0",
-                returnURL: `${req.headers.get('origin') || 'https://lt-foodhub.vercel.app'}/?icicicallback=true`,
+                returnURL: 'https://lt-foodhub.vercel.app/?icicicallback=true',
                 transactionType: "SALE",
                 txnDate: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)
             };

@@ -6600,8 +6600,8 @@
         // ── Render success screen — each step isolated so one failure doesn't kill the rest
         try { setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & ')); } catch (e) { }
         try { setEl('suc-can', numCounters > 1 ? `${numCounters} Counters` : (firstOrder.canteen_icon || '') + ' ' + firstOrder.canteen_name); } catch (e) { }
-        try { setEl('suc-time', '⏰ Ready by ' + S.selSlot); } catch (e) { }
-        try { setEl('suc-sub', 'Show this screen to kitchen staff'); } catch (e) { }
+        try { setEl('suc-time', S.selSlot === 'ASAP' ? '⏰ Preparing Now (Est. 20 mins)' : '🕒 Scheduled: ' + S.selSlot); } catch (e) { }
+        try { setEl('suc-sub', S.selSlot === 'ASAP' ? 'Show this screen to kitchen staff' : 'Collect at the counter during your slot'); } catch (e) { }
         try { setEl('suc-canteen-token-label', numCounters > 1 ? 'Your Tokens' : firstOrder.canteen_name + ' · Token'); } catch (e) { }
 
         if (numCounters > 1) {
@@ -7269,7 +7269,8 @@
             <div class="kitchen-token ${isDone ? 'done' : o.status === 'new' ? 'new-order' : o.status}">#${o.token_number || o.token}</div>
             <div style="background:var(--light2);border-radius:7px;padding:3px 9px;font-size:11px;font-weight:700;color:var(--mid)">${canteen.icon || '🍛'} ${o.canteen_name || canteen.name || 'Canteen'}</div>
           </div>
-          <div class="kitchen-meta">${o.employee_name || 'Employee'} · Slot: ${o.pickup_slot || '—'}</div>
+          <div class="kitchen-meta">${o.employee_name || 'Employee'}</div>
+          ${o.pickup_slot && o.pickup_slot !== 'ASAP' ? `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#FFF7ED;color:#ea580c;border:1px solid #fdba74;display:inline-block">🕒 SCHEDULED: ${o.pickup_slot}</div>` : `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#f0fdf4;color:#16a34a;border:1px solid #86efac;display:inline-block">⚡ ASAP</div>`}
         </div>
         <span class="badge ${isDone ? 'badge-done' : o.status === 'new' ? 'badge-new' : o.status === 'preparing' ? 'badge-prep' : 'badge-ready'}">
           ${isDone ? '📦 Done' : o.status === 'new' ? '🆕 New' : o.status === 'preparing' ? '⏳ Preparing' : '✅ Ready'}
@@ -10158,7 +10159,7 @@ self.addEventListener('fetch',e=>{
         <div>
           <div class="order-token${o.status === 'ready' ? ' ready' : ''}">#${o.token_number || '—'}</div>
           <div class="order-meta" style="font-weight:700;color:var(--mid)">${o.canteen_name || ''}</div>
-          <div class="order-meta">${o.pickup_slot || ''} · ${fmtDate(o.created_at)}</div>
+          <div class="order-meta">${o.pickup_slot && o.pickup_slot !== 'ASAP' ? `<span style="background:#FFF7ED;color:#ea580c;padding:2px 8px;border-radius:5px;font-weight:700;font-size:10px">🕒 ${o.pickup_slot}</span> · ` : ''}${fmtDate(o.created_at)}</div>
           ${o.status === 'preparing' ? `<div class="order-meta" style="color:var(--${wait.cls})">⏱ Est. wait: ${wait.label}</div>` : ''}
         </div>
         <span class="badge ${badgeMap[o.status] || 'badge-done'}">${statusMap[o.status] || o.status}</span>
