@@ -4752,25 +4752,10 @@
       <div class="chip" onclick="kdsFilter('new',this)">🆕 New</div>
       <div class="chip" onclick="kdsFilter('preparing',this)">⏳ Preparing</div>
       <div class="chip" onclick="kdsFilter('ready',this)">✅ Ready</div>
-      <div class="chip" style="background:#065f46;color:#fff;border-color:#065f46" onclick="showDailyMenuSelector()">📋
-        Today's Menu</div>
-      <div class="chip" style="background:#7C3AED;color:#fff;border-color:#7C3AED" onclick="showSoldOutPanel()">🚫 Stock
-      </div>
-      <div class="chip" onclick="kdsFilter('8:00 AM',this)">8:00 AM</div>
-      <div class="chip" onclick="kdsFilter('8:30 AM',this)">8:30 AM</div>
-      <div class="chip" onclick="kdsFilter('9:00 AM',this)">9:00 AM</div>
-      <div class="chip" onclick="kdsFilter('9:30 AM',this)">9:30 AM</div>
-      <div class="chip" onclick="kdsFilter('10:00 AM',this)">10:00 AM</div>
-      <div class="chip" onclick="kdsFilter('10:30 AM',this)">10:30 AM</div>
-      <div class="chip" onclick="kdsFilter('11:00 AM',this)">11:00 AM</div>
-      <div class="chip" onclick="kdsFilter('11:30 AM',this)">11:30 AM</div>
-      <div class="chip" onclick="kdsFilter('12:00 PM',this)">12:00 PM</div>
-      <div class="chip" onclick="kdsFilter('12:30 PM',this)">12:30 PM</div>
-      <div class="chip" onclick="kdsFilter('1:00 PM',this)">1:00 PM</div>
-      <div class="chip" onclick="kdsFilter('1:30 PM',this)">1:30 PM</div>
-      <div class="chip" onclick="kdsFilter('2:00 PM',this)">2:00 PM</div>
-      <div class="chip" onclick="kdsFilter('2:30 PM',this)">2:30 PM</div>
-      <div class="chip" onclick="kdsFilter('3:00 PM',this)">3:00 PM</div>
+      <div class="chip" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="kdsFilter('asap',this)">⚡ ASAP</div>
+      <div class="chip" style="background:#ea580c;color:#fff;border-color:#ea580c" onclick="kdsFilter('scheduled',this)">🕒 Scheduled</div>
+      <div class="chip" style="background:#065f46;color:#fff;border-color:#065f46" onclick="showDailyMenuSelector()">📋 Today's Menu</div>
+      <div class="chip" style="background:#7C3AED;color:#fff;border-color:#7C3AED" onclick="showSoldOutPanel()">🚫 Stock</div>
     </div>
     <div class="scroll" style="flex:1;padding:12px 14px 20px;max-width:520px;width:100%;margin:0 auto" id="kds-body">
       <div class="loader"></div>
@@ -7222,7 +7207,18 @@
       const activeOrders = myOrders.filter(o => {
         if (S.kdsFilter === 'all') return ['new', 'preparing', 'ready'].includes(o.status);
         if (['new', 'preparing', 'ready'].includes(S.kdsFilter)) return o.status === S.kdsFilter;
+        if (S.kdsFilter === 'asap') return (!o.pickup_slot || o.pickup_slot === 'ASAP') && o.status !== 'done';
+        if (S.kdsFilter === 'scheduled') return o.pickup_slot && o.pickup_slot !== 'ASAP' && o.status !== 'done';
         return o.pickup_slot === S.kdsFilter && o.status !== 'done';
+      });
+      // Sort: ASAP first, then scheduled by nearest slot time
+      activeOrders.sort((a, b) => {
+        const aIsAsap = !a.pickup_slot || a.pickup_slot === 'ASAP';
+        const bIsAsap = !b.pickup_slot || b.pickup_slot === 'ASAP';
+        if (aIsAsap && !bIsAsap) return -1;
+        if (!aIsAsap && bIsAsap) return 1;
+        if (!aIsAsap && !bIsAsap) return (a.pickup_slot || '').localeCompare(b.pickup_slot || '');
+        return new Date(a.created_at) - new Date(b.created_at);
       });
       const doneOrders = myOrders.filter(o => o.status === 'done').slice(0, 10);
       const newCnt = myOrders.filter(o => o.status === 'new').length;
