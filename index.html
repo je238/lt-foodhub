@@ -4545,21 +4545,8 @@
       <div class="divider-text">Pickup Details</div>
       <div class="slot-picker">
         <div class="card-title">⏰ Choose Pickup Time</div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Pick a time slot or choose your own</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Select your preferred preparation block</div>
         <div class="slot-grid" id="slot-grid"></div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
-          <div style="flex:1;height:1px;background:var(--border)"></div>
-          <span style="font-size:11px;color:var(--muted);font-weight:600">OR</span>
-          <div style="flex:1;height:1px;background:var(--border)"></div>
-        </div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
-          <input type="time" id="custom-pickup-time" class="form-input"
-            style="flex:1;padding:10px 12px;font-size:14px;font-weight:600" onchange="selectCustomTime(this.value)">
-          <button class="btn btn-primary btn-sm"
-            onclick="selectCustomTime(document.getElementById('custom-pickup-time').value)"
-            style="white-space:nowrap">Set Time</button>
-        </div>
-        <div id="custom-time-msg" style="font-size:11px;color:var(--green2);margin-top:6px;display:none"></div>
       </div>
       <div class="summary-box" id="cart-summary"></div>
       <div class="card">
@@ -6326,42 +6313,65 @@
     function generateSlots() {
       const el = document.getElementById('slot-grid');
       if (!el) return;
-      // Get current canteen hours
-      const cid = S.selCanteen?.id || 'c1';
-      const hours = getCanteenHours(cid);
-      // Parse open/close times
-      const [openH, openM] = (hours.open || '08:00').split(':').map(Number);
-      const [closeH, closeM] = (hours.close || '15:00').split(':').map(Number);
-      // Generate 30-min slots from open to close
+      
+      const now = new Date();
+      // Prep time 20 mins buffer
+      const readyDate = new Date(now.getTime() + 20 * 60000);
+      let rH = readyDate.getHours();
+      let rM = readyDate.getMinutes();
+
       const slots = [];
-      let h = openH, m = openM;
-      while (h < closeH || (h === closeH && m < closeM)) {
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        const displayH = h > 12 ? h - 12 : (h === 0 ? 12 : h);
-        const displayM = m === 0 ? '00' : String(m).padStart(2, '0');
-        slots.push(`${displayH}:${displayM} ${ampm}`);
-        m += 30;
-        if (m >= 60) { h++; m -= 60; }
+      slots.push({ label: 'Prepare ASAP (Est. 20 Mins)', val: 'ASAP', peak: false });
+
+      // Find the next strictly greater 30-min valid boundary that fits prep time
+      let startH = rH;
+      let startM = rM <= 30 ? 30 : 0;
+      if (startM === 0) startH++; 
+
+      // Business boundary constraints: 10:00 AM to 4:00 PM
+      if (startH < 10) { startH = 10; startM = 0; }
+      
+      // Generate max 2 slots, ensuring we don't cross 4:00 PM (16:00)
+      if (startH < 16) {
+        for (let i = 0; i < 2; i++) {
+          if (startH >= 16) break;
+          let endH = startH;
+          let endM = startM + 30;
+          if (endM >= 60) { endM -= 60; endH++; }
+          
+          const formatTime = (h, m) => {
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const dh = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+            const dm = m === 0 ? '00' : String(m).padStart(2, '0');
+            return `${dh}:${dm} ${ampm}`;
+          };
+          
+          const slotStr = `${formatTime(startH, startM)} - ${formatTime(endH, endM)}`;
+          const isPeak = (startH >= 12 && startH < 14); // 12-2 PM is peak
+          slots.push({ label: slotStr, val: slotStr, peak: isPeak });
+          
+          startH = endH;
+          startM = endM;
+        }
       }
-      if (slots.length === 0) slots.push('12:00 PM', '12:30 PM', '1:00 PM');
-      // Peak hours: 12:00-2:00 PM
-      const peak = slots.filter(s => {
-        const [t, ap] = s.split(' ');
-        const [sh] = t.split(':').map(Number);
-        const fullH = ap === 'PM' && sh !== 12 ? sh + 12 : (ap === 'AM' && sh === 12 ? 0 : sh);
-        return fullH >= 12 && fullH < 14;
-      });
-      // Auto-select first available future slot
-      if (!S.selSlot || !slots.includes(S.selSlot)) {
-        S.selSlot = slots.find(s => !isSlotPast(s)) || slots[0];
+
+      // Maintain selection or default to ASAP
+      if (!S.selSlot || !slots.some(s => s.val === S.selSlot)) {
+        S.selSlot = 'ASAP';
       }
+
+      el.style.display = 'grid';
+      el.style.gridTemplateColumns = '1fr';
+      el.style.gap = '8px';
+
       el.innerHTML = slots.map(s => {
-        const isPeak = peak.includes(s);
-        const isPast = isSlotPast(s);
-        return `<div class="slot-item${s === S.selSlot ? ' active' : ''}${isPeak && s !== S.selSlot ? ' peak' : ''}${isPast ? ' past' : ''}" 
-      onclick="${isPast ? 'void(0)' : `selSlot(this,'${s}')`}" ${isPast ? 'disabled' : ''}>
-      ${s}${isPeak ? '<br><small style="font-size:9px;opacity:.7">🔥 Peak</small>' : ''}
-    </div>`;
+        const isActive = s.val === S.selSlot;
+        return `<div class="slot-item ${isActive ? 'active' : ''} ${s.peak && !isActive ? 'peak' : ''}" 
+          onclick="selSlot(this,'${s.val}')"
+          style="padding:12px; border:2px solid ${isActive ? 'var(--brand)' : 'var(--border)'}; border-radius:10px; cursor:pointer; font-weight:700; text-align:center; background:${isActive ? '#FFF7ED' : '#FFF'}; font-size:14px; color:${isActive ? 'var(--brand)' : 'var(--dark)'}; transition:all 0.2s">
+          ${s.val === 'ASAP' ? s.label : `🕒 SCHEDULE: ${s.label}`}
+          ${s.peak ? '<div style="font-size:10px;color:#f59e0b;margin-top:2px;font-weight:800">🔥 PEAK HOUR</div>' : ''}
+        </div>`;
       }).join('');
     }
 
@@ -6910,12 +6920,6 @@
       btn.innerHTML = '<span>Connecting to ICICI...</span>';
 
       try {
-        // Save pending topup info for when ICICI redirects back
-        localStorage.setItem('fh-pending-topup', JSON.stringify({
-          amount, employeeId: S.user.id, ts: Date.now()
-        }));
-
-        // Call our Edge Function to initiate ICICI payment
         const res = await fetch(SURL + '/functions/v1/icici-payment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
@@ -7276,7 +7280,7 @@
       ${!isDone ? `<div class="kitchen-actions">
         ${o.status === 'new' ? `<button class="btn btn-secondary btn-sm" style="flex:1" onclick="${mode}Action('${o.id}','preparing')">✓ Accept & Start</button><button class="btn btn-ghost btn-sm" onclick="${mode}Action('${o.id}','done')">✕ Bump</button>` : ''}
         ${o.status === 'preparing' ? `<button class="btn btn-green btn-sm" style="flex:1" onclick="${mode}Action('${o.id}','ready')">🔔 Mark Ready</button>` : ''}
-        ${o.status === 'ready' ? `<button class="btn btn-primary btn-sm" style="flex:1;background:var(--green2)" onclick="showConfirmOTP('${o.id}')">🔐 Confirm OTP</button>` : ''}
+        ${o.status === 'ready' ? `<button class="btn btn-primary btn-sm" style="flex:1;background:var(--green2)" onclick="${mode}Action('${o.id}','done')">✅ Handed Over</button>` : ''}
       </div>` : ''}
       ${elapsed > 0 && !isDone ? `<div class="kitchen-timer${timerClass ? ' ' + timerClass : ''}">⏱ ${elapsed < 1 ? 'Just now' : elapsed + 'm ago'}</div>` : ''}
     </div>`;
@@ -9078,17 +9082,7 @@ self.addEventListener('fetch',e=>{
           ${ITEM_CUSTOMIZATIONS.onion.map((s, i) => `<div class="slot-item${i === 0 ? ' active' : ''}" onclick="selectCustomOpt('onion-opts',this)">${s}</div>`).join('')}
         </div>
       </div>`: ''}
-      <div class="form-group">
-        <label class="form-label">📝 Special Instructions</label>
-        <textarea class="form-input" id="custom-note" rows="2" maxlength="100" placeholder="e.g. No pickle, extra sauce, allergen info..." oninput="document.getElementById('custom-note-count').textContent=this.value.length+'/100'">${existing?.customNote || ''}</textarea>
-        <div id="custom-note-count" class="char-count">0/100</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">⚠️ Allergen Note</label>
-        <div style="display:flex;gap:7px;flex-wrap:wrap" id="allergen-opts">
-          ${['Nut Allergy', 'Gluten Free', 'Dairy Free', 'Egg Free'].map(a => `<div class="chip" onclick="this.classList.toggle('active')">${a}</div>`).join('')}
-        </div>
-      </div>
+
       <div style="display:flex;gap:8px;margin-top:4px">
         <button class="btn btn-ghost btn-full" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary btn-full" onclick="applyCustomization('${itemId}')">Add to Cart →</button>
@@ -9104,9 +9098,7 @@ self.addEventListener('fetch',e=>{
       if (!item) { closeModal(); return; }
       const spice = document.querySelector('#spice-opts .slot-item.active')?.textContent || 'Regular';
       const onion = document.querySelector('#onion-opts .slot-item.active')?.textContent || 'With Onion';
-      const note = document.getElementById('custom-note')?.value.trim() || '';
-      const allergens = [...document.querySelectorAll('#allergen-opts .chip.active')].map(c => c.textContent).join(', ');
-      const customNote = [spice !== 'Regular' ? spice : '', onion !== 'With Onion' ? onion : '', note, allergens ? `Allergens: ${allergens}` : ''].filter(Boolean).join(' · ');
+      const customNote = [spice !== 'Regular' ? spice : '', onion !== 'With Onion' ? onion : ''].filter(Boolean).join(' · ');
       const ex = S.cart.find(c => c.id === itemId);
       if (ex) { ex.qty++; ex.customNote = customNote; }
       else S.cart.push({ ...item, qty: 1, customNote });
@@ -10177,7 +10169,7 @@ self.addEventListener('fetch',e=>{
         <div class="order-savings">Paid <strong style="color:var(--brand)">₹${o.amount_paid || 0}</strong> · Saved <strong style="color:var(--green2)">₹${o.subsidy_applied || 0}</strong>${o.rating ? ` · ${'⭐'.repeat(o.rating)}` : ''}</div>
       </div>
       <div class="order-actions">
-        ${o.status === 'ready' ? `<button class="btn btn-green btn-sm" style="flex:1" onclick="showPickupOTP('${o.id}')">🔐 Get Pickup OTP</button>` : ''}
+        ${o.status === 'ready' ? `<div style="flex:1;text-align:center;padding:8px;background:var(--green-l);color:var(--green2);border-radius:8px;font-size:13px;font-weight:700;">✅ Prepared! Call Token #${o.token_number} at counter</div>` : ''}
         ${canCancel ? `<button class="btn btn-danger btn-sm" onclick="showCancelOrder('${o.id}')">✕ Cancel</button>` : ''}
         ${o.status === 'done' || o.status === 'cancelled' ? `<button class="btn btn-ghost btn-sm" style="flex:1" onclick="reorder('${o.id}')">🔄 Reorder</button>` : ''}
         ${o.status === 'done' && !o.rating ? `<button class="btn btn-ghost btn-sm" onclick="rateOrderById('${o.id}')">⭐ Rate</button>` : ''}
@@ -11311,33 +11303,7 @@ self.addEventListener('fetch',e=>{
       }, 1000);
     }
 
-    // Kitchen/Vendor: enter OTP to confirm pickup
-    function showConfirmOTP(orderId) {
-      const o = S.allOrders.find(o => o.id === orderId);
-      if (!o) return;
-      showModal(`
-    <div class="modal-head">
-      <span class="modal-title">🔐 Confirm Pickup</span>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="text-align:center;margin-bottom:20px">
-        <div style="font-size:36px;margin-bottom:8px">🍽️</div>
-        <div style="font-weight:700;font-size:16px">Token #${o.token_number}</div>
-        <div style="font-size:13px;color:var(--muted)">${o.employee_name || 'Employee'} · ${o.canteen_name}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">${(o.items || []).map(i => i.item_name || i.name).slice(0, 3).join(', ')}</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Enter Employee's 4-digit OTP</label>
-        <input class="otp-input-field" type="tel" id="confirm-otp-input" maxlength="4" 
-          placeholder="0000" autocomplete="off"
-          oninput="this.value=this.value.replace(/\\D/g,'').slice(0,4);if(this.value.length===4)document.getElementById('confirm-otp-btn').focus()">
-      </div>
-      <div id="confirm-otp-err" style="color:var(--red);font-size:12px;font-weight:600;text-align:center;min-height:18px;margin-bottom:10px"></div>
-      <button class="btn btn-green btn-full btn-lg" id="confirm-otp-btn" onclick="verifyPickupOTP('${orderId}')">✅ Confirm & Hand Over</button>
-    </div>`);
-      setTimeout(() => document.getElementById('confirm-otp-input')?.focus(), 200);
-    }
+    // Kitchen/Vendor: enter OTP to confirm pickup removed
 
     // Verify OTP and mark order as done
     async function verifyPickupOTP(orderId) {
