@@ -31,6 +31,8 @@ async function generateV2Hash(p: any, secretKey: string) {
         p.txnDate || ''
     ].join('');
     
+    console.log('Hash Text Concatenation:', hashText);
+
     const enc = new TextEncoder();
     const key = await crypto.subtle.importKey(
         "raw",
@@ -40,7 +42,10 @@ async function generateV2Hash(p: any, secretKey: string) {
         ["sign"]
     );
     const signature = await crypto.subtle.sign("HMAC", key, enc.encode(hashText));
-    return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('').toLowerCase();
+    const hash = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('').toLowerCase();
+    
+    console.log('Generated SecureHash:', hash);
+    return hash;
 }
 
 serve(async (req) => {
@@ -54,24 +59,26 @@ serve(async (req) => {
             const txnRefNo = `TXN${Date.now()}`;
 
             const payloadObj = {
-                merchantId: String(MERCHANT_ID),
+                addlParam1: "NA",
+                addlParam2: "NA",
                 aggregatorID: '100000000417982',
-                merchantTxnNo: String(txnRefNo),
                 amount: String(Number(amount).toFixed(2)),
                 currencyCode: "356",
-                payType: "0",
                 customerEmailID: "info@slphospitality.com",
-                transactionType: "SALE",
-                returnURL: `${req.headers.get('origin') || 'https://lt-foodhub.vercel.app'}/?icicicallback=true`,
-                txnDate: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
                 customerMobileNo: "9999999999",
                 customerName: String(employeeId).slice(0, 30) || "Employee",
-                addlParam1: "NA",
-                addlParam2: "NA"
+                merchantId: String(MERCHANT_ID),
+                merchantTxnNo: String(txnRefNo),
+                payType: "0",
+                returnURL: `${req.headers.get('origin') || 'https://lt-foodhub.vercel.app'}/?icicicallback=true`,
+                transactionType: "SALE",
+                txnDate: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)
             };
 
             const secureHash = await generateV2Hash(payloadObj, SECRET_KEY);
             const finalPayload = { ...payloadObj, secureHash };
+
+            console.log('Request Payload:', JSON.stringify(finalPayload));
 
             const iciciReq = await fetch(ICICI_URL, {
                 method: 'POST',
@@ -80,6 +87,7 @@ serve(async (req) => {
             });
 
             const iciciData = await iciciReq.json();
+            console.log('ICICI response:', JSON.stringify(iciciData));
 
             if (iciciData.responseCode === 'R1000' || iciciData.redirectURI || iciciData.redirectUrl) {
                 return new Response(JSON.stringify({
@@ -97,8 +105,6 @@ serve(async (req) => {
 
         // 2. CALLBACK VERIFICATION
         if (action === 'verify') {
-            // Logic for callback verification to safely add wallet balance.
-            // Usually the frontend redirects here, taking the parameters and querying Supabase edge function to verify the backend hash.
             return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         }
 
