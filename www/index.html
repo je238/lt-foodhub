@@ -9128,12 +9128,7 @@ self.addEventListener('fetch',e=>{
     // ══════════════════════════════════════════════════════
     // ⑧ ITEM CUSTOMIZATION (special instructions)
     // ══════════════════════════════════════════════════════
-    const ITEM_CUSTOMIZATIONS = {
-      spice: ['Regular', 'Less Spicy', 'Extra Spicy', 'No Chilli'],
-      onion: ['With Onion', 'No Onion'],
-      oil: ['Regular Oil', 'Less Oil'],
-      extras: ['No Garnish', 'Extra Sauce', 'Extra Roti', 'No Pickle'],
-    };
+    const ITEM_CUSTOMIZATIONS = {};
     function showCustomizeItem(itemId) {
       const item = S.menu.find(m => m.id === itemId);
       if (!item) return;
@@ -9148,39 +9143,30 @@ self.addEventListener('fetch',e=>{
         <span style="font-size:36px">${item.emoji || '🍽️'}</span>
         <div><div style="font-weight:700;font-size:14px">${item.name}</div><div style="font-size:12px;color:var(--muted)">₹${item.price} · ${item.category || ''}</div></div>
       </div>
-      ${item.category === 'Meals' || item.category === 'Snacks' ? `
+      
       <div class="form-group">
-        <label class="form-label">🌶️ Spice Level</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px" id="spice-opts">
-          ${ITEM_CUSTOMIZATIONS.spice.map((s, i) => `<div class="slot-item${i === 0 ? ' active' : ''}" onclick="selectCustomOpt('spice-opts',this)">${s}</div>`).join('')}
-        </div>
+        <label class="form-label">📝 Special Instructions (Optional)</label>
+        <textarea id="custom-note-input" class="form-input" style="min-height:80px;resize:none" placeholder="e.g. less spicy, no onion, extra sauce..."></textarea>
       </div>
-      <div class="form-group">
-        <label class="form-label">🧅 Onion</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px" id="onion-opts">
-          ${ITEM_CUSTOMIZATIONS.onion.map((s, i) => `<div class="slot-item${i === 0 ? ' active' : ''}" onclick="selectCustomOpt('onion-opts',this)">${s}</div>`).join('')}
-        </div>
-      </div>`: ''}
 
-      <div style="display:flex;gap:8px;margin-top:4px">
+      <div style="display:flex;gap:8px;margin-top:20px">
         <button class="btn btn-ghost btn-full" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary btn-full" onclick="applyCustomization('${itemId}')">Add to Cart →</button>
       </div>
     </div>`);
     }
-    function selectCustomOpt(groupId, el) {
-      document.querySelectorAll(`#${groupId} .slot-item`).forEach(s => s.classList.remove('active'));
-      el.classList.add('active');
-    }
+
     function applyCustomization(itemId) {
       const item = S.menu.find(m => m.id === itemId);
       if (!item) { closeModal(); return; }
-      const spice = document.querySelector('#spice-opts .slot-item.active')?.textContent || 'Regular';
-      const onion = document.querySelector('#onion-opts .slot-item.active')?.textContent || 'With Onion';
-      const customNote = [spice !== 'Regular' ? spice : '', onion !== 'With Onion' ? onion : ''].filter(Boolean).join(' · ');
+      
+      const customNoteRaw = document.getElementById('custom-note-input')?.value || '';
+      const customNote = customNoteRaw.trim();
+      
       const ex = S.cart.find(c => c.id === itemId);
-      if (ex) { ex.qty++; ex.customNote = customNote; }
+      if (ex) { ex.qty++; if(customNote) ex.customNote = customNote; }
       else S.cart.push({ ...item, qty: 1, customNote });
+      
       updateCartFloat();
       renderMenuItemCtrl(itemId);
       closeModal();
