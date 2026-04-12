@@ -6686,22 +6686,13 @@
     }
 
     function afterSuccess() {
-      renderHome();
-      goScreen('s-home');
+      sessionStorage.setItem('fh-tab', 'home');
+      window.location.reload();
     }
 
     function goToMyOrders() {
-      // Navigate to home screen first
-      goScreen('s-home');
-      // Switch to orders tab properly
-      setTimeout(() => {
-        goTab('orders');
-        // Activate the orders nav button
-        document.querySelectorAll('.bni').forEach(b => b.classList.remove('act'));
-        const ordNav = document.getElementById('ord-nav');
-        if (ordNav) ordNav.classList.add('act');
-        renderMyOrders();
-      }, 150);
+      sessionStorage.setItem('fh-tab', 'orders');
+      window.location.reload();
     }
 
     // ═════════════════════════════════════
@@ -10645,7 +10636,18 @@ self.addEventListener('fetch',e=>{
                 else S.txns = [];
               } catch (e) { console.warn('Session restore fetch error:', e); }
               renderHome(); goScreen('s-home');
-              toast('Welcome back, ' + (emp.name || '').split(' ')[0] + '!', 'success', '👋');
+              const destTab = sessionStorage.getItem('fh-tab');
+              if (destTab === 'orders') {
+                sessionStorage.removeItem('fh-tab');
+                setTimeout(() => {
+                  goTab('orders');
+                  document.querySelectorAll('.bni').forEach(b => b.classList.remove('act'));
+                  document.querySelectorAll('.bni')[1].classList.add('act');
+                }, 100);
+              } else {
+                sessionStorage.removeItem('fh-tab');
+                toast('Welcome back, ' + (emp.name || '').split(' ')[0] + '!', 'success', '👋');
+              }
               setTimeout(addARIA, 500);
               // Check if returning from ICICI payment redirect
               setTimeout(checkPendingPayment, 1000);
