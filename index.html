@@ -9143,11 +9143,6 @@ self.addEventListener('fetch',e=>{
         <span style="font-size:36px">${item.emoji || '🍽️'}</span>
         <div><div style="font-weight:700;font-size:14px">${item.name}</div><div style="font-size:12px;color:var(--muted)">₹${item.price} · ${item.category || ''}</div></div>
       </div>
-      
-      <div class="form-group">
-        <label class="form-label">📝 Special Instructions (Optional)</label>
-        <textarea id="custom-note-input" class="form-input" style="min-height:80px;resize:none" placeholder="e.g. less spicy, no onion, extra sauce..."></textarea>
-      </div>
 
       <div style="display:flex;gap:8px;margin-top:20px">
         <button class="btn btn-ghost btn-full" onclick="closeModal()">Cancel</button>
@@ -9160,8 +9155,7 @@ self.addEventListener('fetch',e=>{
       const item = S.menu.find(m => m.id === itemId);
       if (!item) { closeModal(); return; }
       
-      const customNoteRaw = document.getElementById('custom-note-input')?.value || '';
-      const customNote = customNoteRaw.trim();
+      const customNote = '';
       
       const ex = S.cart.find(c => c.id === itemId);
       if (ex) { ex.qty++; if(customNote) ex.customNote = customNote; }
@@ -9170,7 +9164,7 @@ self.addEventListener('fetch',e=>{
       updateCartFloat();
       renderMenuItemCtrl(itemId);
       closeModal();
-      toast(`${item.name} added${customNote ? ' with notes' : ''}! 🛒`, 'success', '✅');
+      toast(`${item.name} added! 🛒`, 'success', '✅');
     }
 
     // ══════════════════════════════════════════════════════
