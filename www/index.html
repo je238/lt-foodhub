@@ -4722,7 +4722,7 @@
       <div class="chip" onclick="kdsFilter('new',this)">🆕 New</div>
       <div class="chip" onclick="kdsFilter('preparing',this)">⏳ Preparing</div>
       <div class="chip" onclick="kdsFilter('ready',this)">✅ Ready</div>
-      <div class="chip" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="kdsFilter('asap',this)">⚡ ASAP</div>
+      <div class="chip" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="kdsFilter('asap',this)">⚡ Prepare Now</div>
       <div class="chip" style="background:#ea580c;color:#fff;border-color:#ea580c" onclick="kdsFilter('scheduled',this)">🕒 Scheduled</div>
       <div class="chip" style="background:#065f46;color:#fff;border-color:#065f46" onclick="showDailyMenuSelector()">📋 Today's Menu</div>
       <div class="chip" style="background:#7C3AED;color:#fff;border-color:#7C3AED" onclick="showSoldOutPanel()">🚫 Stock</div>
@@ -6283,7 +6283,7 @@
       todayOrders.forEach(o => { if (o.pickup_slot && o.pickup_slot !== 'ASAP') slotCounts[o.pickup_slot] = (slotCounts[o.pickup_slot] || 0) + 1; });
 
       const slots = [];
-      slots.push({ label: 'Prepare ASAP (Est. 20 Mins)', val: 'ASAP', peak: false, full: false, count: 0 });
+      slots.push({ label: 'Prepare Now (Est. 20 Mins)', val: 'ASAP', peak: false, full: false, count: 0 });
 
       let startH = rH;
       let startM = rM <= 30 ? 30 : 0;
@@ -6560,7 +6560,7 @@
         // ── Render success screen — each step isolated so one failure doesn't kill the rest
         try { setEl('suc-tok', splitOrders.map(o => o.token_number).join(' & ')); } catch (e) { }
         try { setEl('suc-can', numCounters > 1 ? `${numCounters} Counters` : (firstOrder.canteen_icon || '') + ' ' + firstOrder.canteen_name); } catch (e) { }
-        try { setEl('suc-time', S.selSlot === 'ASAP' ? '⏰ Preparing Now (Est. 20 mins)' : '🕒 Scheduled: ' + S.selSlot); } catch (e) { }
+        try { setEl('suc-time', S.selSlot === 'ASAP' ? '⚡ Prepare Now (Est. 20 mins)' : '🕒 Scheduled: ' + S.selSlot); } catch (e) { }
         try { setEl('suc-sub', S.selSlot === 'ASAP' ? 'Show this screen to kitchen staff' : 'Collect at the counter during your slot'); } catch (e) { }
         try { setEl('suc-canteen-token-label', numCounters > 1 ? 'Your Tokens' : firstOrder.canteen_name + ' · Token'); } catch (e) { }
 
@@ -7284,7 +7284,7 @@
             <div style="background:var(--light2);border-radius:7px;padding:3px 9px;font-size:11px;font-weight:700;color:var(--mid)">${canteen.icon || '🍛'} ${o.canteen_name || canteen.name || 'Canteen'}</div>
           </div>
           <div class="kitchen-meta">${o.employee_name || 'Employee'}</div>
-          ${o.pickup_slot && o.pickup_slot !== 'ASAP' ? `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#FFF7ED;color:#ea580c;border:1px solid #fdba74;display:inline-block">🕒 SCHEDULED: ${o.pickup_slot}</div>` : `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#f0fdf4;color:#16a34a;border:1px solid #86efac;display:inline-block">⚡ ASAP</div>`}
+          ${o.pickup_slot && o.pickup_slot !== 'ASAP' ? `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#FFF7ED;color:#ea580c;border:1px solid #fdba74;display:inline-block">🕒 SCHEDULED: ${o.pickup_slot}</div>` : `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#f0fdf4;color:#16a34a;border:1px solid #86efac;display:inline-block">⚡ Prepare Now</div>`}
         </div>
         <span class="badge ${isDone ? 'badge-done' : o.status === 'new' ? 'badge-new' : o.status === 'preparing' ? 'badge-prep' : 'badge-ready'}">
           ${isDone ? '📦 Done' : o.status === 'new' ? '🆕 New' : o.status === 'preparing' ? '⏳ Preparing' : '✅ Ready'}
@@ -9551,7 +9551,7 @@ self.addEventListener('fetch',e=>{
       <div class="big">#${o.token_number}</div>
       <div class="divider"></div>
       <div style="font-size:11px;margin-bottom:6px"><strong>Employee:</strong> ${o.employee_name || '—'} (${o.employee_id || ''})</div>
-      <div style="font-size:11px;margin-bottom:8px"><strong>Pickup Slot:</strong> ${o.pickup_slot || 'ASAP'}</div>
+      <div style="font-size:11px;margin-bottom:8px"><strong>Pickup Slot:</strong> ${o.pickup_slot === 'ASAP' || !o.pickup_slot ? '⚡ Prepare Now' : o.pickup_slot}</div>
       <div class="divider"></div>
       ${items.map(i => `<div class="row"><span>${i.emoji || ''} ${i.item_name || i.name}${i.customNote ? `<br><small style="color:#666">${i.customNote}</small>` : ''}</span><span>×${i.quantity || i.qty}</span></div>`).join('')}
       <div class="divider"></div>
