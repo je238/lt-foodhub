@@ -6285,35 +6285,39 @@
       const slots = [];
       slots.push({ label: 'Prepare Now (Est. 20 Mins)', val: 'ASAP', peak: false, full: false, count: 0 });
 
-      let startH = rH;
-      let startM = rM < 30 ? 30 : 0;
-      if (startM === 0) startH++; 
+      // Find the next 30-min slot boundary and check if it falls in the visibility window
+      const nowH = now.getHours();
+      const nowM = now.getMinutes();
+      const nowTotal = nowH * 60 + nowM;
 
-      if (startH < 10) { startH = 10; startM = 0; }
-      
-      if (startH < 18) {
-        for (let i = 0; i < 1; i++) {
-          if (startH >= 18) break;
-          let endH = startH;
-          let endM = startM + 30;
-          if (endM >= 60) { endM -= 60; endH++; }
-          
-          const formatTime = (h, m) => {
-            const ampm = h >= 12 ? 'PM' : 'AM';
-            const dh = h > 12 ? h - 12 : (h === 0 ? 12 : h);
-            const dm = m === 0 ? '00' : String(m).padStart(2, '0');
-            return `${dh}:${dm} ${ampm}`;
-          };
-          
-          const slotStr = `${formatTime(startH, startM)} - ${formatTime(endH, endM)}`;
-          const isPeak = (startH >= 12 && startH < 14);
-          const cnt = slotCounts[slotStr] || 0;
-          const isFull = cnt >= MAX_PER_SLOT;
-          slots.push({ label: slotStr, val: slotStr, peak: isPeak, full: isFull, count: cnt });
-          
-          startH = endH;
-          startM = endM;
-        }
+      // Next 30-min boundary
+      let nextSlotMins = nowM < 30 ? nowH * 60 + 30 : (nowH + 1) * 60;
+      if (nextSlotMins < 600) nextSlotMins = 600; // Business hours start: 10 AM
+
+      // Check this boundary and the next one — show only if 20-30 mins away
+      let showSlotMins = -1;
+      for (let candidate = nextSlotMins; candidate <= nextSlotMins + 30; candidate += 30) {
+        if (candidate >= 1080) break; // 6 PM cutoff
+        const minsAway = candidate - nowTotal;
+        if (minsAway > 20 && minsAway <= 30) { showSlotMins = candidate; break; }
+      }
+
+      if (showSlotMins >= 0 && showSlotMins < 1080) {
+        const sH = Math.floor(showSlotMins / 60);
+        const sM = showSlotMins % 60;
+        const eH = Math.floor((showSlotMins + 30) / 60);
+        const eM = (showSlotMins + 30) % 60;
+        const formatTime = (h, m) => {
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          const dh = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+          const dm = m === 0 ? '00' : String(m).padStart(2, '0');
+          return `${dh}:${dm} ${ampm}`;
+        };
+        const slotStr = `${formatTime(sH, sM)} - ${formatTime(eH, eM)}`;
+        const isPeak = (sH >= 12 && sH < 14);
+        const cnt = slotCounts[slotStr] || 0;
+        const isFull = cnt >= MAX_PER_SLOT;
+        slots.push({ label: slotStr, val: slotStr, peak: isPeak, full: isFull, count: cnt });
       }
 
       if (!S.selSlot || !slots.some(s => s.val === S.selSlot)) S.selSlot = 'ASAP';
