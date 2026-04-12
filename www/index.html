@@ -7209,16 +7209,6 @@
 
       const activeOrders = myOrders.filter(o => {
         if (o.status === 'done' || !['new', 'preparing', 'ready'].includes(o.status)) return false;
-
-        // Auto-hide: scheduled orders hidden until 30 mins before slot
-        if (o.pickup_slot && o.pickup_slot !== 'ASAP' && S.kdsFilter !== 'scheduled') {
-          const slotTime = parseSlotStartTime(o.pickup_slot);
-          if (slotTime) {
-            const showAt = new Date(slotTime.getTime() - 30 * 60000);
-            if (now < showAt) return false;
-          }
-        }
-
         if (S.kdsFilter === 'all') return true;
         if (['new', 'preparing', 'ready'].includes(S.kdsFilter)) return o.status === S.kdsFilter;
         if (S.kdsFilter === 'asap') return !o.pickup_slot || o.pickup_slot === 'ASAP';
