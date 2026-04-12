@@ -6328,6 +6328,32 @@
       el.style.gridTemplateColumns = '1fr';
       el.style.gap = '8px';
 
+      // Calculate next slot arrival for notification during gap periods
+      let nextSlotNotice = '';
+      if (slots.length === 1) { // Only "Prepare Now", no scheduled slot
+        // Find the next slot boundary that will enter the 30-min window
+        let nsMins = nowM < 30 ? nowH * 60 + 30 : (nowH + 1) * 60;
+        if (nsMins < 600) nsMins = 600;
+        const nsAway = nsMins - nowTotal;
+        if (nsAway > 30) {
+          // The slot after this one
+        } else if (nsAway <= 20) {
+          // Current boundary is too close, next one
+          nsMins += 30;
+        }
+        if (nsMins < 1080) {
+          const appearsIn = nsMins - 30 - nowTotal; // slot appears 30 min before start
+          const nsH = Math.floor(nsMins / 60);
+          const nsM = nsMins % 60;
+          const neH = Math.floor((nsMins + 30) / 60);
+          const neM = (nsMins + 30) % 60;
+          const ft = (h, m) => { const ap = h >= 12 ? 'PM' : 'AM'; const dh = h > 12 ? h - 12 : (h === 0 ? 12 : h); return `${dh}:${m === 0 ? '00' : String(m).padStart(2, '0')} ${ap}`; };
+          if (appearsIn > 0) {
+            nextSlotNotice = `<div style="padding:10px;border-radius:10px;background:#EFF6FF;border:1px solid #93C5FD;text-align:center;font-size:12px;color:#1E40AF;font-weight:600;margin-top:4px">\u{1F514} Next pre-order slot <b>${ft(nsH, nsM)} - ${ft(neH, neM)}</b> opens in <b>${appearsIn} min</b></div>`;
+          }
+        }
+      }
+
       el.innerHTML = slots.map(s => {
         const isActive = s.val === S.selSlot;
         if (s.full) {
@@ -6342,7 +6368,7 @@
           ${s.count > 0 ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${s.count}/${MAX_PER_SLOT} orders booked</div>` : ''}
           ${s.peak ? '<div style="font-size:10px;color:#f59e0b;margin-top:2px;font-weight:800">\u{1F525} PEAK HOUR</div>' : ''}
         </div>`;
-      }).join('');
+      }).join('') + nextSlotNotice;
     }
 
     function isSlotPast(slot) {
