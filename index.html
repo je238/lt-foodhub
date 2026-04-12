@@ -6075,12 +6075,7 @@
       if (lower.includes('combo') || lower.includes('thali') || lower.includes('meal')) {
         if (!addons.find(a => a.addonKey === 'roti')) addons.push({ ...ADDON_MAP['roti'], addonKey: 'roti' });
         if (!addons.find(a => a.addonKey === 'rice')) addons.push({ ...ADDON_MAP['rice'], addonKey: 'rice' });
-        if (!addons.find(a => a.addonKey === 'papad')) addons.push({ ...ADDON_MAP['papad'], addonKey: 'papad' });
         if (!addons.find(a => a.addonKey === 'raita')) addons.push({ ...ADDON_MAP['raita'], addonKey: 'raita' });
-      }
-      // Always offer common sides
-      if (!addons.find(a => a.addonKey === 'papad') && !lower.includes('beverage') && !lower.includes('tea') && !lower.includes('coffee') && !lower.includes('juice') && !lower.includes('milkshake') && !lower.includes('lassi') && !lower.includes('smoothie')) {
-        addons.push({ ...ADDON_MAP['papad'], addonKey: 'papad' });
       }
       return addons;
     }
