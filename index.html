@@ -6286,7 +6286,7 @@
       slots.push({ label: 'Prepare Now (Est. 20 Mins)', val: 'ASAP', peak: false, full: false, count: 0 });
 
       let startH = rH;
-      let startM = rM <= 30 ? 30 : 0;
+      let startM = rM < 30 ? 30 : 0;
       if (startM === 0) startH++; 
 
       if (startH < 10) { startH = 10; startM = 0; }
