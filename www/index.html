@@ -8166,32 +8166,74 @@
     }
 
     function renderAdminCanteens(el) {
-      el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div class="section-title">Manage Canteens</div>
-      <button class="btn btn-primary btn-sm" onclick="toast('Canteen add coming soon!','info','🏪')">+ Add</button>
-    </div>
+      if (S._adminCanteenDetail) { renderCanteenDetail(el, S._adminCanteenDetail); return; }
+      const todayStr = new Date().toISOString().slice(0, 10);
+      el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="section-title">Manage Canteens</div></div>
     ${S.canteens.map(c => {
-        const cOrders = S.allOrders.filter(o => o.canteen_id === c.id);
-        const orders = cOrders.length;
-        const rev = cOrders.reduce((s, o) => s + (o.item_total || 0), 0);
-        return `
-      <div class="canteen-mgmt-card">
-        <div class="canteen-mgmt-head">
-          <div class="canteen-mgmt-icon">${c.icon}</div>
-          <div style="flex:1">
-            <div class="canteen-mgmt-name">${c.name}</div>
-            <div class="canteen-mgmt-loc">📍 ${c.location || '—'}</div>
-          </div>
-          <div class="toggle ${c.is_open ? 'on' : ''}" onclick="toggleCanteen('${c.id}',this)"></div>
-        </div>
+        const cO = S.allOrders.filter(o => o.canteen_id === c.id);
+        const tO = cO.filter(o => o.created_at && String(o.created_at).slice(0, 10) === todayStr);
+        const tR = tO.reduce((s, o) => s + (o.amount_paid || o.item_total || 0), 0);
+        return `<div class="canteen-mgmt-card" style="cursor:pointer" onclick="openCanteenDetail('${c.id}')">
+        <div class="canteen-mgmt-head"><div class="canteen-mgmt-icon">${c.icon}</div><div style="flex:1"><div class="canteen-mgmt-name">${c.name}</div><div class="canteen-mgmt-loc">\u{1F4CD} ${c.location || '\u2014'}</div></div>
+          <div class="toggle ${c.is_open ? 'on' : ''}" onclick="event.stopPropagation();toggleCanteen('${c.id}',this)"></div></div>
         <div class="canteen-mgmt-stats">
-          <div class="cms-item"><div class="cms-val">${orders}</div><div class="cms-lbl">Orders</div></div>
-          <div class="cms-item"><div class="cms-val">₹${rev > 999 ? (rev / 1000).toFixed(1) + 'K' : (Math.round(rev * 100) / 100)}</div><div class="cms-lbl">Revenue</div></div>
-          <div class="cms-item"><div class="cms-val">${S.menu.filter(m => m.canteen_id === c.id && m.is_available !== false).length}</div><div class="cms-lbl">Active Items</div></div>
-        </div>
-      </div>`;
+          <div class="cms-item"><div class="cms-val">${tO.length}</div><div class="cms-lbl">Today</div></div>
+          <div class="cms-item"><div class="cms-val">\u20b9${tR > 999 ? (tR/1000).toFixed(1)+'K' : Math.round(tR)}</div><div class="cms-lbl">Today Rev</div></div>
+          <div class="cms-item"><div class="cms-val">${cO.length}</div><div class="cms-lbl">Total</div></div>
+        </div><div style="text-align:center;padding:6px 0 2px;font-size:12px;color:var(--brand);font-weight:700">Tap for details \u2192</div></div>`;
       }).join('')}`;
+    }
+    function openCanteenDetail(cid) { S._adminCanteenDetail = cid; renderAdmin('canteens'); }
+    function renderCanteenDetail(el, cid) {
+      const c = S.canteens.find(x => x.id === cid);
+      if (!c) { S._adminCanteenDetail = null; renderAdminCanteens(el); return; }
+      const allO = S.allOrders.filter(o => o.canteen_id === cid);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayO = allO.filter(o => o.created_at && String(o.created_at).slice(0, 10) === todayStr);
+      const todayRev = todayO.reduce((s, o) => s + (o.amount_paid || o.item_total || 0), 0);
+      const totalRev = allO.reduce((s, o) => s + (o.amount_paid || o.item_total || 0), 0);
+      const dC = {}, dR = {};
+      allO.forEach(o => (o.items || o.order_items || []).forEach(i => {
+        const n = i.item_name || i.name || '?';
+        dC[n] = (dC[n] || 0) + (i.quantity || i.qty || 1);
+        dR[n] = (dR[n] || 0) + ((i.unit_price || i.price || 0) * (i.quantity || i.qty || 1));
+      }));
+      const topD = Object.entries(dC).sort((a,b) => b[1]-a[1]).slice(0,10);
+      const topR = Object.entries(dR).sort((a,b) => b[1]-a[1]).slice(0,10);
+      const mxQ = topD[0]?.[1] || 1, mxR = topR[0]?.[1] || 1;
+      const dtRev = {};
+      for (let i=6;i>=0;i--) { const d=new Date();d.setDate(d.getDate()-i);dtRev[d.toISOString().slice(0,10)]=0; }
+      allO.forEach(o => { const d=o.created_at?String(o.created_at).slice(0,10):''; if(dtRev[d]!==undefined) dtRev[d]+=(o.amount_paid||o.item_total||0); });
+      const mxDR = Math.max(...Object.values(dtRev), 1);
+      const tMenu = S.menu.filter(m => m.canteen_id === cid && m.is_available !== false);
+      el.innerHTML = `
+    <button class="btn btn-ghost btn-sm" style="margin-bottom:12px" onclick="S._adminCanteenDetail=null;renderAdmin('canteens')">\u2190 Back</button>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div style="font-size:36px">${c.icon}</div>
+      <div><div style="font-size:18px;font-weight:800;color:var(--dark)">${c.name}</div>
+        <div style="font-size:12px;color:var(--muted)">${c.is_open?'\u{1F7E2} Open':'\u{1F534} Closed'} \u00b7 ${c.location||''}</div></div>
+    </div>
+    <div class="card" style="margin-bottom:14px"><div class="card-title">\u{1F4B0} Revenue</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#FFF7ED;border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:900;color:var(--brand)">\u20b9${Math.round(todayRev).toLocaleString('en-IN')}</div><div style="font-size:10px;color:var(--muted)">Today</div></div>
+        <div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:900;color:var(--green2)">\u20b9${Math.round(totalRev).toLocaleString('en-IN')}</div><div style="font-size:10px;color:var(--muted)">All Time</div></div>
+        <div style="background:var(--light2);border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:900">${todayO.length}</div><div style="font-size:10px;color:var(--muted)">Today Orders</div></div>
+        <div style="background:var(--light2);border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:900">${allO.length}</div><div style="font-size:10px;color:var(--muted)">Total Orders</div></div>
+      </div></div>
+    <div class="card" style="margin-bottom:14px"><div class="card-title">\u{1F4C5} Date-wise Revenue (7 Days)</div>
+      ${Object.entries(dtRev).map(([d,r]) => {
+        const lbl = new Date(d+'T00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+        const isT = d === todayStr;
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><div style="width:48px;font-size:11px;font-weight:${isT?'800':'600'};color:${isT?'var(--brand)':'var(--mid)'}">${lbl}</div><div style="flex:1;background:var(--light2);border-radius:5px;height:20px;overflow:hidden"><div style="height:100%;width:${(r/mxDR*100).toFixed(0)}%;background:${isT?'var(--brand)':'var(--green2)'};border-radius:5px"></div></div><div style="width:52px;text-align:right;font-size:11px;font-weight:700">\u20b9${Math.round(r)}</div></div>`;
+      }).join('')}</div>
+    <div class="card" style="margin-bottom:14px"><div class="card-title">\u{1F525} Best Selling Dishes</div>
+      ${topD.length===0?'<div style="color:var(--muted);font-size:13px;padding:8px 0">No data</div>':topD.map(([n,q],i) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><div style="width:16px;font-size:11px;font-weight:800;color:var(--muted)">${i+1}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:var(--dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</div><div style="background:var(--light2);border-radius:4px;height:7px;margin-top:2px;overflow:hidden"><div style="height:100%;width:${(q/mxQ*100).toFixed(0)}%;background:var(--brand);border-radius:4px"></div></div></div><div style="font-size:12px;font-weight:800;color:var(--brand)">${q} sold</div></div>`).join('')}</div>
+    <div class="card" style="margin-bottom:14px"><div class="card-title">\u{1F4B8} Dish by Revenue</div>
+      ${topR.length===0?'<div style="color:var(--muted);font-size:13px;padding:8px 0">No data</div>':topR.map(([n,r],i) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><div style="width:16px;font-size:11px;font-weight:800;color:var(--muted)">${i+1}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:var(--dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</div><div style="background:var(--light2);border-radius:4px;height:7px;margin-top:2px;overflow:hidden"><div style="height:100%;width:${(r/mxR*100).toFixed(0)}%;background:var(--green2);border-radius:4px"></div></div></div><div style="font-size:12px;font-weight:800;color:var(--green2)">\u20b9${Math.round(r)}</div></div>`).join('')}</div>
+    <div class="card" style="margin-bottom:14px"><div class="card-title">\u{1F4CB} Today's Menu (${tMenu.length} items)</div>
+      ${tMenu.length===0?'<div style="color:var(--muted);font-size:13px;padding:8px 0">No items</div>':tMenu.map(m => `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:600">${m.emoji||''} ${m.name}</div><div style="font-size:13px;font-weight:700;color:var(--brand)">\u20b9${m.price}</div></div>`).join('')}</div>
+    <div class="card" style="margin-bottom:14px"><div class="card-title">\u{1F4CB} Recent Orders</div>
+      ${todayO.slice(0,20).map(o => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)"><div><div style="font-size:13px;font-weight:700">#${o.token_number} \u00b7 ${o.employee_name||'Employee'}</div><div style="font-size:11px;color:var(--muted)">${(o.items||[]).map(i=>(i.item_name||i.name||'')+' \u00d7'+(i.quantity||i.qty||1)).join(', ')}</div></div><div style="text-align:right"><div style="font-size:13px;font-weight:700;color:var(--brand)">\u20b9${o.amount_paid||0}</div><span class="badge ${o.status==='done'?'badge-done':o.status==='ready'?'badge-ready':'badge-new'}" style="font-size:9px">${o.status}</span></div></div>`).join('')||'<div style="color:var(--muted);font-size:13px;padding:8px 0">No orders today</div>'}</div>`;
     }
 
     // Kitchen open/close toggle
