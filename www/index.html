@@ -6440,7 +6440,8 @@
 
       // Check ALL canteens that have items in cart
       const cartCanteenIds = [...new Set(S.cart.map(i => {
-        const mi = S.menu.find(m => m.id === i.id);
+        const targetId = (i.is_addon && i.parent_id) ? i.parent_id : i.id;
+        const mi = S.menu.find(m => m.id === targetId);
         return mi?.canteen_id || S.selCanteen?.id || 'c1';
       }))];
       const closedCanteens = cartCanteenIds.map(cid => S.canteens.find(c => c.id === cid)).filter(c => c && !c.is_open);
@@ -6467,7 +6468,8 @@
         // ── Group cart items by canteen ──────────────────────────────────────
         const byCanteen = {};
         S.cart.forEach(i => {
-          const menuItem = S.menu.find(m => m.id === i.id);
+          const targetId = (i.is_addon && i.parent_id) ? i.parent_id : i.id;
+          const menuItem = S.menu.find(m => m.id === targetId);
           const cid = menuItem?.canteen_id || S.selCanteen?.id || 'c1';
           if (!byCanteen[cid]) byCanteen[cid] = [];
           byCanteen[cid].push(i);
