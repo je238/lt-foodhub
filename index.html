@@ -7233,12 +7233,9 @@
       });
 
       activeOrders.sort((a, b) => {
-        const aIsAsap = !a.pickup_slot || a.pickup_slot === 'ASAP';
-        const bIsAsap = !b.pickup_slot || b.pickup_slot === 'ASAP';
-        if (aIsAsap && !bIsAsap) return -1;
-        if (!aIsAsap && bIsAsap) return 1;
-        if (!aIsAsap && !bIsAsap) return (a.pickup_slot || '').localeCompare(b.pickup_slot || '');
-        return new Date(a.created_at) - new Date(b.created_at);
+        const tA = parseInt(a.token_number || a.token || a.id) || 0;
+        const tB = parseInt(b.token_number || b.token || b.id) || 0;
+        return tA - tB;
       });
 
       const doneOrders = myOrders.filter(o => o.status === 'done').slice(0, 10);
