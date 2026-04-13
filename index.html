@@ -5499,8 +5499,8 @@
         const { data: existing } = await sb.from('employees').select('id,password_hash').eq('email', email).maybeSingle();
         if (existing) {
           if (existing.password_hash) { err.textContent = 'Account exists. Please login.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-          _pendingEmpData = existing; toast('Account found! Please set a password. 🔐', 'success', '✅');
-          _showEmpPanel('emp-set-pw'); btn.classList.remove('btn-loading'); btn.disabled = false; return;
+          _pendingEmpData = existing; toast('Account found! Sending OTP... 📧', 'success', '✅');
+          _otpEmail = email; await sendEmailOTP(); btn.classList.remove('btn-loading'); btn.disabled = false; return;
         }
         const { data: result, error: rpcErr } = await sb.rpc('register_employee', {
           p_name: name, p_email: email, p_phone: phone || null
@@ -5510,9 +5510,9 @@
           btn.classList.remove('btn-loading'); btn.disabled = false;
           return;
         }
-        toast('Account created! Please set a password. 🔐', 'success', '✅');
-        _pendingEmpData = { id: result.emp_id, email: email };
-        _showEmpPanel('emp-set-pw');
+        toast('Account created! Sending OTP... 📧', 'success', '✅');
+        _otpEmail = email;
+        await sendEmailOTP();
       } catch (e) {
         err.textContent = 'Error: ' + (e.message || 'Try again');
       }
@@ -8961,16 +8961,26 @@ self.addEventListener('fetch',e=>{
       btn.classList.add('btn-loading'); btn.disabled = true;
       try {
         if (!sb) { err.textContent = 'Database not connected'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-        const { data: existing } = await sb.from('employees').select('id').eq('email', email).maybeSingle();
-        if (!existing) {
-          err.textContent = 'Email not found. Please register first.';
+        const edgeFnUrl = SURL + '/functions/v1/send-otp-email';
+        const res = await fetch(edgeFnUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
+          body: JSON.stringify({ email })
+        });
+        const result = await res.json();
+        if (!result.success) {
+          err.textContent = result.error || 'Email not found. Please register first.';
           btn.classList.remove('btn-loading'); btn.disabled = false;
           return;
         }
         closeModal();
-        _pendingEmpData = { id: existing.id, email: email };
-        _showEmpPanel('emp-set-pw');
-        toast('Proceed to reset password 🔐', 'success', '✅');
+        // Pre-fill login email and show OTP step
+        _otpEmail = email;
+        _showEmpPanel('emp-step2');
+        document.getElementById('otp-email-display').textContent = result.maskedEmail || email;
+        ['otp-1', 'otp-2', 'otp-3', 'otp-4', 'otp-5', 'otp-6'].forEach(id => { const b = document.getElementById(id); if (b) b.value = ''; });
+        document.getElementById('otp-1')?.focus();
+        toast('OTP sent to ' + (result.maskedEmail || email), 'success', '📧');
       } catch (e) {
         err.textContent = 'Error: ' + (e.message || 'Try again');
       }
