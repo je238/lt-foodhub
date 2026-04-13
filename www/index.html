@@ -10386,7 +10386,6 @@ self.addEventListener('fetch',e=>{
       ${topDishes.length === 0 ? '<div style="text-align:center;color:var(--muted);padding:16px">No orders this month</div>' : ''}
       ${topDishes.length > 10 ? `<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px">Showing top 10 of ${topDishes.length} dishes</div>` : ''}`;
         el.appendChild(topCard);
-
         // ── Per-Dish Order Count (full table) ──
         const dishTableCard = document.createElement('div');
         dishTableCard.className = 'card';
@@ -10473,6 +10472,7 @@ self.addEventListener('fetch',e=>{
         <button class="btn btn-ghost btn-full" onclick="showBulkImport()">📋 Bulk Import Employees</button>
         <button class="btn btn-ghost btn-full" onclick="showRefundModal('','',0)">💚 Issue Manual Refund</button>
         <button class="btn btn-ghost btn-full" onclick="showAdminHoursConfig()">⏰ Canteen Hours Config</button>
+        <button class="btn btn-ghost btn-full" onclick="showFifoInventory()">📦 FIFO Inventory Management</button>
       </div>
     </div>`;
       el.appendChild(extra);
