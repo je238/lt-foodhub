@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 const MERCHANT_ID = Deno.env.get('ICICI_MERCHANT_ID') || '100000000417983';
 const AGGREGATOR_ID = Deno.env.get('ICICI_AGGREGATOR_ID') || '100000000417982';
 const SECRET_KEY = Deno.env.get('ICICI_SECURE_KEY') || 'f1aac8b6-fd42-439a-a102-d58465b75876';
+const ICICI_URL = 'https://pgpay.icicibank.com/pg/api/v2/initiateSale';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -10,6 +11,7 @@ const corsHeaders = {
 };
 
 // ICICI Hash = HMAC-SHA256 of VALUES concatenated in ALPHABETICAL order of parameter NAMES
+// IMPORTANT: aggregatorID is EXCLUDED from hash (per ICICI sample)
 async function generateICICIHash(params: Record<string, string>, secretKey: string): Promise<string> {
     const sortedKeys = Object.keys(params).sort();
     const hashText = sortedKeys.map(k => params[k]).join('');
@@ -26,7 +28,9 @@ async function generateICICIHash(params: Record<string, string>, secretKey: stri
         ["sign"]
     );
     const signature = await crypto.subtle.sign("HMAC", key, enc.encode(hashText));
-    return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const hash = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log('Generated hash:', hash);
+    return hash;
 }
 
 serve(async (req) => {
@@ -36,7 +40,6 @@ serve(async (req) => {
         const body = await req.json();
         const { action } = body;
 
-        // ── GENERATE HASH — browser will submit form directly to ICICI ──
         if (action === 'initiate') {
             const { amount, employeeId, employeeName, employeeEmail, employeePhone } = body;
             const txnRefNo = `TXN${Date.now()}`;
@@ -44,10 +47,10 @@ serve(async (req) => {
             const txnDate = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
             const returnURL = 'https://lt-foodhub.vercel.app/';
 
-            const params: Record<string, string> = {
+            // Parameters for HASH only — aggregatorID is EXCLUDED from hash
+            const hashParams: Record<string, string> = {
                 addlParam1: employeeId || '000',
                 addlParam2: 'TOPUP',
-                aggregatorID: AGGREGATOR_ID,
                 amount: amt,
                 currencyCode: '356',
                 customerEmailID: employeeEmail || 'info@slphospitality.com',
@@ -61,21 +64,48 @@ serve(async (req) => {
                 txnDate: txnDate,
             };
 
-            const secureHash = await generateICICIHash(params, SECRET_KEY);
-            console.log('Generated hash:', secureHash);
+            const secureHash = await generateICICIHash(hashParams, SECRET_KEY);
 
-            // Return ALL params + hash to the browser — browser will POST to ICICI directly
-            return new Response(JSON.stringify({
-                success: true,
-                iciciUrl: 'https://pgpay.icicibank.com/pg/api/v2/initiateSale',
-                params: { ...params, secureHash },
-                merchantTxnNo: txnRefNo,
-            }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            // Full request body sent to ICICI — includes aggregatorID + secureHash
+            const requestBody = {
+                ...hashParams,
+                aggregatorID: AGGREGATOR_ID,
+                secureHash: secureHash,
+            };
+
+            console.log('ICICI request body:', JSON.stringify(requestBody));
+
+            const iciciRes = await fetch(ICICI_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
             });
+
+            const iciciData = await iciciRes.json();
+            console.log('ICICI res:', JSON.stringify(iciciData));
+
+            if (iciciData.responseCode === 'R1000' && (iciciData.redirectURI || iciciData.redirectUrl)) {
+                const redirectBase = iciciData.redirectURI || iciciData.redirectUrl;
+
+                return new Response(JSON.stringify({
+                    success: true,
+                    redirectUrl: redirectBase,
+                    tranCtx: iciciData.tranCtx,
+                    merchantTxnNo: txnRefNo,
+                }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                });
+            } else {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: iciciData.message || iciciData.responseCode || 'ICICI rejected the request',
+                    rawResponse: iciciData,
+                }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                });
+            }
         }
 
-        // ── VERIFY CALLBACK ────────────────────────────────────────────
         if (action === 'verify') {
             return new Response(JSON.stringify({ success: true }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
