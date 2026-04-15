@@ -6885,6 +6885,7 @@
       btn.innerHTML = '<span>Connecting to ICICI...</span>';
 
       try {
+        // Step 1: Get hash from our secure server (Edge Function only generates hash now)
         const res = await fetch(SURL + '/functions/v1/icici-payment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
@@ -6894,8 +6895,7 @@
             employeeId: S.user.id,
             employeeName: S.user.name || 'Employee',
             employeeEmail: S.user.email || 'noreply@slpnexus.com',
-            employeePhone: S.user.phone || '9999999999',
-            returnUrl: window.location.origin + window.location.pathname
+            employeePhone: S.user.phone || '9999999999'
           })
         });
 
@@ -6909,7 +6909,7 @@
           return;
         }
 
-        if (data.success && data.redirectUrl) {
+        if (data.success && data.params) {
           // Store merchantTxnNo for verification after redirect
           localStorage.setItem('fh-pending-topup', JSON.stringify({
             amount, employeeId: S.user.id, merchantTxnNo: data.merchantTxnNo, ts: Date.now()
@@ -6917,10 +6917,24 @@
 
           toast('Redirecting to ICICI payment page...', 'info', '🏦');
 
-          // Redirect to ICICI payment page with tranCtx token
+          // Step 2: Submit form directly to ICICI from the browser (NOT from Edge Function)
+          // This ensures the request comes from lt-foodhub.vercel.app (whitelisted domain)
           setTimeout(() => {
-            const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
-            window.location.href = fullUrl;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = data.iciciUrl;
+            form.style.display = 'none';
+
+            Object.entries(data.params).forEach(([key, value]) => {
+              const input = document.createElement('input');
+              input.type = 'hidden';
+              input.name = key;
+              input.value = value;
+              form.appendChild(input);
+            });
+
+            document.body.appendChild(form);
+            form.submit();
           }, 500);
         } else {
           toast('Payment initiation failed: ' + (data.error || 'Unknown error'), 'error', '❌');

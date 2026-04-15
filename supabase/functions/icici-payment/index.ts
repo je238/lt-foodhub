@@ -1,37 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const MERCHANT_ID = Deno.env.get('ICICI_MERCHANT_ID') || '100000000417983';
-const SECRET_KEY = Deno.env.get('ICICI_SECRET_KEY') || 'f1aac8b6-fd42-439a-a102-d58465b75876';
-const ICICI_URL = 'https://pgpay.icicibank.com/pg/api/v2/initiateSale';
+const AGGREGATOR_ID = Deno.env.get('ICICI_AGGREGATOR_ID') || '100000000417982';
+const SECRET_KEY = Deno.env.get('ICICI_SECURE_KEY') || 'f1aac8b6-fd42-439a-a102-d58465b75876';
 
-// Enable CORS for frontend requests
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function generateV2Hash(p: any, secretKey: string) {
-    // ICICI Hash Order is EXPLICIT: addlParam1, addlParam2, aggregatorID, amount, currencyCode, 
-    // customerEmailID, customerMobileNo, customerName, merchantId, merchantTxnNo, payType, returnURL, transactionType, txnDate
-    const hashText = [
-        p.addlParam1 || '',
-        p.addlParam2 || '',
-        p.aggregatorID || '',
-        p.amount || '',
-        p.currencyCode || '',
-        p.customerEmailID || '',
-        p.customerMobileNo || '',
-        p.customerName || '',
-        p.merchantId || '',
-        p.merchantTxnNo || '',
-        p.payType || '',
-        p.returnURL || '',
-        p.transactionType || '',
-        p.txnDate || ''
-    ].join('');
-    
-    console.log('Hash Text Concatenation:', hashText);
+// ICICI Hash = HMAC-SHA256 of VALUES concatenated in ALPHABETICAL order of parameter NAMES
+async function generateICICIHash(params: Record<string, string>, secretKey: string): Promise<string> {
+    const sortedKeys = Object.keys(params).sort();
+    const hashText = sortedKeys.map(k => params[k]).join('');
+
+    console.log('Hash keys order:', sortedKeys.join(', '));
+    console.log('Hash text:', hashText);
 
     const enc = new TextEncoder();
     const key = await crypto.subtle.importKey(
@@ -42,75 +26,72 @@ async function generateV2Hash(p: any, secretKey: string) {
         ["sign"]
     );
     const signature = await crypto.subtle.sign("HMAC", key, enc.encode(hashText));
-    const hash = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('').toLowerCase();
-    
-    console.log('Generated SecureHash:', hash);
-    return hash;
+    return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
     try {
-        const { action, amount, employeeId, orderId } = await req.json();
+        const body = await req.json();
+        const { action } = body;
 
-        // 1. INITIATE SALE
+        // ── GENERATE HASH — browser will submit form directly to ICICI ──
         if (action === 'initiate') {
+            const { amount, employeeId, employeeName, employeeEmail, employeePhone } = body;
             const txnRefNo = `TXN${Date.now()}`;
+            const amt = Number(amount).toFixed(2);
+            const txnDate = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+            const returnURL = 'https://lt-foodhub.vercel.app/';
 
-            const payloadObj = {
-                addlParam1: "NA",
-                addlParam2: "NA",
-                aggregatorID: '100000000417982',
-                amount: String(Number(amount).toFixed(2)),
-                currencyCode: "356",
-                customerEmailID: "info@slphospitality.com",
-                customerMobileNo: "9999999999",
-                customerName: String(employeeId).slice(0, 30) || "Employee",
-                merchantId: String(MERCHANT_ID),
-                merchantTxnNo: String(txnRefNo),
-                payType: "0",
-                returnURL: 'https://slp-nexus.vercel.app',
-                transactionType: "SALE",
-                txnDate: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)
+            const params: Record<string, string> = {
+                addlParam1: employeeId || '000',
+                addlParam2: 'TOPUP',
+                aggregatorID: AGGREGATOR_ID,
+                amount: amt,
+                currencyCode: '356',
+                customerEmailID: employeeEmail || 'info@slphospitality.com',
+                customerMobileNo: employeePhone || '9999999999',
+                customerName: employeeName || 'SLP Employee',
+                merchantId: MERCHANT_ID,
+                merchantTxnNo: txnRefNo,
+                payType: '0',
+                returnURL: returnURL,
+                transactionType: 'SALE',
+                txnDate: txnDate,
             };
 
-            const secureHash = await generateV2Hash(payloadObj, SECRET_KEY);
-            const finalPayload = { ...payloadObj, secureHash };
+            const secureHash = await generateICICIHash(params, SECRET_KEY);
+            console.log('Generated hash:', secureHash);
 
-            console.log('Request Payload:', JSON.stringify(finalPayload));
-
-            const iciciReq = await fetch(ICICI_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(finalPayload)
+            // Return ALL params + hash to the browser — browser will POST to ICICI directly
+            return new Response(JSON.stringify({
+                success: true,
+                iciciUrl: 'https://pgpay.icicibank.com/pg/api/v2/initiateSale',
+                params: { ...params, secureHash },
+                merchantTxnNo: txnRefNo,
+            }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
-
-            const iciciData = await iciciReq.json();
-            console.log('ICICI response:', JSON.stringify(iciciData));
-
-            if (iciciData.responseCode === 'R1000' || iciciData.redirectURI || iciciData.redirectUrl) {
-                return new Response(JSON.stringify({
-                    success: true,
-                    redirectUrl: iciciData.redirectURI || iciciData.redirectUrl,
-                    tranCtx: iciciData.tranCtx,
-                    merchantTxnNo: txnRefNo
-                }), {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                });
-            } else {
-                return new Response(JSON.stringify({ success: false, error: iciciData.respDescription || 'ICICI Error', rawData: iciciData }), { headers: corsHeaders, status: 400 });
-            }
         }
 
-        // 2. CALLBACK VERIFICATION
+        // ── VERIFY CALLBACK ────────────────────────────────────────────
         if (action === 'verify') {
-            return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+            return new Response(JSON.stringify({ success: true }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
         }
 
-        return new Response(JSON.stringify({ error: 'Invalid action' }), { headers: corsHeaders, status: 400 });
+        return new Response(JSON.stringify({ error: 'Invalid action' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+        });
 
     } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), { headers: corsHeaders, status: 500 });
+        console.error('Edge function error:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500,
+        });
     }
 });
