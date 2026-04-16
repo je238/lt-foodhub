@@ -6950,6 +6950,22 @@
                   if (!rpcErr && result?.success) {
                     S.user.wallet_balance = parseFloat(result.new_balance) || S.user.wallet_balance;
                     toast(`Order placed! Token #${result.token_number} at ${canteen.icon} ${canteen.name}`, 'success', '✅');
+
+                    // Add to local state so it appears instantly without manual refresh
+                    const newOrder = {
+                      id: result.order_id,
+                      token_number: result.token_number,
+                      employee_id: S.user.id,
+                      canteen_id: cid,
+                      canteen_name: canteen.name,
+                      canteen_icon: canteen.icon,
+                      pickup_slot: orderData.selSlot,
+                      status: 'new',
+                      created_at: new Date().toISOString(),
+                      items: items.map(i => ({ ...i }))
+                    };
+                    S.orders.unshift(newOrder);
+                    S.allOrders.unshift({ ...newOrder });
                   }
                 }
 

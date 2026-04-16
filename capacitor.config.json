@@ -3,7 +3,11 @@
   "appName": "SLP Nexus",
   "webDir": "www",
   "server": {
-    "androidScheme": "https"
+    "url": "https://lt-foodhub.vercel.app",
+    "androidScheme": "https",
+    "allowNavigation": [
+      "pgpay.icicibank.com"
+    ]
   },
   "android": {
     "allowMixedContent": true,
