@@ -6888,6 +6888,76 @@
       }
     })();
 
+    // ── Auto-verify any pending payments on page load ──
+    // Handles: bank debited but redirect failed (internet issue, browser closed, etc.)
+    async function verifyPendingPayments() {
+      if (!sb || !S.user) return;
+      const pending = localStorage.getItem('fh-pending-topup');
+      if (!pending) return;
+
+      try {
+        const { merchantTxnNo, amount, ts } = JSON.parse(pending);
+        // Only check payments less than 24 hours old
+        if (Date.now() - ts > 24 * 60 * 60 * 1000) {
+          localStorage.removeItem('fh-pending-topup');
+          return;
+        }
+
+        console.log('Verifying pending payment:', merchantTxnNo);
+
+        const res = await fetch(SURL + '/functions/v1/icici-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
+          body: JSON.stringify({ action: 'verify', merchantTxnNo })
+        });
+
+        const data = await res.json();
+        console.log('Payment verification result:', data);
+
+        if (data.paymentStatus === 'SUCCESS') {
+          const paidAmount = parseFloat(data.amount) || parseFloat(amount);
+          toast(`Found successful payment of ₹${paidAmount}! Crediting wallet...`, 'info', '🔍');
+
+          // Credit wallet
+          const { data: result, error: rpcErr } = await sb.rpc('admin_wallet_credit', {
+            p_employee_id: S.user.id,
+            p_amount: paidAmount,
+            p_reason: `ICICI Online Top-up (Txn: ${merchantTxnNo}, Auto-verified)`
+          });
+
+          if (!rpcErr && result?.success) {
+            S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + paidAmount);
+          } else {
+            const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+            const newBal = (parseFloat(emp?.wallet_balance) || 0) + paidAmount;
+            await sb.from('employees').update({ wallet_balance: newBal }).eq('id', S.user.id);
+            await sb.from('wallet_transactions').insert({
+              employee_id: S.user.id, amount: paidAmount, type: 'credit',
+              description: `ICICI Top-up auto-verified (Txn: ${merchantTxnNo})`, reference_id: merchantTxnNo
+            });
+            S.user.wallet_balance = newBal;
+          }
+
+          setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
+          setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
+          toast(`₹${paidAmount} added to wallet!`, 'success', '💰');
+          localStorage.removeItem('fh-pending-topup');
+
+        } else if (data.paymentStatus === 'PENDING') {
+          toast('Your recent payment is still processing. Will check again shortly.', 'info', '⏳');
+          // Don't remove from localStorage — check again later
+        } else {
+          // Payment genuinely failed
+          localStorage.removeItem('fh-pending-topup');
+        }
+      } catch (e) {
+        console.error('Payment verification error:', e);
+      }
+    }
+
+    // Run verification 5 seconds after page load (gives time for user auth)
+    setTimeout(() => { if (S.user) verifyPendingPayments(); }, 5000);
+
     async function topUp(amount) { showTopUp(amount); }
 
     function showTopUp(amount) {

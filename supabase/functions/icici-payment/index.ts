@@ -106,8 +106,48 @@ serve(async (req) => {
             }
         }
 
+        // ── VERIFY / STATUS CHECK ──────────────────────────────────
         if (action === 'verify') {
-            return new Response(JSON.stringify({ success: true }), {
+            const { merchantTxnNo } = body;
+            if (!merchantTxnNo) {
+                return new Response(JSON.stringify({ error: 'merchantTxnNo required' }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
+                });
+            }
+
+            // Build status check request
+            const statusParams: Record<string, string> = {
+                aggregatorID: AGGREGATOR_ID,
+                merchantId: MERCHANT_ID,
+                merchantTxnNo: merchantTxnNo,
+                requestType: 'STATUS',
+            };
+            const statusHash = await generateICICIHash(statusParams, SECRET_KEY);
+
+            const statusBody = { ...statusParams, secureHash: statusHash };
+            console.log('Status check request:', JSON.stringify(statusBody));
+
+            const statusRes = await fetch('https://pgpay.icicibank.com/pg/api/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(statusBody),
+            });
+
+            const statusData = await statusRes.json();
+            console.log('Status check response:', JSON.stringify(statusData));
+
+            // ICICI returns responseCode "0000" for successful payment
+            const isSuccess = statusData.responseCode === '0000' || statusData.responseCode === 'E000';
+
+            return new Response(JSON.stringify({
+                success: true,
+                paymentStatus: isSuccess ? 'SUCCESS' : (statusData.responseCode === 'P1001' ? 'PENDING' : 'FAILED'),
+                responseCode: statusData.responseCode,
+                amount: statusData.amount || statusData.txnAmount,
+                iciciTxnNo: statusData.iciciTxnNo || statusData.bankRefNo,
+                merchantTxnNo: statusData.merchantTxnNo,
+                rawResponse: statusData,
+            }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
