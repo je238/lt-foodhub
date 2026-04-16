@@ -4529,13 +4529,11 @@
           </div>
           <div class="pay-radio"></div>
         </div>
-        <div class="pay-option" onclick="selPay(this,'upi')" style="opacity:0.6">
-          <span class="pay-icon">📱</span>
+        <div class="pay-option" onclick="selPay(this,'upi')" id="pay-opt-upi">
+          <span class="pay-icon">🏦</span>
           <div class="pay-body">
-            <div class="pay-name">UPI <span
-                style="font-size:10px;background:#f59e0b;color:#fff;padding:1px 6px;border-radius:8px;font-weight:700">COMING
-                SOON</span></div>
-            <div class="pay-sub">Google Pay, PhonePe, Paytm</div>
+            <div class="pay-name">ICICI Pay</div>
+            <div class="pay-sub">UPI, Cards, Net Banking</div>
           </div>
           <div class="pay-radio"></div>
         </div>
@@ -6413,10 +6411,6 @@
     }
 
     function selPay(el, method) {
-      if (method === 'upi') {
-        toast('UPI coming soon! Please use SLP Nexus Wallet.', 'warn', '📱');
-        return;
-      }
       document.querySelectorAll('.pay-option').forEach(p => p.classList.remove('active'));
       el.classList.add('active');
       S.selPay = method;
@@ -6427,7 +6421,6 @@
     // ═════════════════════════════════════
     async function placeOrder() {
       if (S.cart.length === 0) { toast('Your cart is empty!', 'error', '🛒'); return; }
-      if (S.selPay === 'upi') { toast('UPI coming soon! Please use SLP Nexus Wallet.', 'warn', '📱'); return; }
       if (!sb) { toast('Database not connected!', 'error', '❌'); return; }
 
       // Fetch fresh canteen status from DB before placing order
@@ -6452,9 +6445,58 @@
         return;
       }
 
-      // Quick client-side balance estimate before hitting server
       const estimatedTotal = S.cart.reduce((s, i) => s + i.price * i.qty, 0);
       const estimatedFees = calcFees(estimatedTotal);
+
+      // ── ICICI Pay: redirect to payment gateway ──
+      if (S.selPay === 'upi') {
+        const btn = document.getElementById('pay-btn');
+        btn.classList.add('btn-loading'); btn.disabled = true;
+        btn.innerHTML = '<span>Connecting to ICICI...</span>';
+        try {
+          // Save cart + order details so we can place the order after payment
+          localStorage.setItem('fh-pending-order', JSON.stringify({
+            cart: S.cart, selSlot: S.selSlot, selCanteen: S.selCanteen,
+            amount: estimatedFees.grandTotal, userId: S.user.id, ts: Date.now()
+          }));
+
+          const res = await fetch(SURL + '/functions/v1/icici-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
+            body: JSON.stringify({
+              action: 'initiate',
+              amount: estimatedFees.grandTotal,
+              employeeId: S.user.id,
+              employeeName: S.user.name || 'Employee',
+              employeeEmail: S.user.email || 'noreply@slpnexus.com',
+              employeePhone: S.user.phone || '9999999999'
+            })
+          });
+          const data = await res.json();
+          if (data.success && data.redirectUrl) {
+            localStorage.setItem('fh-pending-topup', JSON.stringify({
+              amount: estimatedFees.grandTotal, employeeId: S.user.id,
+              merchantTxnNo: data.merchantTxnNo, ts: Date.now(), isOrder: true
+            }));
+            toast('Redirecting to ICICI payment page...', 'info', '🏦');
+            setTimeout(() => {
+              window.location.href = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
+            }, 500);
+          } else {
+            toast('Payment failed: ' + (data.error || 'Unknown'), 'error', '❌');
+            btn.classList.remove('btn-loading'); btn.disabled = false;
+            btn.innerHTML = '<span>Place Order & Pay →</span>';
+          }
+        } catch (e) {
+          toast('Payment error: ' + e.message, 'error', '❌');
+          const btn2 = document.getElementById('pay-btn');
+          btn2.classList.remove('btn-loading'); btn2.disabled = false;
+          btn2.innerHTML = '<span>Place Order & Pay →</span>';
+        }
+        return;
+      }
+
+      // ── Wallet payment: check balance ──
       if (S.user.wallet_balance < estimatedFees.grandTotal) {
         toast(`Insufficient balance! You have ₹${Math.round(S.user.wallet_balance)}, need ₹${estimatedFees.grandTotal.toFixed(2)}`, 'error', '💸');
         return;
@@ -6875,7 +6917,55 @@
 
             setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
             setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
-            toast(`₹${amount} added to wallet! New balance: ₹${Math.round(S.user.wallet_balance)}`, 'success', '💰');
+
+            // Check if this was an order payment (not just wallet top-up)
+            const pendingOrder = localStorage.getItem('fh-pending-order');
+            if (pendingOrder) {
+              try {
+                const orderData = JSON.parse(pendingOrder);
+                toast('Payment successful! Placing your order...', 'info', '🍽️');
+
+                // Group cart items by canteen and place orders
+                const byCanteen = {};
+                (orderData.cart || []).forEach(i => {
+                  const mi = S.menu.find(m => m.id === ((i.is_addon && i.parent_id) ? i.parent_id : i.id));
+                  const cid = mi?.canteen_id || orderData.selCanteen?.id || 'c1';
+                  if (!byCanteen[cid]) byCanteen[cid] = [];
+                  byCanteen[cid].push(i);
+                });
+
+                for (const cid of Object.keys(byCanteen)) {
+                  const canteen = S.canteens.find(c => c.id === cid) || { id: cid, name: 'Counter', icon: '🍽️' };
+                  const items = byCanteen[cid];
+                  const { data: result, error: rpcErr } = await sb.rpc('place_order', {
+                    p_employee_id: S.user.id,
+                    p_canteen_id: cid,
+                    p_canteen_name: canteen.name,
+                    p_canteen_icon: canteen.icon || '🍽️',
+                    p_pickup_slot: orderData.selSlot,
+                    p_items: items.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price })),
+                    p_payment_method: 'icici_pay'
+                  });
+
+                  if (!rpcErr && result?.success) {
+                    S.user.wallet_balance = parseFloat(result.new_balance) || S.user.wallet_balance;
+                    toast(`Order placed! Token #${result.token_number} at ${canteen.icon} ${canteen.name}`, 'success', '✅');
+                  }
+                }
+
+                S.cart = [];
+                localStorage.removeItem('fh-pending-order');
+                setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
+                setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
+                setTimeout(() => { if (typeof renderMyOrders === 'function') renderMyOrders(); nav('orders'); }, 1500);
+              } catch (orderErr) {
+                console.error('Order placement error:', orderErr);
+                toast(`₹${amount} added to wallet but order placement failed. Please order again from wallet balance.`, 'warn', '⚠️');
+                localStorage.removeItem('fh-pending-order');
+              }
+            } else {
+              toast(`₹${amount} added to wallet! New balance: ₹${Math.round(S.user.wallet_balance)}`, 'success', '💰');
+            }
           } catch (e) {
             console.error('Wallet credit error:', e);
             toast('Payment received but wallet update failed. Contact admin.', 'error', '⚠️');
