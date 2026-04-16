@@ -47,10 +47,11 @@ serve(async (req) => {
             const txnDate = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
             const returnURL = 'https://lt-foodhub.vercel.app/';
 
-            // Parameters for HASH only — aggregatorID is EXCLUDED from hash
+            // Parameters for HASH — aggregatorID IS included
             const hashParams: Record<string, string> = {
                 addlParam1: employeeId || '000',
                 addlParam2: 'TOPUP',
+                aggregatorID: AGGREGATOR_ID,
                 amount: amt,
                 currencyCode: '356',
                 customerEmailID: employeeEmail || 'info@slphospitality.com',
@@ -66,10 +67,9 @@ serve(async (req) => {
 
             const secureHash = await generateICICIHash(hashParams, SECRET_KEY);
 
-            // Full request body sent to ICICI — includes aggregatorID + secureHash
+            // Full request body = hash params + secureHash
             const requestBody = {
                 ...hashParams,
-                aggregatorID: AGGREGATOR_ID,
                 secureHash: secureHash,
             };
 

@@ -4388,7 +4388,7 @@
       <div class="card" style="margin-bottom:16px">
         <div class="card-title">💳 Add Money to Wallet</div>
         <div class="topup-grid">
-          <button class="topup-btn" onclick="topUp(100)">₹100</button>
+          <button class="topup-btn" onclick="topUp(1)">₹1</button>
           <button class="topup-btn" onclick="topUp(200)">₹200</button>
           <button class="topup-btn" onclick="topUp(500)">₹500</button>
           <button class="topup-btn" onclick="topUp(1000)">₹1,000</button>
@@ -4396,9 +4396,9 @@
           <button class="topup-btn" onclick="topUp(3000)">₹3,000</button>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:4px">
-          <input type="number" id="custom-topup-amt" placeholder="Custom amount" min="100" max="10000"
+          <input type="number" id="custom-topup-amt" placeholder="Custom amount" min="1" max="10000"
             style="flex:1;padding:12px;border:2px solid var(--border);border-radius:12px;font-size:15px;font-weight:700;font-family:var(--fh);outline:none"
-            oninput="this.style.borderColor=this.value>=100?'var(--brand)':'var(--border)'">
+            oninput="this.style.borderColor=this.value>=1?'var(--brand)':'var(--border)'">
           <button class="btn btn-primary" style="padding:12px 16px;border-radius:12px;font-weight:800"
             onclick="topUp(parseInt(document.getElementById('custom-topup-amt').value)||0)">Add</button>
         </div>
@@ -6828,7 +6828,7 @@
     async function topUp(amount) { showTopUp(amount); }
 
     function showTopUp(amount) {
-      if (!amount || amount < 100) { toast('Minimum top-up is ₹100', 'warn', '⚠️'); return; }
+      if (!amount || amount < 1) { toast('Minimum top-up is ₹1', 'warn', '⚠️'); return; }
       if (amount > 10000) { toast('Maximum top-up is ₹10,000', 'warn', '⚠️'); return; }
       if (!S.user) return;
 
