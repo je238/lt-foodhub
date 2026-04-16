@@ -45,7 +45,7 @@ serve(async (req) => {
             const txnRefNo = `TXN${Date.now()}`;
             const amt = Number(amount).toFixed(2);
             const txnDate = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-            const returnURL = 'https://lt-foodhub.vercel.app/';
+            const returnURL = 'https://lt-foodhub.vercel.app/api/icici-callback';
 
             // Parameters for HASH — aggregatorID IS included
             const hashParams: Record<string, string> = {

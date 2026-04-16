@@ -6825,6 +6825,31 @@
     </div>`).join('');
     }
 
+    // ── ICICI Payment Callback Handler ──
+    (function handlePaymentCallback() {
+      const params = new URLSearchParams(window.location.search);
+      const paymentStatus = params.get('payment');
+      if (!paymentStatus) return;
+
+      // Clean URL (remove query params)
+      window.history.replaceState({}, '', window.location.pathname);
+
+      const txn = params.get('txn') || '';
+      const amount = params.get('amount') || '';
+      const code = params.get('code') || '';
+      const msg = decodeURIComponent(params.get('msg') || '');
+
+      if (paymentStatus === 'success') {
+        toast(`Payment of ₹${amount} successful! Txn: ${txn}`, 'success', '✅');
+        localStorage.removeItem('fh-pending-topup');
+        // Refresh wallet balance after a short delay
+        setTimeout(() => { if (typeof loadWallet === 'function') loadWallet(); }, 2000);
+      } else {
+        toast(`Payment failed: ${msg || code || 'Unknown error'}. Txn: ${txn}`, 'error', '❌');
+        localStorage.removeItem('fh-pending-topup');
+      }
+    })();
+
     async function topUp(amount) { showTopUp(amount); }
 
     function showTopUp(amount) {
