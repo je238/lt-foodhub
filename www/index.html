@@ -6930,6 +6930,17 @@
                   S.user.wallet_balance = parseFloat(result.new_balance) || S.user.wallet_balance;
                   toast(`Order placed! Token #${result.token_number} at ${canteen.icon} ${canteen.name}`, 'success', '✅');
 
+                  // Log ICICI payment in wallet_transactions
+                  try {
+                    await sb.from('wallet_transactions').insert({
+                      employee_id: S.user.id,
+                      amount: parseFloat(result.amount_paid) || amount,
+                      type: 'credit',
+                      description: `ICICI Order Payment - Token #${result.token_number} at ${canteen.name} (Txn: ${txn})`,
+                      reference_id: txn
+                    });
+                  } catch (e) { console.log('Txn log skipped:', e); }
+
                   const newOrder = {
                     id: result.order_id, token_number: result.token_number,
                     employee_id: S.user.id, canteen_id: cid, canteen_name: canteen.name,
@@ -6972,12 +6983,15 @@
                 const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
                 const newBal = (parseFloat(emp?.wallet_balance) || 0) + amount;
                 await sb.from('employees').update({ wallet_balance: newBal }).eq('id', S.user.id);
-                await sb.from('wallet_transactions').insert({
-                  employee_id: S.user.id, amount, type: 'credit',
-                  description: `ICICI Online Top-up (Txn: ${txn})`, reference_id: txn
-                });
                 S.user.wallet_balance = newBal;
               }
+              // Always log the top-up transaction
+              try {
+                await sb.from('wallet_transactions').insert({
+                  employee_id: S.user.id, amount, type: 'credit',
+                  description: `ICICI Online Top-up (Txn: ${txn}, ICICI Ref: ${iciciTxn})`, reference_id: txn
+                });
+              } catch (e) { console.log('Txn log skipped (may be duplicate):', e); }
               setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
               setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
               toast(`₹${amount} added to wallet! Balance: ₹${Math.round(S.user.wallet_balance)}`, 'success', '💰');
