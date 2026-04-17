@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="referrer" content="unsafe-url">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -6925,6 +6926,9 @@
                 const orderData = JSON.parse(pendingOrder);
                 toast('Payment successful! Placing your order...', 'info', '🍽️');
 
+                // Small delay to let wallet credit propagate in DB
+                await new Promise(r => setTimeout(r, 1500));
+
                 // Group cart items by canteen and place orders
                 const byCanteen = {};
                 (orderData.cart || []).forEach(i => {
@@ -6944,10 +6948,16 @@
                     p_canteen_icon: canteen.icon || '🍽️',
                     p_pickup_slot: orderData.selSlot,
                     p_items: items.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price })),
-                    p_payment_method: 'icici_pay'
+                    p_payment_method: 'wallet'
                   });
 
-                  if (!rpcErr && result?.success) {
+                  if (rpcErr) {
+                    console.error('Order RPC error:', rpcErr);
+                    toast(`Order failed: ${rpcErr.message}`, 'error', '❌');
+                  } else if (!result?.success) {
+                    console.error('Order result error:', result);
+                    toast(`Order failed: ${result?.error || 'Unknown error'}`, 'error', '❌');
+                  } else {
                     S.user.wallet_balance = parseFloat(result.new_balance) || S.user.wallet_balance;
                     toast(`Order placed! Token #${result.token_number} at ${canteen.icon} ${canteen.name}`, 'success', '✅');
 
