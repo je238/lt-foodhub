@@ -6874,7 +6874,7 @@
       const paymentStatus = params.get('payment');
       if (!paymentStatus) return;
 
-      // Clean URL (remove query params) but save them first
+      // Save params before cleaning URL
       const txn = params.get('txn') || '';
       const amount = parseFloat(params.get('amount') || '0');
       const code = params.get('code') || '';
@@ -6883,124 +6883,115 @@
       window.history.replaceState({}, '', window.location.pathname);
 
       if (paymentStatus === 'success' && amount > 0) {
-        // Wait for user to be loaded, then credit wallet
-        const creditWallet = async () => {
-          if (!sb || !S.user) { setTimeout(creditWallet, 500); return; }
-
-          toast(`Payment of ₹${amount} successful! Crediting wallet...`, 'success', '✅');
+        const processPayment = async () => {
+          if (!sb || !S.user) { setTimeout(processPayment, 500); return; }
           localStorage.removeItem('fh-pending-topup');
 
-          try {
-            // Try RPC first (secure server-side credit)
-            const { data: result, error: rpcErr } = await sb.rpc('admin_wallet_credit', {
-              p_employee_id: S.user.id,
-              p_amount: amount,
-              p_reason: `ICICI Online Top-up (Txn: ${txn}, ICICI Ref: ${iciciTxn})`
-            });
+          // Check if this was a direct order payment
+          const pendingOrder = localStorage.getItem('fh-pending-order');
 
-            if (!rpcErr && result?.success) {
-              S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + amount);
-            } else {
-              // Fallback: direct update
-              const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-              const currentBal = parseFloat(emp?.wallet_balance) || 0;
-              const newBalance = currentBal + amount;
-              await sb.from('employees').update({ wallet_balance: newBalance }).eq('id', S.user.id);
-              await sb.from('wallet_transactions').insert({
-                employee_id: S.user.id,
-                amount: amount,
-                type: 'credit',
-                description: `ICICI Online Top-up (Txn: ${txn})`,
-                reference_id: txn
+          if (pendingOrder) {
+            // ── DIRECT ORDER PAYMENT ── (no wallet credit needed)
+            try {
+              const orderData = JSON.parse(pendingOrder);
+              toast('Payment successful! Placing your order...', 'success', '✅');
+
+              // Wait for menu to load
+              let waitCount = 0;
+              while ((!S.menu || S.menu.length === 0) && waitCount < 20) {
+                await new Promise(r => setTimeout(r, 500));
+                waitCount++;
+              }
+
+              const byCanteen = {};
+              (orderData.cart || []).forEach(i => {
+                const mi = S.menu.find(m => m.id === ((i.is_addon && i.parent_id) ? i.parent_id : i.id));
+                const cid = mi?.canteen_id || orderData.selCanteen?.id || 'c1';
+                if (!byCanteen[cid]) byCanteen[cid] = [];
+                byCanteen[cid].push(i);
               });
-              S.user.wallet_balance = newBalance;
-            }
 
-            setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
-            setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
-
-            // Check if this was an order payment (not just wallet top-up)
-            const pendingOrder = localStorage.getItem('fh-pending-order');
-            if (pendingOrder) {
-              try {
-                const orderData = JSON.parse(pendingOrder);
-                toast('Payment successful! Placing your order...', 'info', '🍽️');
-
-                // Small delay to let wallet credit propagate in DB
-                await new Promise(r => setTimeout(r, 1500));
-
-                // Group cart items by canteen and place orders
-                const byCanteen = {};
-                (orderData.cart || []).forEach(i => {
-                  const mi = S.menu.find(m => m.id === ((i.is_addon && i.parent_id) ? i.parent_id : i.id));
-                  const cid = mi?.canteen_id || orderData.selCanteen?.id || 'c1';
-                  if (!byCanteen[cid]) byCanteen[cid] = [];
-                  byCanteen[cid].push(i);
+              let orderPlaced = false;
+              for (const cid of Object.keys(byCanteen)) {
+                const canteen = S.canteens.find(c => c.id === cid) || { id: cid, name: 'Counter', icon: '🍽️' };
+                const items = byCanteen[cid];
+                const { data: result, error: rpcErr } = await sb.rpc('place_order', {
+                  p_employee_id: S.user.id,
+                  p_canteen_id: cid,
+                  p_canteen_name: canteen.name,
+                  p_canteen_icon: canteen.icon || '🍽️',
+                  p_pickup_slot: orderData.selSlot,
+                  p_items: items.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price })),
+                  p_payment_method: 'icici_pay'
                 });
 
-                for (const cid of Object.keys(byCanteen)) {
-                  const canteen = S.canteens.find(c => c.id === cid) || { id: cid, name: 'Counter', icon: '🍽️' };
-                  const items = byCanteen[cid];
-                  const { data: result, error: rpcErr } = await sb.rpc('place_order', {
-                    p_employee_id: S.user.id,
-                    p_canteen_id: cid,
-                    p_canteen_name: canteen.name,
-                    p_canteen_icon: canteen.icon || '🍽️',
-                    p_pickup_slot: orderData.selSlot,
-                    p_items: items.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price })),
-                    p_payment_method: 'wallet'
-                  });
+                if (!rpcErr && result?.success) {
+                  orderPlaced = true;
+                  S.user.wallet_balance = parseFloat(result.new_balance) || S.user.wallet_balance;
+                  toast(`Order placed! Token #${result.token_number} at ${canteen.icon} ${canteen.name}`, 'success', '✅');
 
-                  if (rpcErr) {
-                    console.error('Order RPC error:', rpcErr);
-                    toast(`Order failed: ${rpcErr.message}`, 'error', '❌');
-                  } else if (!result?.success) {
-                    console.error('Order result error:', result);
-                    toast(`Order failed: ${result?.error || 'Unknown error'}`, 'error', '❌');
-                  } else {
-                    S.user.wallet_balance = parseFloat(result.new_balance) || S.user.wallet_balance;
-                    toast(`Order placed! Token #${result.token_number} at ${canteen.icon} ${canteen.name}`, 'success', '✅');
-
-                    // Add to local state so it appears instantly without manual refresh
-                    const newOrder = {
-                      id: result.order_id,
-                      token_number: result.token_number,
-                      employee_id: S.user.id,
-                      canteen_id: cid,
-                      canteen_name: canteen.name,
-                      canteen_icon: canteen.icon,
-                      pickup_slot: orderData.selSlot,
-                      status: 'new',
-                      created_at: new Date().toISOString(),
-                      items: items.map(i => ({ ...i }))
-                    };
-                    S.orders.unshift(newOrder);
-                    S.allOrders.unshift({ ...newOrder });
-                  }
+                  const newOrder = {
+                    id: result.order_id, token_number: result.token_number,
+                    employee_id: S.user.id, canteen_id: cid, canteen_name: canteen.name,
+                    canteen_icon: canteen.icon, pickup_slot: orderData.selSlot,
+                    status: 'new', created_at: new Date().toISOString(),
+                    items: items.map(i => ({ ...i }))
+                  };
+                  S.orders.unshift(newOrder);
+                  S.allOrders.unshift({ ...newOrder });
+                } else {
+                  console.error('Order RPC error:', rpcErr || result);
+                  toast(`Order failed: ${rpcErr?.message || result?.error || 'Unknown'}`, 'error', '❌');
                 }
-
-                S.cart = [];
-                localStorage.removeItem('fh-pending-order');
-                setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
-                setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
-                setTimeout(() => { if (typeof renderMyOrders === 'function') renderMyOrders(); nav('orders'); }, 1500);
-              } catch (orderErr) {
-                console.error('Order placement error:', orderErr);
-                toast(`₹${amount} added to wallet but order placement failed. Please order again from wallet balance.`, 'warn', '⚠️');
-                localStorage.removeItem('fh-pending-order');
               }
-            } else {
-              toast(`₹${amount} added to wallet! New balance: ₹${Math.round(S.user.wallet_balance)}`, 'success', '💰');
+
+              S.cart = [];
+              localStorage.removeItem('fh-pending-order');
+              setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
+              setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
+              if (orderPlaced) {
+                setTimeout(() => { if (typeof renderMyOrders === 'function') renderMyOrders(); nav('orders'); }, 1500);
+              }
+            } catch (orderErr) {
+              console.error('Order placement error:', orderErr);
+              toast('Payment received but order placement failed. Contact admin.', 'error', '⚠️');
+              localStorage.removeItem('fh-pending-order');
             }
-          } catch (e) {
-            console.error('Wallet credit error:', e);
-            toast('Payment received but wallet update failed. Contact admin.', 'error', '⚠️');
+
+          } else {
+            // ── WALLET TOP-UP ── (credit the wallet)
+            toast(`₹${amount} top-up successful! Crediting wallet...`, 'success', '💰');
+            try {
+              const { data: result, error: rpcErr } = await sb.rpc('admin_wallet_credit', {
+                p_employee_id: S.user.id, p_amount: amount,
+                p_reason: `ICICI Online Top-up (Txn: ${txn}, ICICI Ref: ${iciciTxn})`
+              });
+              if (!rpcErr && result?.success) {
+                S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + amount);
+              } else {
+                const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+                const newBal = (parseFloat(emp?.wallet_balance) || 0) + amount;
+                await sb.from('employees').update({ wallet_balance: newBal }).eq('id', S.user.id);
+                await sb.from('wallet_transactions').insert({
+                  employee_id: S.user.id, amount, type: 'credit',
+                  description: `ICICI Online Top-up (Txn: ${txn})`, reference_id: txn
+                });
+                S.user.wallet_balance = newBal;
+              }
+              setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
+              setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
+              toast(`₹${amount} added to wallet! Balance: ₹${Math.round(S.user.wallet_balance)}`, 'success', '💰');
+            } catch (e) {
+              console.error('Wallet credit error:', e);
+              toast('Payment received but wallet update failed. Contact admin.', 'error', '⚠️');
+            }
           }
         };
-        creditWallet();
+        processPayment();
       } else {
         toast(`Payment failed: ${msg || code || 'Unknown error'}. Txn: ${txn}`, 'error', '❌');
         localStorage.removeItem('fh-pending-topup');
+        localStorage.removeItem('fh-pending-order');
       }
     })();
 
