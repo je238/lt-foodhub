@@ -7164,6 +7164,8 @@
         }
 
         if (data.success && data.redirectUrl) {
+          // This is a TOP-UP, not an order — clear any stale pending orders
+          localStorage.removeItem('fh-pending-order');
           // Store merchantTxnNo for verification after redirect
           localStorage.setItem('fh-pending-topup', JSON.stringify({
             amount, employeeId: S.user.id, merchantTxnNo: data.merchantTxnNo, ts: Date.now()
