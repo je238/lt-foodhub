@@ -5868,7 +5868,7 @@
         <div>
           <div class="menu-name">
             <div class="${m.is_veg ? 'veg-dot' : 'nveg-dot'}"></div>
-            ${m.name}
+            ${esc(m.name)}
           </div>
           <div class="menu-desc">${searchQuery ? (S.canteens.find(c => c.id === m.canteen_id)?.icon || '') + ' ' + (S.canteens.find(c => c.id === m.canteen_id)?.name || '').replace(' Counter', '') + (m.category ? ' · ' + m.category : '') : (m.description || (m.category ? m.category : ''))}</div>
         </div>
@@ -8362,7 +8362,7 @@
       <div class="inventory-item">
         <div class="inv-icon">${m.emoji || '🍽️'}</div>
         <div class="inv-body">
-          <div class="inv-name">${m.name}</div>
+          <div class="inv-name">${esc(m.name)}</div>
           <div class="inv-stock ${cls}">${stock} units remaining${stock <= 5 ? ' — CRITICAL' : stock <= 15 ? ' — Low' : ' — Good'}</div>
           <div class="inv-progress"><div class="progress"><div class="progress-fill ${cls === 'low' ? 'red' : cls === 'medium' ? 'amber' : 'green'}" style="width:${pct}%"></div></div></div>
         </div>
@@ -9635,8 +9635,8 @@ self.addEventListener('fetch',e=>{
               if (bc.target_canteen && bc.target_canteen !== S.selCanteen?.id) return;
               const icons = { info: '📢', warn: '⚠️', promo: '🎉', closed: '🔴' };
               const icon = icons[bc.type] || '📢';
-              addNotif(`${icon} ${bc.message}`, icon);
-              toast(`${icon} ${bc.message}`, bc.type === 'warn' || bc.type === 'closed' ? 'warn' : 'success', icon, 8000);
+              addNotif(`${icon} ${esc(bc.message)}`, icon);
+              toast(`${icon} ${esc(bc.message)}`, bc.type === 'warn' || bc.type === 'closed' ? 'warn' : 'success', icon, 8000);
             }
           })
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'employees' }, payload => {
@@ -9712,7 +9712,7 @@ self.addEventListener('fetch',e=>{
       <div style="text-align:center;margin-bottom:20px">
         <div style="font-size:44px;margin-bottom:10px">⚠️</div>
         <div style="font-weight:700;font-size:15px">Order #${o.token_number}</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px">${o.employee_name}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">${esc(o.employee_name)}</div>
       </div>
       <div class="form-group">
         <label class="form-label">Reason for Rejection</label>
@@ -9783,10 +9783,10 @@ self.addEventListener('fetch',e=>{
       <div class="divider"></div>
       <div class="big">#${o.token_number}</div>
       <div class="divider"></div>
-      <div style="font-size:11px;margin-bottom:6px"><strong>Employee:</strong> ${o.employee_name || '—'} (${o.employee_id || ''})</div>
+      <div style="font-size:11px;margin-bottom:6px"><strong>Employee:</strong> ${esc(o.employee_name || '—')} (${esc(o.employee_id || '')})</div>
       <div style="font-size:11px;margin-bottom:8px"><strong>Pickup Slot:</strong> ${o.pickup_slot === 'ASAP' || !o.pickup_slot ? '⚡ Prepare Now' : o.pickup_slot}</div>
       <div class="divider"></div>
-      ${items.map(i => `<div class="row"><span>${i.emoji || ''} ${i.item_name || i.name}${i.customNote ? `<br><small style="color:#666">${i.customNote}</small>` : ''}</span><span>×${i.quantity || i.qty}</span></div>`).join('')}
+      ${items.map(i => `<div class="row"><span>${esc(i.emoji || '')} ${esc(i.item_name || i.name)}${i.customNote ? `<br><small style="color:#666">${esc(i.customNote)}</small>` : ''}</span><span>×${i.quantity || i.qty}</span></div>`).join('')}
       <div class="divider"></div>
       <div class="row"><span>Total</span><span>₹${o.item_total || 0}</span></div>
       <div class="row"><span>Subsidy</span><span>-₹${o.subsidy_applied || 0}</span></div>
@@ -9839,8 +9839,8 @@ self.addEventListener('fetch',e=>{
         <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--light2);border-radius:11px;margin-bottom:7px;opacity:${m.is_available !== false ? 1 : 0.5}">
           <span style="font-size:22px">${m.emoji || '🍽️'}</span>
           <div style="flex:1">
-            <div style="font-weight:700;font-size:13px">${m.name}</div>
-            <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${m.category || ''}</div>
+            <div style="font-weight:700;font-size:13px">${esc(m.name)}</div>
+            <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${esc(m.category || '')}</div>
           </div>
           <div class="toggle ${m.is_available !== false ? 'on' : ''}" onclick="vendorToggleItem('${m.id}',this)" data-item-id="${m.id}"></div>
         </div>`).join('')}
@@ -10435,7 +10435,7 @@ self.addEventListener('fetch',e=>{
         <span class="badge ${badgeMap[o.status] || 'badge-done'}">${statusMap[o.status] || o.status}</span>
       </div>
       <div>
-        ${(o.items || []).map(i => `<div class="order-item-row"><strong>${i.item_emoji || i.emoji || ''} ${i.item_name || i.name || ''} ×${i.quantity || i.qty || 1}${(i.custom_note || i.customNote) ? ` <small style="color:var(--muted)">(${i.custom_note || i.customNote})</small>` : ''}</strong><span>₹${((i.unit_price || i.price || 0) * (i.quantity || i.qty || 1)).toFixed(0)}</span></div>`).join('')}
+        ${(o.items || []).map(i => `<div class="order-item-row"><strong>${esc(i.item_emoji || i.emoji || '')} ${esc(i.item_name || i.name || '')} ×${i.quantity || i.qty || 1}${(i.custom_note || i.customNote) ? ` <small style="color:var(--muted)">(${esc(i.custom_note || i.customNote)})</small>` : ''}</strong><span>₹${((i.unit_price || i.price || 0) * (i.quantity || i.qty || 1)).toFixed(0)}</span></div>`).join('')}
       </div>
       <div class="order-footer">
         <div class="order-savings">Paid <strong style="color:var(--brand)">₹${o.amount_paid || 0}</strong> · Saved <strong style="color:var(--green2)">₹${o.subsidy_applied || 0}</strong>${o.rating ? ` · ${'⭐'.repeat(o.rating)}` : ''}</div>
@@ -10953,7 +10953,7 @@ self.addEventListener('fetch',e=>{
         ${items.map(m => `
           <div style="background:var(--light2);border-radius:10px;padding:10px;cursor:pointer;transition:.2s;border:1.5px solid transparent" onclick="posAddItem('${m.id}')" id="pos-item-${m.id}">
             <div style="font-size:18px;text-align:center">${m.emoji || '🍽️'}</div>
-            <div style="font-size:11px;font-weight:700;text-align:center;margin-top:4px">${m.name.length > 18 ? m.name.slice(0, 18) + '…' : m.name}</div>
+            <div style="font-size:11px;font-weight:700;text-align:center;margin-top:4px">${esc(m.name.length > 18 ? m.name.slice(0, 18) + '…' : m.name)}</div>
             <div style="font-size:12px;font-weight:800;color:var(--brand);text-align:center">₹${m.price}</div>
           </div>`).join('')}
       </div>
@@ -10990,7 +10990,7 @@ self.addEventListener('fetch',e=>{
       document.getElementById('pos-items').innerHTML = items.map(m => `
     <div style="background:var(--light2);border-radius:10px;padding:10px;cursor:pointer;transition:.2s;border:1.5px solid ${posCart.find(c => c.id === m.id) ? 'var(--brand)' : 'transparent'}" onclick="posAddItem('${m.id}')" id="pos-item-${m.id}">
       <div style="font-size:18px;text-align:center">${m.emoji || '🍽️'}</div>
-      <div style="font-size:11px;font-weight:700;text-align:center;margin-top:4px">${m.name.length > 18 ? m.name.slice(0, 18) + '…' : m.name}</div>
+      <div style="font-size:11px;font-weight:700;text-align:center;margin-top:4px">${esc(m.name.length > 18 ? m.name.slice(0, 18) + '…' : m.name)}</div>
       <div style="font-size:12px;font-weight:800;color:var(--brand);text-align:center">₹${m.price}</div>
       ${posCart.find(c => c.id === m.id) ? `<div style="font-size:10px;text-align:center;color:var(--brand);font-weight:700">×${posCart.find(c => c.id === m.id).qty}</div>` : ''}
     </div>`).join('');
@@ -11236,14 +11236,14 @@ self.addEventListener('fetch',e=>{
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
             <div>
               <div style="font-weight:700;font-size:14px">${typeLabels[c.type] || c.type}</div>
-              <div style="font-size:12px;color:var(--muted)">${c.employee_name} · Order ${c.order_id?.slice(-8) || '—'} · ${c.canteen_name || ''}</div>
+              <div style="font-size:12px;color:var(--muted)">${esc(c.employee_name)} · Order ${c.order_id?.slice(-8) || '—'} · ${esc(c.canteen_name || '')}</div>
               <div style="font-size:11px;color:var(--muted)">${fmtDate(c.created_at)}</div>
             </div>
             <span class="badge ${statusBadge[c.status] || 'badge-done'}">${c.status}</span>
           </div>
-          <div style="font-size:13px;margin-bottom:8px;color:var(--dark);line-height:1.5">${c.description || ''}</div>
-          ${c.photo_url ? `<div style="margin-bottom:8px"><img src="${c.photo_url}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border)"></div>` : ''}
-          ${c.admin_note ? `<div style="background:var(--light2);border-radius:8px;padding:8px;font-size:12px;margin-bottom:8px"><strong>Admin:</strong> ${c.admin_note}</div>` : ''}
+          <div style="font-size:13px;margin-bottom:8px;color:var(--dark);line-height:1.5">${esc(c.description || '')}</div>
+          ${c.photo_url ? `<div style="margin-bottom:8px"><img src="${esc(c.photo_url)}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border)"></div>` : ''}
+          ${c.admin_note ? `<div style="background:var(--light2);border-radius:8px;padding:8px;font-size:12px;margin-bottom:8px"><strong>Admin:</strong> ${esc(c.admin_note)}</div>` : ''}
           ${c.status === 'open' ? `
             <div style="display:flex;gap:8px">
               <button class="btn btn-green btn-sm" style="flex:1" onclick="resolveComplaint(${c.id}, 'refund', ${c.refund_amount || 0})">💚 Refund ₹${c.refund_amount || '?'}</button>
@@ -11399,8 +11399,8 @@ self.addEventListener('fetch',e=>{
           <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--light2);border-radius:11px;margin-bottom:7px" id="dm-row-${m.id}">
             <span style="font-size:22px">${m.emoji || '🍽️'}</span>
             <div style="flex:1">
-              <div style="font-weight:700;font-size:13px">${m.name}</div>
-              <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${m.category || ''}</div>
+              <div style="font-weight:700;font-size:13px">${esc(m.name)}</div>
+              <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${esc(m.category || '')}</div>
             </div>
             <div class="toggle ${isOn ? 'on' : ''}" onclick="toggleDailyItem('${m.id}', this)" data-item-id="${m.id}"></div>
           </div>`;
