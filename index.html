@@ -6644,7 +6644,7 @@
             invItemsEl.innerHTML = allItems.map(i => `
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <div>
-              <div style="font-size:13px;font-weight:600;color:var(--dark)">${i.emoji || ''} ${i.item_name || i.name || ''}</div>
+              <div style="font-size:13px;font-weight:600;color:var(--dark)">${esc(i.emoji || '')} ${esc(i.item_name || i.name || '')}</div>
               <div style="font-size:11px;color:var(--muted)">${i.counter} × ${i.quantity || i.qty || 1}</div>
             </div>
             <div style="font-size:13px;font-weight:700;color:var(--dark)">₹${((parseFloat(i.price || i.unit_price) || 0) * (i.quantity || i.qty || 1)).toFixed(2)}</div>
@@ -7275,7 +7275,7 @@
       <div>
         ${(o.items || []).map(i => `
           <div class="order-item-row">
-            <strong>${i.emoji || ''} ${i.item_name || i.name} ×${i.quantity || i.qty}</strong>
+            <strong>${esc(i.emoji || '')} ${esc(i.item_name || i.name)} ×${i.quantity || i.qty}</strong>
             <span>₹${(i.unit_price || i.price || 0) * (i.quantity || i.qty || 1)}</span>
           </div>`).join('')}
       </div>
@@ -7535,7 +7535,7 @@
             <div class="kitchen-token ${isDone ? 'done' : o.status === 'new' ? 'new-order' : o.status}">#${o.token_number || o.token}</div>
             <div style="background:var(--light2);border-radius:7px;padding:3px 9px;font-size:11px;font-weight:700;color:var(--mid)">${canteen.icon || '🍛'} ${o.canteen_name || canteen.name || 'Canteen'}</div>
           </div>
-          <div class="kitchen-meta">${o.employee_name || 'Employee'}</div>
+          <div class="kitchen-meta">${esc(o.employee_name || 'Employee')}</div>
           ${o.pickup_slot && o.pickup_slot !== 'ASAP' ? `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#FFF7ED;color:#ea580c;border:1px solid #fdba74;display:inline-block">🕒 SCHEDULED: ${o.pickup_slot}</div>` : `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#f0fdf4;color:#16a34a;border:1px solid #86efac;display:inline-block">⚡ Prepare Now</div>`}
         </div>
         <span class="badge ${isDone ? 'badge-done' : o.status === 'new' ? 'badge-new' : o.status === 'preparing' ? 'badge-prep' : 'badge-ready'}">
@@ -7543,7 +7543,7 @@
         </span>
       </div>
       <div class="kitchen-items">
-        ${items.map(i => `<div class="kitchen-item-row"><strong>${i.emoji || ''} ${i.item_name || i.name}</strong><span>×${i.quantity || i.qty}</span></div>`).join('')}
+        ${items.map(i => `<div class="kitchen-item-row"><strong>${esc(i.emoji || '')} ${esc(i.item_name || i.name)}</strong><span>×${i.quantity || i.qty}</span></div>`).join('')}
       </div>
       ${!isDone ? `<div class="kitchen-actions">
         ${o.status === 'new' ? `<button class="btn btn-secondary btn-sm" style="flex:1" onclick="${mode}Action('${o.id}','preparing')">✓ Accept & Start</button><button class="btn btn-ghost btn-sm" onclick="${mode}Action('${o.id}','done')">✕ Bump</button>` : ''}
@@ -7941,8 +7941,8 @@
                 <div class="kitchen-head">
                   <div>
                     <div class="kitchen-token ${o.status === 'new' ? 'new-order' : o.status}">#${o.token_number}</div>
-                    <div class="kitchen-meta">${o.employee_name || 'Walk-up'} · ${fmtDate(o.created_at)}</div>
-                    <div class="kitchen-meta">Slot: ${o.pickup_slot || '—'} · ${(o.items || []).map(i => i.item_name || i.name).slice(0, 2).join(', ')}</div>
+                    <div class="kitchen-meta">${esc(o.employee_name || 'Walk-up')} · ${fmtDate(o.created_at)}</div>
+                    <div class="kitchen-meta">Slot: ${o.pickup_slot || '—'} · ${(o.items || []).map(i => esc(i.item_name || i.name)).slice(0, 2).join(', ')}</div>
                   </div>
                   <div style="text-align:right">
                     <span class="badge ${statusBadge(o.status)}">${statusLabel(o.status)}</span>
@@ -8033,7 +8033,7 @@
         <div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.5);border-radius:3px;padding:1px 3px;font-size:9px;color:#fff">📷</div>
       </div>
       <div class="mgmt-body">
-        <div class="mgmt-name">${m.name}</div>
+        <div class="mgmt-name">${esc(m.name)}</div>
         <div class="mgmt-meta">${m.category} · ${m.is_veg ? '🟢 Veg' : '🔴 Non-Veg'} · ${S.canteens.find(c => c.id === m.canteen_id)?.name || 'All'}</div>
         <div class="mgmt-meta">Stock: ${stock} · ⭐ ${m.rating || 'N/A'}</div>
       </div>
@@ -8274,14 +8274,14 @@
       if (!m) return;
       showModal(`
     <div class="modal-head">
-      <span class="modal-title">Edit: ${m.name}</span>
+      <span class="modal-title">Edit: ${esc(m.name)}</span>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Emoji</label>
-          <input class="form-input" id="e-emoji" value="${m.emoji || '🍽️'}" maxlength="2" style="font-size:22px;text-align:center">
+          <input class="form-input" id="e-emoji" value="${esc(m.emoji || '🍽️')}" maxlength="2" style="font-size:22px;text-align:center">
         </div>
         <div class="form-group">
           <label class="form-label">Price (₹)</label>
@@ -8290,11 +8290,11 @@
       </div>
       <div class="form-group">
         <label class="form-label">Item Name</label>
-        <input class="form-input" id="e-name" value="${m.name}">
+        <input class="form-input" id="e-name" value="${esc(m.name)}">
       </div>
       <div class="form-group">
         <label class="form-label">Description</label>
-        <textarea class="form-input" id="e-desc" rows="2">${m.description || ''}</textarea>
+        <textarea class="form-input" id="e-desc" rows="2">${esc(m.description || '')}</textarea>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -8716,8 +8716,8 @@
               ${isRefund ? '↩' : '💳'}
             </div>
             <div style="flex:1;min-width:0">
-              <div style="font-weight:700;font-size:13px;color:var(--dark)">${emp.name || t.employee_id || '—'}</div>
-              <div style="font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.description || 'Wallet credit'}</div>
+              <div style="font-weight:700;font-size:13px;color:var(--dark)">${esc(emp.name || t.employee_id || '—')}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.description || 'Wallet credit')}</div>
               <div style="font-size:10px;color:var(--muted);margin-top:2px">${emp.email || ''} · ${fmtDate(t.created_at)}</div>
             </div>
             <div style="text-align:right;flex-shrink:0">
