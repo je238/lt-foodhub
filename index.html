@@ -5194,30 +5194,7 @@
             p_role: role
           }));
 
-          // Admin fallback: fetch all admin rows and match locally (handles any column name)
-          if ((authErr || !authResult?.success) && role === 'admin') {
-            try {
-              const { data: adminRows } = await sb.from('admins').select('*').limit(20);
-              if (adminRows && adminRows.length) {
-                const inputL = staffId.toLowerCase();
-                const match = adminRows.find(function (row) {
-                  var idMatch = Object.values(row).some(function (v) {
-                    return typeof v === 'string' && v.toLowerCase() === inputL;
-                  });
-                  if (!idMatch) return false;
-                  var pwMatch = Object.entries(row).some(function (entry) {
-                    var k = entry[0], v = entry[1];
-                    return (k.includes('pass') || k.includes('pwd') || k.includes('secret')) && typeof v === 'string' && v === pw;
-                  });
-                  return pwMatch;
-                });
-                if (match) {
-                  authResult = { success: true, name: match.name || match.full_name || match.staff_id || match.username || staffId, id: match.id || staffId };
-                  authErr = null;
-                }
-              }
-            } catch (e) { }
-          }
+          // Admin fallback removed for security — only RPC auth is allowed
 
           if (authErr || !authResult?.success) {
             err.textContent = authResult?.error || authErr?.message || 'Invalid ID or password.';
@@ -5302,9 +5279,8 @@
           const { data: authRes, error: authErr } = await sb.rpc('verify_employee_login', { p_email: input, p_password: pw });
           if (!authErr && authRes?.success) {
             await _finishEmpLogin(authRes.employee || emp);
-          } else if (emp.password_hash === pw) {
-            // Plain text fallback (pgcrypto not yet enabled or password stored as plain)
-            await _finishEmpLogin(emp);
+          } else if (false) {
+            // Plain text fallback REMOVED for security — only bcrypt RPC login allowed
           } else {
             err.textContent = 'Incorrect password. Try again.';
             btn.classList.remove('btn-loading'); btn.disabled = false;
@@ -5449,8 +5425,8 @@
           p_password: pw1
         });
         if (pwErr) {
-          const { error: directErr } = await sb.from('employees').update({ password_hash: pw1 }).eq('id', _pendingEmpData.id);
-          if (directErr) { err.textContent = 'Could not save password. Try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+          // Direct plaintext write REMOVED for security — only RPC password hashing allowed
+          err.textContent = 'Could not save password. Please try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return;
         } else if (pwRes && !pwRes.success) {
           err.textContent = pwRes.error || 'Could not save password.';
           btn.classList.remove('btn-loading'); btn.disabled = false; return;
@@ -10262,27 +10238,8 @@ self.addEventListener('fetch',e=>{
           }
         }
 
-        // Fallback: direct DB update (admin has postgres access via RLS service role)
-        const { data: emp, error: empErr } = await sb.from('employees').select('wallet_balance, name').eq('id', empId).single();
-        if (empErr || !emp) { toast('Employee not found: ' + empId, 'error', '❌'); return; }
-
-        const newBalance = (emp.wallet_balance || 0) + amount;
-        const { error: updateErr } = await sb.from('employees').update({ wallet_balance: newBalance }).eq('id', empId);
-        if (updateErr) { toast('Refund failed: ' + updateErr.message, 'error', '❌'); return; }
-
-        // Log transaction
-        await sb.from('wallet_transactions').insert({
-          employee_id: empId,
-          type: 'credit',
-          amount: amount,
-          description: (reason || 'Admin refund') + ' — by admin',
-          balance_after: newBalance
-        });
-
-        if (S.user?.id === empId) { S.user.wallet_balance = newBalance; setEl('nav-bal', '₹' + Math.round(newBalance)); }
-        closeModal();
-        toast(`₹${amount} credited to ${emp.name || empId}'s wallet ✅`, 'success', '💚');
-        addNotif(`₹${amount} refund credited to ${empId} (${reason})`, '💚');
+        // Direct DB wallet update REMOVED for security — only admin_wallet_credit RPC is allowed
+        toast('Refund failed. Please contact support if this persists.', 'error', '❌');
 
       } catch (e) {
         toast('Refund failed: ' + e.message, 'error', '❌');
