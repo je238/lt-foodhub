@@ -13,9 +13,19 @@
   <script>
     // Capacitor crash prevention — must run before anything else
     window._isCapacitor = (typeof window.Capacitor !== 'undefined') || navigator.userAgent.includes('SLPNexus');
-    // Prevent WebView crash on uncaught errors
-    window.addEventListener('error', function (e) { e.preventDefault(); return true; }, true);
-    window.addEventListener('unhandledrejection', function (e) { e.preventDefault(); }, true);
+    // Queue early errors before Sentry loads
+    window._earlyErrors = [];
+    // Prevent WebView crash on uncaught errors — but forward to Sentry first
+    window.addEventListener('error', function (e) {
+      try { if (window.logError) window.logError(e.message, { stack: e.error && e.error.stack, file: e.filename, line: e.lineno }); else window._earlyErrors.push({ msg: e.message, ts: Date.now() }); } catch(x) {}
+      e.preventDefault(); return true;
+    }, true);
+    window.addEventListener('unhandledrejection', function (e) {
+      try { if (window.logError) window.logError('Unhandled rejection: ' + (e.reason && e.reason.message || e.reason), {}); } catch(x) {}
+      e.preventDefault();
+    }, true);
+    // XSS protection helper — escapes user/admin-supplied strings for safe HTML insertion
+    window.esc = function(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
     // Memory cleanup — garbage collect every 60s on mobile
     if (window._isCapacitor) {
       setInterval(function () {
@@ -41,6 +51,11 @@
             tracesSampleRate: 0.05,
             beforeSend: function (event) { if (event.exception?.values?.[0]?.type === 'NetworkError') return null; return event; }
           });
+          // Flush early errors that happened before Sentry loaded
+          if (window._earlyErrors && window._earlyErrors.length) {
+            window._earlyErrors.forEach(function(e) { try { Sentry.captureException(new Error(e.msg)); } catch(x) {} });
+            window._earlyErrors = [];
+          }
         }
       };
       document.head.appendChild(s);
@@ -4856,7 +4871,7 @@
           row.innerHTML = items.map(m => {
             let imgId = m.image_url ? null : Object.entries(_FOOD_IMGS_LOGIN).find(([k]) => m.name.toLowerCase().includes(k))?.[1];
             const imgSrc = m.image_url || (imgId ? `https://images.unsplash.com/${imgId}?w=300&h=200&fit=crop&q=70` : `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=200&fit=crop&q=70`);
-            return `<div class="login-special-card"><img src="${imgSrc}" alt="${m.name}" onerror="this.src='https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=200&fit=crop&q=70'"><div class="login-special-card-body"><div class="login-special-name">${m.name}</div><div class="login-special-price">₹${m.price}</div></div></div>`;
+            return `<div class="login-special-card"><img src="${imgSrc}" alt="${esc(m.name)}" onerror="this.src='https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=200&fit=crop&q=70'"><div class="login-special-card-body"><div class="login-special-name">${esc(m.name)}</div><div class="login-special-price">₹${m.price}</div></div></div>`;
           }).join('');
         }
       } catch (e) { }
@@ -5676,7 +5691,7 @@
         return `
     <div class="canteen-card${!c.is_open ? ' closed' : ''}${S.selCanteen?.id === c.id ? ' active' : ''}" onclick="selCanteen('${c.id}')">
       ${imgUrl
-            ? `<img class="canteen-img" src="${imgUrl}" alt="${c.name}" loading="lazy" onerror="this.outerHTML='<div class=canteen-img-emoji>${c.icon}</div>'">`
+            ? `<img class="canteen-img" src="${imgUrl}" alt="${esc(c.name)}" loading="lazy" onerror="this.outerHTML='<div class=canteen-img-emoji>${esc(c.icon)}</div>'">`
             : `<div class="canteen-img-emoji">${c.icon}</div>`}
       <div class="canteen-body">
         <div class="canteen-name">${c.name.replace(' Counter', '').replace(' Canteen', '')}</div>
@@ -5844,7 +5859,7 @@
       ${m.is_bestseller ? '<div class="bestseller-tag">🔥 Bestseller</div>' : ''}
       <div class="menu-img-wrap">
         ${imgUrl
-            ? `<img src="${imgUrl}" alt="${m.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${m.emoji || '🍽️'}</div>'">`
+            ? `<img src="${imgUrl}" alt="${esc(m.name)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${esc(m.emoji || '🍽️')}</div>'">`
             : `<div class="menu-img-emoji">${m.emoji || '🍽️'}</div>`}
         ${!avail ? '<div class="unavail-badge">SOLD OUT</div>' : ''}
         ${avail && stock > 0 && stock <= 5 ? `<div style="position:absolute;bottom:6px;left:6px;background:rgba(217,119,6,.9);color:#fff;font-size:8px;font-weight:800;padding:2px 7px;border-radius:6px;z-index:2;backdrop-filter:blur(4px)">${stock} left</div>` : ''}
@@ -5890,8 +5905,8 @@
         const avail = m.is_available !== false && stock > 0;
         const imgUrl = m.image_url || _getFoodImg(m.name, m.emoji);
         return `<div class="menu-item${!avail ? ' unavailable' : ''}">
-      <div class="menu-img-wrap">${imgUrl ? `<img src="${imgUrl}" alt="${m.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${m.emoji || '🍽️'}</div>'">` : `<div class="menu-img-emoji">${m.emoji || '🍽️'}</div>`}</div>
-      <div class="menu-body"><div><div class="menu-name"><div class="${m.is_veg ? 'veg-dot' : 'nveg-dot'}"></div>${m.name}</div></div>
+      <div class="menu-img-wrap">${imgUrl ? `<img src="${imgUrl}" alt="${esc(m.name)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${esc(m.emoji || '🍽️')}</div>'">` : `<div class="menu-img-emoji">${esc(m.emoji || '🍽️')}</div>`}</div>
+      <div class="menu-body"><div><div class="menu-name"><div class="${m.is_veg ? 'veg-dot' : 'nveg-dot'}"></div>${esc(m.name)}</div></div>
       <div class="menu-footer"><div><span class="menu-price">₹${m.price}</span></div>
       <div class="mc" id="mc-${m.id}">${qty > 0 ? `<div class="qty-ctrl"><button class="qty-btn" onclick="chgQty('${m.id}',-1)">−</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="chgQty('${m.id}',1)">+</button></div>` : `<button class="add-btn" onclick="addCart('${m.id}')">ADD</button>`}</div></div></div></div>`;
       }).join('');
@@ -7606,6 +7621,7 @@
 
     function startPoll() {
       clearInterval(S.pollInterval);
+      clearInterval(S._menuPollInterval); // Fix: prevent interval stacking
       if (S.role === 'employee') {
         // Canteen open/close poll every 30s as backup to Realtime
         // Realtime handles instant updates — this is just a safety net
