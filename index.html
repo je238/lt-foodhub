@@ -4958,6 +4958,8 @@
             if (s.key === 'icici_pay_enabled') window._iciciPayEnabled = (s.value !== 'false');
           });
         }
+        if (!S._appSettings) S._appSettings = {};
+        S._appSettings.icici_pay_enabled = window._iciciPayEnabled;
         applyIciciPayVisibility();
         // Load token counters + operating hours from canteens table
         S.canteens.forEach(c => {
@@ -6521,6 +6523,10 @@
 
       // ── ICICI Pay: redirect to payment gateway ──
       if (S.selPay === 'upi') {
+        if (window._iciciPayEnabled === false) {
+          toast('ICICI Pay is temporarily unavailable. Use wallet or top up via another method.', 'warn', '🏦');
+          return;
+        }
         const btn = document.getElementById('pay-btn');
         btn.classList.add('btn-loading'); btn.disabled = true;
         btn.innerHTML = '<span>Connecting to ICICI...</span>';
@@ -7196,6 +7202,10 @@
     async function processTopUp(amount) {
       if (!S.user || !sb) return;
       if (amount < 1 || amount > 10000) { toast('Amount must be ₹1 — ₹10,000', 'error', '⚠️'); return; }
+      if (window._iciciPayEnabled === false) {
+        toast('Top-ups are temporarily unavailable. Please try again later.', 'warn', '🏦');
+        return;
+      }
 
       const btn = document.getElementById('topup-pay-btn');
       btn.classList.add('btn-loading'); btn.disabled = true;
@@ -8935,6 +8945,7 @@
     function renderAdminSettings(el) {
       // Load saved settings from state
       const settings = S._appSettings || { accept_orders: true, preorder: true, guest_ordering: false, email_summaries: true, low_stock_alerts: true, daily_report: true, traffic_alerts: true };
+      if (settings.icici_pay_enabled === undefined) settings.icici_pay_enabled = window._iciciPayEnabled !== false;
       el.innerHTML = `
     <div class="subsidy-card">
       <div class="sub-label">Current Subsidy Per Meal</div>
@@ -8948,6 +8959,7 @@
     <div class="card">
       <div class="card-title">⚙️ System Settings</div>
       <div class="toggle-row"><div class="toggle-info">Accept new orders<small>Temporarily pause ordering system</small></div><div class="toggle ${settings.accept_orders ? 'on' : ''}" onclick="toggleSetting('accept_orders',this)"></div></div>
+      <div class="toggle-row"><div class="toggle-info">ICICI Pay gateway<small>Kill-switch — disables top-up & ICICI order payment if gateway is down</small></div><div class="toggle ${settings.icici_pay_enabled ? 'on' : ''}" onclick="toggleSetting('icici_pay_enabled',this)"></div></div>
       <div class="toggle-row"><div class="toggle-info">Pre-order enabled<small>Allow advance ordering</small></div><div class="toggle ${settings.preorder ? 'on' : ''}" onclick="toggleSetting('preorder',this)"></div></div>
       <div class="toggle-row"><div class="toggle-info">Guest ordering<small>Allow non-enrolled users</small></div><div class="toggle ${settings.guest_ordering ? 'on' : ''}" onclick="toggleSetting('guest_ordering',this)"></div></div>
       <div class="toggle-row"><div class="toggle-info">Email order summaries<small>Daily digest to admins</small></div><div class="toggle ${settings.email_summaries ? 'on' : ''}" onclick="toggleSetting('email_summaries',this)"></div></div>
@@ -8989,6 +9001,10 @@
       if (key === 'accept_orders') {
         S._ordersPaused = !S._appSettings[key];
         toast(S._appSettings[key] ? 'Orders are now ACTIVE' : 'Orders are now PAUSED — employees cannot place orders', S._appSettings[key] ? 'success' : 'warn', S._appSettings[key] ? '✅' : '⏸️');
+      } else if (key === 'icici_pay_enabled') {
+        window._iciciPayEnabled = S._appSettings[key];
+        if (typeof applyIciciPayVisibility === 'function') applyIciciPayVisibility();
+        toast(S._appSettings[key] ? 'ICICI Pay ACTIVE — employees can use gateway' : 'ICICI Pay DISABLED — gateway hidden from employees', S._appSettings[key] ? 'success' : 'warn', S._appSettings[key] ? '🏦' : '⏸️');
       } else {
         toast(`${key.replace(/_/g, ' ')} ${S._appSettings[key] ? 'enabled' : 'disabled'}`, 'success', '⚙️');
       }
@@ -9730,6 +9746,17 @@ self.addEventListener('fetch',e=>{
                   toast(`₹${Math.round(diff)} added to your wallet!`, 'success', '💚');
                 }
               }
+            }
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, payload => {
+            // Live-propagate admin kill-switch changes (e.g. ICICI Pay) to all employees
+            const row = payload.new || payload.old;
+            if (!row) return;
+            if (row.key === 'icici_pay_enabled') {
+              window._iciciPayEnabled = (row.value !== 'false');
+              if (!S._appSettings) S._appSettings = {};
+              S._appSettings.icici_pay_enabled = window._iciciPayEnabled;
+              if (typeof applyIciciPayVisibility === 'function') applyIciciPayVisibility();
             }
           })
           .subscribe((status) => {
