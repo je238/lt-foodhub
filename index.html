@@ -37,6 +37,7 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/@capacitor/browser@8.0.3/dist/plugin.js"></script>
   <script>
     // Defer Sentry — load 3s after boot (non-blocking for APK)
     setTimeout(function () {
@@ -6478,8 +6479,9 @@
             setTimeout(() => {
               const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
               const forwardUrl = 'https://lt-foodhub.vercel.app/api/icici-forward?target=' + encodeURIComponent(fullUrl);
-              if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
-                window.Capacitor.Plugins.Browser.open({ url: forwardUrl });
+              const Browser = (window.Capacitor?.Plugins?.Browser) || (window.capacitorBrowser?.Browser);
+              if (window._isCapacitor && Browser) {
+                Browser.open({ url: forwardUrl });
               } else {
                 window.location.href = fullUrl;
               }
@@ -7166,8 +7168,9 @@
           setTimeout(() => {
             const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
             const forwardUrl = 'https://lt-foodhub.vercel.app/api/icici-forward?target=' + encodeURIComponent(fullUrl);
-            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
-              window.Capacitor.Plugins.Browser.open({ url: forwardUrl });
+            const Browser = (window.Capacitor?.Plugins?.Browser) || (window.capacitorBrowser?.Browser);
+            if (window._isCapacitor && Browser) {
+              Browser.open({ url: forwardUrl });
             } else {
               window.location.href = fullUrl;
             }
