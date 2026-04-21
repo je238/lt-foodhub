@@ -7049,7 +7049,9 @@
           setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
           setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
           if (orderPlaced) {
-            setTimeout(() => { if (typeof renderMyOrders === 'function') renderMyOrders(); nav('orders'); }, 1500);
+            closeModal();
+            if (typeof goScreen === 'function') goScreen('s-home');
+            setTimeout(() => { if (typeof renderMyOrders === 'function') renderMyOrders(); }, 1500);
           }
         } catch (orderErr) {
           toast('Payment received but order placement failed. Contact admin.', 'error', '⚠️');
@@ -7088,6 +7090,8 @@
         const credited = parseFloat(creditedRow.amount) || urlAmt;
         S.txns.unshift({ type: 'credit', icon: '🏦', name: `ICICI Online Top-up ₹${credited}`, details: `Txn: ${txn}`, date: 'Just now', amount: credited });
         toast(`₹${Math.round(credited)} added to wallet! Balance: ₹${Math.round(newBalance)}`, 'success', '💰');
+        closeModal();
+        if (typeof goScreen === 'function') goScreen('s-home');
       } else {
         toast('Payment is processing — balance will update shortly. Pull to refresh if not visible in 1 min.', 'warn', '⏳');
       }
