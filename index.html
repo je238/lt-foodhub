@@ -6477,8 +6477,9 @@
             toast('Redirecting to ICICI payment page...', 'info', '🏦');
             setTimeout(() => {
               const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
+              const forwardUrl = 'https://lt-foodhub.vercel.app/api/icici-forward?target=' + encodeURIComponent(fullUrl);
               if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
-                window.Capacitor.Plugins.Browser.open({ url: fullUrl });
+                window.Capacitor.Plugins.Browser.open({ url: forwardUrl });
               } else {
                 window.location.href = fullUrl;
               }
@@ -7164,8 +7165,9 @@
           // Redirect to ICICI payment page with tranCtx token
           setTimeout(() => {
             const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
+            const forwardUrl = 'https://lt-foodhub.vercel.app/api/icici-forward?target=' + encodeURIComponent(fullUrl);
             if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
-              window.Capacitor.Plugins.Browser.open({ url: fullUrl });
+              window.Capacitor.Plugins.Browser.open({ url: forwardUrl });
             } else {
               window.location.href = fullUrl;
             }
