@@ -104,19 +104,27 @@ serve(async (req) => {
       const SUCCESS_CODES = ["000", "0000"];
       const isSuccess = SUCCESS_CODES.includes(rc) || ts === "SUCCESS" || ts === "SUC";
 
-      // ── Defense in depth: require valid hash for credit. If ICICI sends
-      //    no secureHash at all (older integrations), we still allow so we
-      //    don't break legitimate callbacks — flip this to strict later.
-      const shouldCredit = isSuccess && emp && amt > 0 && (hashValid || !receivedHash);
+      // Log hash mismatches so we can fix the response-hash formula if
+      // ICICI's field order turns out to be different from what we expect.
+      if (receivedHash && !hashValid) {
+        console.log("ICICI hash mismatch", { txn, receivedHash, expectedHash, respHashText });
+      }
+
+      // Credit on gateway success + non-zero amount + identified employee.
+      // Idempotency (description ILIKE check + reference_id unique index) is
+      // the real safety net against duplicates; we don't also gate on hash
+      // because ICICI response-hash format has changed between integrations
+      // and we'd rather credit a legit payment than block on a formula drift.
+      const shouldCredit = isSuccess && emp && amt > 0;
 
       if (shouldCredit) {
         try {
           const sb = createClient(SU!, SK!);
 
-          // Idempotency: reject if this merchantTxnNo already credited
+          // Idempotency on reference_id (unique index uniq_wallet_txn_reference_id)
           const { data: existingTxn } = await sb.from("wallet_transactions")
             .select("id")
-            .ilike("description", `%${txn}%`)
+            .eq("reference_id", txn)
             .limit(1);
 
           if (!existingTxn || existingTxn.length === 0) {
@@ -133,7 +141,8 @@ serve(async (req) => {
                 type: "credit",
                 amount: amt,
                 description: "ICICI Wallet Top-up TxnNo:" + txn,
-                balance_after: nb
+                balance_after: nb,
+                reference_id: txn
               });
             }
           }

@@ -4949,12 +4949,16 @@
         // // removed debug log
         window._menuDebug = { total: S.menu.length, perCanteen: counts };
         // Load app settings (subsidy, monthly limit, etc.)
+        // Default ICICI Pay to ON so missing row doesn't break the payment flow
+        window._iciciPayEnabled = true;
         if (settingsRes.data?.length) {
           settingsRes.data.forEach(s => {
             if (s.key === 'subsidy_per_meal') S.subsidy = parseInt(s.value) || 80;
             if (s.key === 'monthly_limit') window._monthlyLimit = parseInt(s.value) || 2000;
+            if (s.key === 'icici_pay_enabled') window._iciciPayEnabled = (s.value !== 'false');
           });
         }
+        applyIciciPayVisibility();
         // Load token counters + operating hours from canteens table
         S.canteens.forEach(c => {
           if (c.token_counter != null) {
@@ -6457,9 +6461,26 @@
     }
 
     function selPay(el, method) {
+      if (method === 'upi' && window._iciciPayEnabled === false) {
+        toast('ICICI Pay is temporarily unavailable. Please use wallet.', 'warn', '🏦');
+        return;
+      }
       document.querySelectorAll('.pay-option').forEach(p => p.classList.remove('active'));
       el.classList.add('active');
       S.selPay = method;
+    }
+
+    // Hide/show the ICICI Pay option based on admin kill-switch (`icici_pay_enabled`)
+    function applyIciciPayVisibility() {
+      const opt = document.getElementById('pay-opt-upi');
+      if (!opt) return;
+      const enabled = window._iciciPayEnabled !== false;
+      opt.style.display = enabled ? '' : 'none';
+      if (!enabled && S.selPay === 'upi') {
+        S.selPay = 'wallet';
+        document.querySelectorAll('.pay-option').forEach(p => p.classList.remove('active'));
+        document.getElementById('pay-opt-wallet')?.classList.add('active');
+      }
     }
 
     // ═════════════════════════════════════
@@ -7009,6 +7030,11 @@
                 employee_id: S.user.id, canteen_id: cid, canteen_name: canteen.name,
                 canteen_icon: canteen.icon, pickup_slot: orderData.selSlot,
                 status: 'new', created_at: new Date().toISOString(),
+                item_total: parseFloat(result.item_total) || 0,
+                gst_amount: parseFloat(result.gst_amount) || 0,
+                amount_paid: parseFloat(result.amount_paid) || 0,
+                subsidy_applied: 0,
+                payment_method: 'icici_pay',
                 items: items.map(i => ({ ...i }))
               };
               S.orders.unshift(newOrder);
@@ -7032,30 +7058,38 @@
         return;
       }
 
-      // ── WALLET TOP-UP ── server already credited; poll for updated balance
+      // ── WALLET TOP-UP ── server already credited; confirm via wallet_transactions
+      // (diffing wallet_balance fails if S.user cache was stale, so check the txn row directly)
       toast('Payment successful! Updating wallet...', 'success', '💰');
-      const startBal = parseFloat(S.user.wallet_balance) || 0;
-      let newBalance = startBal;
+      let creditedRow = null;
       for (let i = 0; i < 12; i++) {
         try {
-          const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-          if (emp) {
-            newBalance = parseFloat(emp.wallet_balance) || 0;
-            if (newBalance > startBal) break;
-          }
+          const { data: tx } = await sb.from('wallet_transactions')
+            .select('id, amount, balance_after')
+            .eq('employee_id', S.user.id)
+            .eq('type', 'credit')
+            .ilike('description', `%${txn}%`)
+            .limit(1);
+          if (tx && tx.length > 0) { creditedRow = tx[0]; break; }
         } catch (_) { /* retry */ }
         await new Promise(r => setTimeout(r, 1000));
       }
+
+      let newBalance = parseFloat(S.user.wallet_balance) || 0;
+      try {
+        const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+        if (emp) newBalance = parseFloat(emp.wallet_balance) || 0;
+      } catch (_) {}
       S.user.wallet_balance = newBalance;
       setEl('nav-bal', '₹' + Math.round(newBalance));
       setEl('w-bal', '₹' + Math.round(newBalance));
 
-      if (newBalance > startBal) {
-        const credited = newBalance - startBal;
+      if (creditedRow) {
+        const credited = parseFloat(creditedRow.amount) || urlAmt;
         S.txns.unshift({ type: 'credit', icon: '🏦', name: `ICICI Online Top-up ₹${credited}`, details: `Txn: ${txn}`, date: 'Just now', amount: credited });
         toast(`₹${Math.round(credited)} added to wallet! Balance: ₹${Math.round(newBalance)}`, 'success', '💰');
       } else {
-        toast('Payment is processing — balance will update shortly.', 'info', '⏳');
+        toast('Payment is processing — balance will update shortly. Pull to refresh if not visible in 1 min.', 'warn', '⏳');
       }
       if (typeof renderWallet === 'function') renderWallet();
     }
