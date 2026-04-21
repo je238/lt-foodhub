@@ -13,9 +13,19 @@
   <script>
     // Capacitor crash prevention — must run before anything else
     window._isCapacitor = (typeof window.Capacitor !== 'undefined') || navigator.userAgent.includes('SLPNexus');
-    // Prevent WebView crash on uncaught errors
-    window.addEventListener('error', function (e) { e.preventDefault(); return true; }, true);
-    window.addEventListener('unhandledrejection', function (e) { e.preventDefault(); }, true);
+    // Queue early errors before Sentry loads
+    window._earlyErrors = [];
+    // Prevent WebView crash on uncaught errors — but forward to Sentry first
+    window.addEventListener('error', function (e) {
+      try { if (window.logError) window.logError(e.message, { stack: e.error && e.error.stack, file: e.filename, line: e.lineno }); else window._earlyErrors.push({ msg: e.message, ts: Date.now() }); } catch(x) {}
+      e.preventDefault(); return true;
+    }, true);
+    window.addEventListener('unhandledrejection', function (e) {
+      try { if (window.logError) window.logError('Unhandled rejection: ' + (e.reason && e.reason.message || e.reason), {}); } catch(x) {}
+      e.preventDefault();
+    }, true);
+    // XSS protection helper — escapes user/admin-supplied strings for safe HTML insertion
+    window.esc = function(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
     // Memory cleanup — garbage collect every 60s on mobile
     if (window._isCapacitor) {
       setInterval(function () {
@@ -27,6 +37,7 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/@capacitor/browser@8.0.3/dist/plugin.js"></script>
   <script>
     // Defer Sentry — load 3s after boot (non-blocking for APK)
     setTimeout(function () {
@@ -41,6 +52,11 @@
             tracesSampleRate: 0.05,
             beforeSend: function (event) { if (event.exception?.values?.[0]?.type === 'NetworkError') return null; return event; }
           });
+          // Flush early errors that happened before Sentry loaded
+          if (window._earlyErrors && window._earlyErrors.length) {
+            window._earlyErrors.forEach(function(e) { try { Sentry.captureException(new Error(e.msg)); } catch(x) {} });
+            window._earlyErrors = [];
+          }
         }
       };
       document.head.appendChild(s);
@@ -4856,7 +4872,7 @@
           row.innerHTML = items.map(m => {
             let imgId = m.image_url ? null : Object.entries(_FOOD_IMGS_LOGIN).find(([k]) => m.name.toLowerCase().includes(k))?.[1];
             const imgSrc = m.image_url || (imgId ? `https://images.unsplash.com/${imgId}?w=300&h=200&fit=crop&q=70` : `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=200&fit=crop&q=70`);
-            return `<div class="login-special-card"><img src="${imgSrc}" alt="${m.name}" onerror="this.src='https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=200&fit=crop&q=70'"><div class="login-special-card-body"><div class="login-special-name">${m.name}</div><div class="login-special-price">₹${m.price}</div></div></div>`;
+            return `<div class="login-special-card"><img src="${imgSrc}" alt="${esc(m.name)}" onerror="this.src='https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=200&fit=crop&q=70'"><div class="login-special-card-body"><div class="login-special-name">${esc(m.name)}</div><div class="login-special-price">₹${m.price}</div></div></div>`;
           }).join('');
         }
       } catch (e) { }
@@ -5194,30 +5210,7 @@
             p_role: role
           }));
 
-          // Admin fallback: fetch all admin rows and match locally (handles any column name)
-          if ((authErr || !authResult?.success) && role === 'admin') {
-            try {
-              const { data: adminRows } = await sb.from('admins').select('*').limit(20);
-              if (adminRows && adminRows.length) {
-                const inputL = staffId.toLowerCase();
-                const match = adminRows.find(function (row) {
-                  var idMatch = Object.values(row).some(function (v) {
-                    return typeof v === 'string' && v.toLowerCase() === inputL;
-                  });
-                  if (!idMatch) return false;
-                  var pwMatch = Object.entries(row).some(function (entry) {
-                    var k = entry[0], v = entry[1];
-                    return (k.includes('pass') || k.includes('pwd') || k.includes('secret')) && typeof v === 'string' && v === pw;
-                  });
-                  return pwMatch;
-                });
-                if (match) {
-                  authResult = { success: true, name: match.name || match.full_name || match.staff_id || match.username || staffId, id: match.id || staffId };
-                  authErr = null;
-                }
-              }
-            } catch (e) { }
-          }
+          // Admin fallback removed for security — only RPC auth is allowed
 
           if (authErr || !authResult?.success) {
             err.textContent = authResult?.error || authErr?.message || 'Invalid ID or password.';
@@ -5302,9 +5295,8 @@
           const { data: authRes, error: authErr } = await sb.rpc('verify_employee_login', { p_email: input, p_password: pw });
           if (!authErr && authRes?.success) {
             await _finishEmpLogin(authRes.employee || emp);
-          } else if (emp.password_hash === pw) {
-            // Plain text fallback (pgcrypto not yet enabled or password stored as plain)
-            await _finishEmpLogin(emp);
+          } else if (false) {
+            // Plain text fallback REMOVED for security — only bcrypt RPC login allowed
           } else {
             err.textContent = 'Incorrect password. Try again.';
             btn.classList.remove('btn-loading'); btn.disabled = false;
@@ -5449,8 +5441,8 @@
           p_password: pw1
         });
         if (pwErr) {
-          const { error: directErr } = await sb.from('employees').update({ password_hash: pw1 }).eq('id', _pendingEmpData.id);
-          if (directErr) { err.textContent = 'Could not save password. Try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+          // Direct plaintext write REMOVED for security — only RPC password hashing allowed
+          err.textContent = 'Could not save password. Please try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return;
         } else if (pwRes && !pwRes.success) {
           err.textContent = pwRes.error || 'Could not save password.';
           btn.classList.remove('btn-loading'); btn.disabled = false; return;
@@ -5700,7 +5692,7 @@
         return `
     <div class="canteen-card${!c.is_open ? ' closed' : ''}${S.selCanteen?.id === c.id ? ' active' : ''}" onclick="selCanteen('${c.id}')">
       ${imgUrl
-            ? `<img class="canteen-img" src="${imgUrl}" alt="${c.name}" loading="lazy" onerror="this.outerHTML='<div class=canteen-img-emoji>${c.icon}</div>'">`
+            ? `<img class="canteen-img" src="${imgUrl}" alt="${esc(c.name)}" loading="lazy" onerror="this.outerHTML='<div class=canteen-img-emoji>${esc(c.icon)}</div>'">`
             : `<div class="canteen-img-emoji">${c.icon}</div>`}
       <div class="canteen-body">
         <div class="canteen-name">${c.name.replace(' Counter', '').replace(' Canteen', '')}</div>
@@ -5868,7 +5860,7 @@
       ${m.is_bestseller ? '<div class="bestseller-tag">🔥 Bestseller</div>' : ''}
       <div class="menu-img-wrap">
         ${imgUrl
-            ? `<img src="${imgUrl}" alt="${m.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${m.emoji || '🍽️'}</div>'">`
+            ? `<img src="${imgUrl}" alt="${esc(m.name)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${esc(m.emoji || '🍽️')}</div>'">`
             : `<div class="menu-img-emoji">${m.emoji || '🍽️'}</div>`}
         ${!avail ? '<div class="unavail-badge">SOLD OUT</div>' : ''}
         ${avail && stock > 0 && stock <= 5 ? `<div style="position:absolute;bottom:6px;left:6px;background:rgba(217,119,6,.9);color:#fff;font-size:8px;font-weight:800;padding:2px 7px;border-radius:6px;z-index:2;backdrop-filter:blur(4px)">${stock} left</div>` : ''}
@@ -5877,7 +5869,7 @@
         <div>
           <div class="menu-name">
             <div class="${m.is_veg ? 'veg-dot' : 'nveg-dot'}"></div>
-            ${m.name}
+            ${esc(m.name)}
           </div>
           <div class="menu-desc">${searchQuery ? (S.canteens.find(c => c.id === m.canteen_id)?.icon || '') + ' ' + (S.canteens.find(c => c.id === m.canteen_id)?.name || '').replace(' Counter', '') + (m.category ? ' · ' + m.category : '') : (m.description || (m.category ? m.category : ''))}</div>
         </div>
@@ -5914,8 +5906,8 @@
         const avail = m.is_available !== false && stock > 0;
         const imgUrl = m.image_url || _getFoodImg(m.name, m.emoji);
         return `<div class="menu-item${!avail ? ' unavailable' : ''}">
-      <div class="menu-img-wrap">${imgUrl ? `<img src="${imgUrl}" alt="${m.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${m.emoji || '🍽️'}</div>'">` : `<div class="menu-img-emoji">${m.emoji || '🍽️'}</div>`}</div>
-      <div class="menu-body"><div><div class="menu-name"><div class="${m.is_veg ? 'veg-dot' : 'nveg-dot'}"></div>${m.name}</div></div>
+      <div class="menu-img-wrap">${imgUrl ? `<img src="${imgUrl}" alt="${esc(m.name)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=menu-img-emoji>${esc(m.emoji || '🍽️')}</div>'">` : `<div class="menu-img-emoji">${esc(m.emoji || '🍽️')}</div>`}</div>
+      <div class="menu-body"><div><div class="menu-name"><div class="${m.is_veg ? 'veg-dot' : 'nveg-dot'}"></div>${esc(m.name)}</div></div>
       <div class="menu-footer"><div><span class="menu-price">₹${m.price}</span></div>
       <div class="mc" id="mc-${m.id}">${qty > 0 ? `<div class="qty-ctrl"><button class="qty-btn" onclick="chgQty('${m.id}',-1)">−</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="chgQty('${m.id}',1)">+</button></div>` : `<button class="add-btn" onclick="addCart('${m.id}')">ADD</button>`}</div></div></div></div>`;
       }).join('');
@@ -6420,9 +6412,13 @@
     // ═════════════════════════════════════
     // PLACE ORDER
     // ═════════════════════════════════════
+    let _orderPlacing = false;
     async function placeOrder() {
-      if (S.cart.length === 0) { toast('Your cart is empty!', 'error', '🛒'); return; }
-      if (!sb) { toast('Database not connected!', 'error', '❌'); return; }
+      if (_orderPlacing) { toast('Order already in progress...', 'info', '⏳'); return; }
+      _orderPlacing = true;
+      setTimeout(() => { _orderPlacing = false; }, 5000); // unlock after 5s
+      if (S.cart.length === 0) { _orderPlacing = false; toast('Your cart is empty!', 'error', '🛒'); return; }
+      if (!sb) { _orderPlacing = false; toast('Database not connected!', 'error', '❌'); return; }
 
       // Fetch fresh canteen status from DB before placing order
       try {
@@ -6461,7 +6457,7 @@
             amount: estimatedFees.grandTotal, userId: S.user.id, ts: Date.now()
           }));
 
-          const res = await fetch(SURL + '/functions/v1/icici-payment', {
+            const res = await fetch(SURL + '/functions/v1/icici-payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
             body: JSON.stringify({
@@ -6470,7 +6466,8 @@
               employeeId: S.user.id,
               employeeName: S.user.name || 'Employee',
               employeeEmail: S.user.email || 'noreply@slpnexus.com',
-              employeePhone: S.user.phone || '9999999999'
+              employeePhone: S.user.phone || '9999999999',
+              isApk: window._isCapacitor
             })
           });
           const data = await res.json();
@@ -6481,7 +6478,14 @@
             }));
             toast('Redirecting to ICICI payment page...', 'info', '🏦');
             setTimeout(() => {
-              window.location.href = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
+              const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
+              const forwardUrl = 'https://lt-foodhub.vercel.app/api/icici-forward?target=' + encodeURIComponent(fullUrl);
+              const Browser = (window.Capacitor?.Plugins?.Browser) || (window.capacitorBrowser?.Browser);
+              if (window._isCapacitor && Browser) {
+                Browser.open({ url: forwardUrl });
+              } else {
+                window.location.href = fullUrl;
+              }
             }, 500);
           } else {
             toast('Payment failed: ' + (data.error || 'Unknown'), 'error', '❌');
@@ -6653,7 +6657,7 @@
             invItemsEl.innerHTML = allItems.map(i => `
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <div>
-              <div style="font-size:13px;font-weight:600;color:var(--dark)">${i.emoji || ''} ${i.item_name || i.name || ''}</div>
+              <div style="font-size:13px;font-weight:600;color:var(--dark)">${esc(i.emoji || '')} ${esc(i.item_name || i.name || '')}</div>
               <div style="font-size:11px;color:var(--muted)">${i.counter} × ${i.quantity || i.qty || 1}</div>
             </div>
             <div style="font-size:13px;font-weight:700;color:var(--dark)">₹${((parseFloat(i.price || i.unit_price) || 0) * (i.quantity || i.qty || 1)).toFixed(2)}</div>
@@ -6869,214 +6873,171 @@
     }
 
     // ── ICICI Payment Callback Handler ──
-    (function handlePaymentCallback() {
+    // Wallet crediting is done SERVER-SIDE by the edge function's ICICI callback
+    // handler — this function only refreshes the UI after the redirect returns.
+    async function handlePaymentCallback() {
       const params = new URLSearchParams(window.location.search);
       const paymentStatus = params.get('payment');
       if (!paymentStatus) return;
 
-      // Save params before cleaning URL
-      const txn = params.get('txn') || '';
-      const amount = parseFloat(params.get('amount') || '0');
-      const code = params.get('code') || '';
-      const msg = decodeURIComponent(params.get('msg') || '');
-      const iciciTxn = params.get('iciciTxn') || '';
+      const txn = params.get('txnNo') || params.get('txn') || '';
+      const urlAmt = parseFloat(params.get('amt') || params.get('amount') || '0');
       window.history.replaceState({}, '', window.location.pathname);
 
-      if (paymentStatus === 'success' && amount > 0) {
-        const processPayment = async () => {
-          if (!sb || !S.user) { setTimeout(processPayment, 500); return; }
-          localStorage.removeItem('fh-pending-topup');
-
-          // Check if this was a direct order payment
-          const pendingOrder = localStorage.getItem('fh-pending-order');
-
-          if (pendingOrder) {
-            // ── DIRECT ORDER PAYMENT ── (no wallet credit needed)
-            try {
-              const orderData = JSON.parse(pendingOrder);
-              toast('Payment successful! Placing your order...', 'success', '✅');
-
-              // Wait for menu to load
-              let waitCount = 0;
-              while ((!S.menu || S.menu.length === 0) && waitCount < 20) {
-                await new Promise(r => setTimeout(r, 500));
-                waitCount++;
-              }
-
-              const byCanteen = {};
-              (orderData.cart || []).forEach(i => {
-                const mi = S.menu.find(m => m.id === ((i.is_addon && i.parent_id) ? i.parent_id : i.id));
-                const cid = mi?.canteen_id || orderData.selCanteen?.id || 'c1';
-                if (!byCanteen[cid]) byCanteen[cid] = [];
-                byCanteen[cid].push(i);
-              });
-
-              let orderPlaced = false;
-              for (const cid of Object.keys(byCanteen)) {
-                const canteen = S.canteens.find(c => c.id === cid) || { id: cid, name: 'Counter', icon: '🍽️' };
-                const items = byCanteen[cid];
-                const { data: result, error: rpcErr } = await sb.rpc('place_order', {
-                  p_employee_id: S.user.id,
-                  p_canteen_id: cid,
-                  p_canteen_name: canteen.name,
-                  p_canteen_icon: canteen.icon || '🍽️',
-                  p_pickup_slot: orderData.selSlot,
-                  p_items: items.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price })),
-                  p_payment_method: 'icici_pay'
-                });
-
-                if (!rpcErr && result?.success) {
-                  orderPlaced = true;
-                  S.user.wallet_balance = parseFloat(result.new_balance) || S.user.wallet_balance;
-                  toast(`Order placed! Token #${result.token_number} at ${canteen.icon} ${canteen.name}`, 'success', '✅');
-
-                  // Log ICICI payment in wallet_transactions
-                  try {
-                    await sb.from('wallet_transactions').insert({
-                      employee_id: S.user.id,
-                      amount: parseFloat(result.amount_paid) || amount,
-                      type: 'credit',
-                      description: `ICICI Order Payment - Token #${result.token_number} at ${canteen.name} (Txn: ${txn})`,
-                      reference_id: txn
-                    });
-                  } catch (e) { console.log('Txn log skipped:', e); }
-
-                  const newOrder = {
-                    id: result.order_id, token_number: result.token_number,
-                    employee_id: S.user.id, canteen_id: cid, canteen_name: canteen.name,
-                    canteen_icon: canteen.icon, pickup_slot: orderData.selSlot,
-                    status: 'new', created_at: new Date().toISOString(),
-                    items: items.map(i => ({ ...i }))
-                  };
-                  S.orders.unshift(newOrder);
-                  S.allOrders.unshift({ ...newOrder });
-                } else {
-                  console.error('Order RPC error:', rpcErr || result);
-                  toast(`Order failed: ${rpcErr?.message || result?.error || 'Unknown'}`, 'error', '❌');
-                }
-              }
-
-              S.cart = [];
-              localStorage.removeItem('fh-pending-order');
-              setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
-              setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
-              if (orderPlaced) {
-                setTimeout(() => { if (typeof renderMyOrders === 'function') renderMyOrders(); nav('orders'); }, 1500);
-              }
-            } catch (orderErr) {
-              console.error('Order placement error:', orderErr);
-              toast('Payment received but order placement failed. Contact admin.', 'error', '⚠️');
-              localStorage.removeItem('fh-pending-order');
-            }
-
-          } else {
-            // ── WALLET TOP-UP ── (credit the wallet)
-            toast(`₹${amount} top-up successful! Crediting wallet...`, 'success', '💰');
-            try {
-              const { data: result, error: rpcErr } = await sb.rpc('admin_wallet_credit', {
-                p_employee_id: S.user.id, p_amount: amount,
-                p_reason: `ICICI Online Top-up (Txn: ${txn}, ICICI Ref: ${iciciTxn})`
-              });
-              if (!rpcErr && result?.success) {
-                S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + amount);
-              } else {
-                const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-                const newBal = (parseFloat(emp?.wallet_balance) || 0) + amount;
-                await sb.from('employees').update({ wallet_balance: newBal }).eq('id', S.user.id);
-                S.user.wallet_balance = newBal;
-              }
-              // Always log the top-up transaction
-              try {
-                await sb.from('wallet_transactions').insert({
-                  employee_id: S.user.id, amount, type: 'credit',
-                  description: `ICICI Online Top-up (Txn: ${txn}, ICICI Ref: ${iciciTxn})`, reference_id: txn
-                });
-              } catch (e) { console.log('Txn log skipped (may be duplicate):', e); }
-              setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
-              setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
-              // Add to local transaction history so it shows immediately
-              S.txns.unshift({ type: 'credit', icon: '🏦', name: `ICICI Online Top-up ₹${amount}`, details: `Txn: ${txn}`, date: 'Just now', amount: amount });
-              toast(`₹${amount} added to wallet! Balance: ₹${Math.round(S.user.wallet_balance)}`, 'success', '💰');
-              if (typeof renderWallet === 'function') renderWallet();
-            } catch (e) {
-              console.error('Wallet credit error:', e);
-              toast('Payment received but wallet update failed. Contact admin.', 'error', '⚠️');
-            }
-          }
-        };
-        processPayment();
-      } else {
-        toast(`Payment failed: ${msg || code || 'Unknown error'}. Txn: ${txn}`, 'error', '❌');
+      if (paymentStatus !== 'success') {
+        const msg = decodeURIComponent(params.get('msg') || '');
+        const code = params.get('code') || '';
+        toast(`Payment failed: ${msg || code || 'Cancelled'}`, 'error', '❌');
         localStorage.removeItem('fh-pending-topup');
         localStorage.removeItem('fh-pending-order');
+        return;
       }
-    })();
 
-    // ── Auto-verify any pending payments on page load ──
+      // Wait for auth + supabase to be ready (up to 10s)
+      let wait = 0;
+      while ((!sb || !S.user) && wait < 20) { await new Promise(r => setTimeout(r, 500)); wait++; }
+      if (!sb || !S.user) {
+        toast('Payment successful — please log in to see updated balance', 'info', 'ℹ️');
+        return;
+      }
+
+      const pendingOrder = localStorage.getItem('fh-pending-order');
+      localStorage.removeItem('fh-pending-topup');
+
+      if (pendingOrder) {
+        // ── DIRECT ORDER PAYMENT ── edge function has credited; now place the order
+        try {
+          const orderData = JSON.parse(pendingOrder);
+          toast('Payment successful! Placing your order...', 'success', '✅');
+
+          let waitCount = 0;
+          while ((!S.menu || S.menu.length === 0) && waitCount < 20) {
+            await new Promise(r => setTimeout(r, 500));
+            waitCount++;
+          }
+
+          const byCanteen = {};
+          (orderData.cart || []).forEach(i => {
+            const mi = S.menu.find(m => m.id === ((i.is_addon && i.parent_id) ? i.parent_id : i.id));
+            const cid = mi?.canteen_id || orderData.selCanteen?.id || 'c1';
+            if (!byCanteen[cid]) byCanteen[cid] = [];
+            byCanteen[cid].push(i);
+          });
+
+          let orderPlaced = false;
+          for (const cid of Object.keys(byCanteen)) {
+            const canteen = S.canteens.find(c => c.id === cid) || { id: cid, name: 'Counter', icon: '🍽️' };
+            const items = byCanteen[cid];
+            const { data: result, error: rpcErr } = await sb.rpc('place_order', {
+              p_employee_id: S.user.id,
+              p_canteen_id: cid,
+              p_canteen_name: canteen.name,
+              p_canteen_icon: canteen.icon || '🍽️',
+              p_pickup_slot: orderData.selSlot,
+              p_items: items.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price })),
+              p_payment_method: 'icici_pay'
+            });
+
+            if (!rpcErr && result?.success) {
+              orderPlaced = true;
+              S.user.wallet_balance = parseFloat(result.new_balance) || S.user.wallet_balance;
+              toast(`Order placed! Token #${result.token_number} at ${canteen.icon} ${canteen.name}`, 'success', '✅');
+
+              const newOrder = {
+                id: result.order_id, token_number: result.token_number,
+                employee_id: S.user.id, canteen_id: cid, canteen_name: canteen.name,
+                canteen_icon: canteen.icon, pickup_slot: orderData.selSlot,
+                status: 'new', created_at: new Date().toISOString(),
+                items: items.map(i => ({ ...i }))
+              };
+              S.orders.unshift(newOrder);
+              S.allOrders.unshift({ ...newOrder });
+            } else {
+              toast(`Order failed: ${rpcErr?.message || result?.error || 'Unknown'}`, 'error', '❌');
+            }
+          }
+
+          S.cart = [];
+          localStorage.removeItem('fh-pending-order');
+          setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
+          setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
+          if (orderPlaced) {
+            setTimeout(() => { if (typeof renderMyOrders === 'function') renderMyOrders(); nav('orders'); }, 1500);
+          }
+        } catch (orderErr) {
+          toast('Payment received but order placement failed. Contact admin.', 'error', '⚠️');
+          localStorage.removeItem('fh-pending-order');
+        }
+        return;
+      }
+
+      // ── WALLET TOP-UP ── server already credited; poll for updated balance
+      toast('Payment successful! Updating wallet...', 'success', '💰');
+      const startBal = parseFloat(S.user.wallet_balance) || 0;
+      let newBalance = startBal;
+      for (let i = 0; i < 12; i++) {
+        try {
+          const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+          if (emp) {
+            newBalance = parseFloat(emp.wallet_balance) || 0;
+            if (newBalance > startBal) break;
+          }
+        } catch (_) { /* retry */ }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      S.user.wallet_balance = newBalance;
+      setEl('nav-bal', '₹' + Math.round(newBalance));
+      setEl('w-bal', '₹' + Math.round(newBalance));
+
+      if (newBalance > startBal) {
+        const credited = newBalance - startBal;
+        S.txns.unshift({ type: 'credit', icon: '🏦', name: `ICICI Online Top-up ₹${credited}`, details: `Txn: ${txn}`, date: 'Just now', amount: credited });
+        toast(`₹${Math.round(credited)} added to wallet! Balance: ₹${Math.round(newBalance)}`, 'success', '💰');
+      } else {
+        toast('Payment is processing — balance will update shortly.', 'info', '⏳');
+      }
+      if (typeof renderWallet === 'function') renderWallet();
+    }
+    // Run on initial web load (for browser redirect flow)
+    handlePaymentCallback();
+
+    // ── Auto-check any pending payments on page load ──
     // Handles: bank debited but redirect failed (internet issue, browser closed, etc.)
+    // The edge function credits wallets server-side via the ICICI callback, so here
+    // we just check if a wallet_transactions record exists for the pending txn.
     async function verifyPendingPayments() {
       if (!sb || !S.user) return;
       const pending = localStorage.getItem('fh-pending-topup');
       if (!pending) return;
 
       try {
-        const { merchantTxnNo, amount, ts } = JSON.parse(pending);
-        // Only check payments less than 24 hours old
+        const { merchantTxnNo, ts } = JSON.parse(pending);
         if (Date.now() - ts > 24 * 60 * 60 * 1000) {
           localStorage.removeItem('fh-pending-topup');
           return;
         }
 
-        console.log('Verifying pending payment:', merchantTxnNo);
+        const { data: tx } = await sb.from('wallet_transactions')
+          .select('amount, description, created_at')
+          .eq('employee_id', S.user.id)
+          .ilike('description', `%${merchantTxnNo}%`)
+          .limit(1)
+          .maybeSingle();
 
-        const res = await fetch(SURL + '/functions/v1/icici-payment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
-          body: JSON.stringify({ action: 'verify', merchantTxnNo })
-        });
-
-        const data = await res.json();
-        console.log('Payment verification result:', data);
-
-        if (data.paymentStatus === 'SUCCESS') {
-          const paidAmount = parseFloat(data.amount) || parseFloat(amount);
-          toast(`Found successful payment of ₹${paidAmount}! Crediting wallet...`, 'info', '🔍');
-
-          // Credit wallet
-          const { data: result, error: rpcErr } = await sb.rpc('admin_wallet_credit', {
-            p_employee_id: S.user.id,
-            p_amount: paidAmount,
-            p_reason: `ICICI Online Top-up (Txn: ${merchantTxnNo}, Auto-verified)`
-          });
-
-          if (!rpcErr && result?.success) {
-            S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + paidAmount);
-          } else {
-            const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-            const newBal = (parseFloat(emp?.wallet_balance) || 0) + paidAmount;
-            await sb.from('employees').update({ wallet_balance: newBal }).eq('id', S.user.id);
-            await sb.from('wallet_transactions').insert({
-              employee_id: S.user.id, amount: paidAmount, type: 'credit',
-              description: `ICICI Top-up auto-verified (Txn: ${merchantTxnNo})`, reference_id: merchantTxnNo
-            });
-            S.user.wallet_balance = newBal;
+        if (tx) {
+          const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+          if (emp) {
+            S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
+            setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
+            setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
           }
-
-          setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
-          setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
-          toast(`₹${paidAmount} added to wallet!`, 'success', '💰');
+          toast(`₹${Math.round(tx.amount)} top-up confirmed! Balance: ₹${Math.round(S.user.wallet_balance)}`, 'success', '💰');
           localStorage.removeItem('fh-pending-topup');
-
-        } else if (data.paymentStatus === 'PENDING') {
-          toast('Your recent payment is still processing. Will check again shortly.', 'info', '⏳');
-          // Don't remove from localStorage — check again later
-        } else {
-          // Payment genuinely failed
-          localStorage.removeItem('fh-pending-topup');
+          if (typeof renderWallet === 'function') renderWallet();
         }
-      } catch (e) {
-        console.error('Payment verification error:', e);
-      }
+        // Otherwise: leave pending — either still processing or failed. Don't delete
+        // so the next page load can re-check; 24h window cleans up the rest.
+      } catch (_) { /* silent — retried on next load */ }
     }
 
     // Run verification 5 seconds after page load (gives time for user auth)
@@ -7152,7 +7113,8 @@
             employeeId: S.user.id,
             employeeName: S.user.name || 'Employee',
             employeeEmail: S.user.email || 'noreply@slpnexus.com',
-            employeePhone: S.user.phone || '9999999999'
+            employeePhone: S.user.phone || '9999999999',
+            isApk: window._isCapacitor
           })
         });
 
@@ -7179,7 +7141,13 @@
           // Redirect to ICICI payment page with tranCtx token
           setTimeout(() => {
             const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
-            window.location.href = fullUrl;
+            const forwardUrl = 'https://lt-foodhub.vercel.app/api/icici-forward?target=' + encodeURIComponent(fullUrl);
+            const Browser = (window.Capacitor?.Plugins?.Browser) || (window.capacitorBrowser?.Browser);
+            if (window._isCapacitor && Browser) {
+              Browser.open({ url: forwardUrl });
+            } else {
+              window.location.href = fullUrl;
+            }
           }, 500);
         } else {
           toast('Payment initiation failed: ' + (data.error || 'Unknown error'), 'error', '❌');
@@ -7284,7 +7252,7 @@
       <div>
         ${(o.items || []).map(i => `
           <div class="order-item-row">
-            <strong>${i.emoji || ''} ${i.item_name || i.name} ×${i.quantity || i.qty}</strong>
+            <strong>${esc(i.emoji || '')} ${esc(i.item_name || i.name)} ×${i.quantity || i.qty}</strong>
             <span>₹${(i.unit_price || i.price || 0) * (i.quantity || i.qty || 1)}</span>
           </div>`).join('')}
       </div>
@@ -7544,7 +7512,7 @@
             <div class="kitchen-token ${isDone ? 'done' : o.status === 'new' ? 'new-order' : o.status}">#${o.token_number || o.token}</div>
             <div style="background:var(--light2);border-radius:7px;padding:3px 9px;font-size:11px;font-weight:700;color:var(--mid)">${canteen.icon || '🍛'} ${o.canteen_name || canteen.name || 'Canteen'}</div>
           </div>
-          <div class="kitchen-meta">${o.employee_name || 'Employee'}</div>
+          <div class="kitchen-meta">${esc(o.employee_name || 'Employee')}</div>
           ${o.pickup_slot && o.pickup_slot !== 'ASAP' ? `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#FFF7ED;color:#ea580c;border:1px solid #fdba74;display:inline-block">🕒 SCHEDULED: ${o.pickup_slot}</div>` : `<div style="margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;background:#f0fdf4;color:#16a34a;border:1px solid #86efac;display:inline-block">⚡ Prepare Now</div>`}
         </div>
         <span class="badge ${isDone ? 'badge-done' : o.status === 'new' ? 'badge-new' : o.status === 'preparing' ? 'badge-prep' : 'badge-ready'}">
@@ -7552,7 +7520,7 @@
         </span>
       </div>
       <div class="kitchen-items">
-        ${items.map(i => `<div class="kitchen-item-row"><strong>${i.emoji || ''} ${i.item_name || i.name}</strong><span>×${i.quantity || i.qty}</span></div>`).join('')}
+        ${items.map(i => `<div class="kitchen-item-row"><strong>${esc(i.emoji || '')} ${esc(i.item_name || i.name)}</strong><span>×${i.quantity || i.qty}</span></div>`).join('')}
       </div>
       ${!isDone ? `<div class="kitchen-actions">
         ${o.status === 'new' ? `<button class="btn btn-secondary btn-sm" style="flex:1" onclick="${mode}Action('${o.id}','preparing')">✓ Accept & Start</button><button class="btn btn-ghost btn-sm" onclick="${mode}Action('${o.id}','done')">✕ Bump</button>` : ''}
@@ -7630,6 +7598,7 @@
 
     function startPoll() {
       clearInterval(S.pollInterval);
+      clearInterval(S._menuPollInterval); // Fix: prevent interval stacking
       if (S.role === 'employee') {
         // Canteen open/close poll every 30s as backup to Realtime
         // Realtime handles instant updates — this is just a safety net
@@ -7949,8 +7918,8 @@
                 <div class="kitchen-head">
                   <div>
                     <div class="kitchen-token ${o.status === 'new' ? 'new-order' : o.status}">#${o.token_number}</div>
-                    <div class="kitchen-meta">${o.employee_name || 'Walk-up'} · ${fmtDate(o.created_at)}</div>
-                    <div class="kitchen-meta">Slot: ${o.pickup_slot || '—'} · ${(o.items || []).map(i => i.item_name || i.name).slice(0, 2).join(', ')}</div>
+                    <div class="kitchen-meta">${esc(o.employee_name || 'Walk-up')} · ${fmtDate(o.created_at)}</div>
+                    <div class="kitchen-meta">Slot: ${o.pickup_slot || '—'} · ${(o.items || []).map(i => esc(i.item_name || i.name)).slice(0, 2).join(', ')}</div>
                   </div>
                   <div style="text-align:right">
                     <span class="badge ${statusBadge(o.status)}">${statusLabel(o.status)}</span>
@@ -8041,7 +8010,7 @@
         <div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.5);border-radius:3px;padding:1px 3px;font-size:9px;color:#fff">📷</div>
       </div>
       <div class="mgmt-body">
-        <div class="mgmt-name">${m.name}</div>
+        <div class="mgmt-name">${esc(m.name)}</div>
         <div class="mgmt-meta">${m.category} · ${m.is_veg ? '🟢 Veg' : '🔴 Non-Veg'} · ${S.canteens.find(c => c.id === m.canteen_id)?.name || 'All'}</div>
         <div class="mgmt-meta">Stock: ${stock} · ⭐ ${m.rating || 'N/A'}</div>
       </div>
@@ -8282,14 +8251,14 @@
       if (!m) return;
       showModal(`
     <div class="modal-head">
-      <span class="modal-title">Edit: ${m.name}</span>
+      <span class="modal-title">Edit: ${esc(m.name)}</span>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Emoji</label>
-          <input class="form-input" id="e-emoji" value="${m.emoji || '🍽️'}" maxlength="2" style="font-size:22px;text-align:center">
+          <input class="form-input" id="e-emoji" value="${esc(m.emoji || '🍽️')}" maxlength="2" style="font-size:22px;text-align:center">
         </div>
         <div class="form-group">
           <label class="form-label">Price (₹)</label>
@@ -8298,11 +8267,11 @@
       </div>
       <div class="form-group">
         <label class="form-label">Item Name</label>
-        <input class="form-input" id="e-name" value="${m.name}">
+        <input class="form-input" id="e-name" value="${esc(m.name)}">
       </div>
       <div class="form-group">
         <label class="form-label">Description</label>
-        <textarea class="form-input" id="e-desc" rows="2">${m.description || ''}</textarea>
+        <textarea class="form-input" id="e-desc" rows="2">${esc(m.description || '')}</textarea>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -8370,7 +8339,7 @@
       <div class="inventory-item">
         <div class="inv-icon">${m.emoji || '🍽️'}</div>
         <div class="inv-body">
-          <div class="inv-name">${m.name}</div>
+          <div class="inv-name">${esc(m.name)}</div>
           <div class="inv-stock ${cls}">${stock} units remaining${stock <= 5 ? ' — CRITICAL' : stock <= 15 ? ' — Low' : ' — Good'}</div>
           <div class="inv-progress"><div class="progress"><div class="progress-fill ${cls === 'low' ? 'red' : cls === 'medium' ? 'amber' : 'green'}" style="width:${pct}%"></div></div></div>
         </div>
@@ -8724,8 +8693,8 @@
               ${isRefund ? '↩' : '💳'}
             </div>
             <div style="flex:1;min-width:0">
-              <div style="font-weight:700;font-size:13px;color:var(--dark)">${emp.name || t.employee_id || '—'}</div>
-              <div style="font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.description || 'Wallet credit'}</div>
+              <div style="font-weight:700;font-size:13px;color:var(--dark)">${esc(emp.name || t.employee_id || '—')}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.description || 'Wallet credit')}</div>
               <div style="font-size:10px;color:var(--muted);margin-top:2px">${emp.email || ''} · ${fmtDate(t.created_at)}</div>
             </div>
             <div style="text-align:right;flex-shrink:0">
@@ -9643,8 +9612,8 @@ self.addEventListener('fetch',e=>{
               if (bc.target_canteen && bc.target_canteen !== S.selCanteen?.id) return;
               const icons = { info: '📢', warn: '⚠️', promo: '🎉', closed: '🔴' };
               const icon = icons[bc.type] || '📢';
-              addNotif(`${icon} ${bc.message}`, icon);
-              toast(`${icon} ${bc.message}`, bc.type === 'warn' || bc.type === 'closed' ? 'warn' : 'success', icon, 8000);
+              addNotif(`${icon} ${esc(bc.message)}`, icon);
+              toast(`${icon} ${esc(bc.message)}`, bc.type === 'warn' || bc.type === 'closed' ? 'warn' : 'success', icon, 8000);
             }
           })
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'employees' }, payload => {
@@ -9720,7 +9689,7 @@ self.addEventListener('fetch',e=>{
       <div style="text-align:center;margin-bottom:20px">
         <div style="font-size:44px;margin-bottom:10px">⚠️</div>
         <div style="font-weight:700;font-size:15px">Order #${o.token_number}</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px">${o.employee_name}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">${esc(o.employee_name)}</div>
       </div>
       <div class="form-group">
         <label class="form-label">Reason for Rejection</label>
@@ -9791,10 +9760,10 @@ self.addEventListener('fetch',e=>{
       <div class="divider"></div>
       <div class="big">#${o.token_number}</div>
       <div class="divider"></div>
-      <div style="font-size:11px;margin-bottom:6px"><strong>Employee:</strong> ${o.employee_name || '—'} (${o.employee_id || ''})</div>
+      <div style="font-size:11px;margin-bottom:6px"><strong>Employee:</strong> ${esc(o.employee_name || '—')} (${esc(o.employee_id || '')})</div>
       <div style="font-size:11px;margin-bottom:8px"><strong>Pickup Slot:</strong> ${o.pickup_slot === 'ASAP' || !o.pickup_slot ? '⚡ Prepare Now' : o.pickup_slot}</div>
       <div class="divider"></div>
-      ${items.map(i => `<div class="row"><span>${i.emoji || ''} ${i.item_name || i.name}${i.customNote ? `<br><small style="color:#666">${i.customNote}</small>` : ''}</span><span>×${i.quantity || i.qty}</span></div>`).join('')}
+      ${items.map(i => `<div class="row"><span>${esc(i.emoji || '')} ${esc(i.item_name || i.name)}${i.customNote ? `<br><small style="color:#666">${esc(i.customNote)}</small>` : ''}</span><span>×${i.quantity || i.qty}</span></div>`).join('')}
       <div class="divider"></div>
       <div class="row"><span>Total</span><span>₹${o.item_total || 0}</span></div>
       <div class="row"><span>Subsidy</span><span>-₹${o.subsidy_applied || 0}</span></div>
@@ -9847,8 +9816,8 @@ self.addEventListener('fetch',e=>{
         <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--light2);border-radius:11px;margin-bottom:7px;opacity:${m.is_available !== false ? 1 : 0.5}">
           <span style="font-size:22px">${m.emoji || '🍽️'}</span>
           <div style="flex:1">
-            <div style="font-weight:700;font-size:13px">${m.name}</div>
-            <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${m.category || ''}</div>
+            <div style="font-weight:700;font-size:13px">${esc(m.name)}</div>
+            <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${esc(m.category || '')}</div>
           </div>
           <div class="toggle ${m.is_available !== false ? 'on' : ''}" onclick="vendorToggleItem('${m.id}',this)" data-item-id="${m.id}"></div>
         </div>`).join('')}
@@ -10262,27 +10231,8 @@ self.addEventListener('fetch',e=>{
           }
         }
 
-        // Fallback: direct DB update (admin has postgres access via RLS service role)
-        const { data: emp, error: empErr } = await sb.from('employees').select('wallet_balance, name').eq('id', empId).single();
-        if (empErr || !emp) { toast('Employee not found: ' + empId, 'error', '❌'); return; }
-
-        const newBalance = (emp.wallet_balance || 0) + amount;
-        const { error: updateErr } = await sb.from('employees').update({ wallet_balance: newBalance }).eq('id', empId);
-        if (updateErr) { toast('Refund failed: ' + updateErr.message, 'error', '❌'); return; }
-
-        // Log transaction
-        await sb.from('wallet_transactions').insert({
-          employee_id: empId,
-          type: 'credit',
-          amount: amount,
-          description: (reason || 'Admin refund') + ' — by admin',
-          balance_after: newBalance
-        });
-
-        if (S.user?.id === empId) { S.user.wallet_balance = newBalance; setEl('nav-bal', '₹' + Math.round(newBalance)); }
-        closeModal();
-        toast(`₹${amount} credited to ${emp.name || empId}'s wallet ✅`, 'success', '💚');
-        addNotif(`₹${amount} refund credited to ${empId} (${reason})`, '💚');
+        // Direct DB wallet update REMOVED for security — only admin_wallet_credit RPC is allowed
+        toast('Refund failed. Please contact support if this persists.', 'error', '❌');
 
       } catch (e) {
         toast('Refund failed: ' + e.message, 'error', '❌');
@@ -10462,7 +10412,7 @@ self.addEventListener('fetch',e=>{
         <span class="badge ${badgeMap[o.status] || 'badge-done'}">${statusMap[o.status] || o.status}</span>
       </div>
       <div>
-        ${(o.items || []).map(i => `<div class="order-item-row"><strong>${i.item_emoji || i.emoji || ''} ${i.item_name || i.name || ''} ×${i.quantity || i.qty || 1}${(i.custom_note || i.customNote) ? ` <small style="color:var(--muted)">(${i.custom_note || i.customNote})</small>` : ''}</strong><span>₹${((i.unit_price || i.price || 0) * (i.quantity || i.qty || 1)).toFixed(0)}</span></div>`).join('')}
+        ${(o.items || []).map(i => `<div class="order-item-row"><strong>${esc(i.item_emoji || i.emoji || '')} ${esc(i.item_name || i.name || '')} ×${i.quantity || i.qty || 1}${(i.custom_note || i.customNote) ? ` <small style="color:var(--muted)">(${esc(i.custom_note || i.customNote)})</small>` : ''}</strong><span>₹${((i.unit_price || i.price || 0) * (i.quantity || i.qty || 1)).toFixed(0)}</span></div>`).join('')}
       </div>
       <div class="order-footer">
         <div class="order-savings">Paid <strong style="color:var(--brand)">₹${o.amount_paid || 0}</strong> · Saved <strong style="color:var(--green2)">₹${o.subsidy_applied || 0}</strong>${o.rating ? ` · ${'⭐'.repeat(o.rating)}` : ''}</div>
@@ -10980,7 +10930,7 @@ self.addEventListener('fetch',e=>{
         ${items.map(m => `
           <div style="background:var(--light2);border-radius:10px;padding:10px;cursor:pointer;transition:.2s;border:1.5px solid transparent" onclick="posAddItem('${m.id}')" id="pos-item-${m.id}">
             <div style="font-size:18px;text-align:center">${m.emoji || '🍽️'}</div>
-            <div style="font-size:11px;font-weight:700;text-align:center;margin-top:4px">${m.name.length > 18 ? m.name.slice(0, 18) + '…' : m.name}</div>
+            <div style="font-size:11px;font-weight:700;text-align:center;margin-top:4px">${esc(m.name.length > 18 ? m.name.slice(0, 18) + '…' : m.name)}</div>
             <div style="font-size:12px;font-weight:800;color:var(--brand);text-align:center">₹${m.price}</div>
           </div>`).join('')}
       </div>
@@ -11017,7 +10967,7 @@ self.addEventListener('fetch',e=>{
       document.getElementById('pos-items').innerHTML = items.map(m => `
     <div style="background:var(--light2);border-radius:10px;padding:10px;cursor:pointer;transition:.2s;border:1.5px solid ${posCart.find(c => c.id === m.id) ? 'var(--brand)' : 'transparent'}" onclick="posAddItem('${m.id}')" id="pos-item-${m.id}">
       <div style="font-size:18px;text-align:center">${m.emoji || '🍽️'}</div>
-      <div style="font-size:11px;font-weight:700;text-align:center;margin-top:4px">${m.name.length > 18 ? m.name.slice(0, 18) + '…' : m.name}</div>
+      <div style="font-size:11px;font-weight:700;text-align:center;margin-top:4px">${esc(m.name.length > 18 ? m.name.slice(0, 18) + '…' : m.name)}</div>
       <div style="font-size:12px;font-weight:800;color:var(--brand);text-align:center">₹${m.price}</div>
       ${posCart.find(c => c.id === m.id) ? `<div style="font-size:10px;text-align:center;color:var(--brand);font-weight:700">×${posCart.find(c => c.id === m.id).qty}</div>` : ''}
     </div>`).join('');
@@ -11263,14 +11213,14 @@ self.addEventListener('fetch',e=>{
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
             <div>
               <div style="font-weight:700;font-size:14px">${typeLabels[c.type] || c.type}</div>
-              <div style="font-size:12px;color:var(--muted)">${c.employee_name} · Order ${c.order_id?.slice(-8) || '—'} · ${c.canteen_name || ''}</div>
+              <div style="font-size:12px;color:var(--muted)">${esc(c.employee_name)} · Order ${c.order_id?.slice(-8) || '—'} · ${esc(c.canteen_name || '')}</div>
               <div style="font-size:11px;color:var(--muted)">${fmtDate(c.created_at)}</div>
             </div>
             <span class="badge ${statusBadge[c.status] || 'badge-done'}">${c.status}</span>
           </div>
-          <div style="font-size:13px;margin-bottom:8px;color:var(--dark);line-height:1.5">${c.description || ''}</div>
-          ${c.photo_url ? `<div style="margin-bottom:8px"><img src="${c.photo_url}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border)"></div>` : ''}
-          ${c.admin_note ? `<div style="background:var(--light2);border-radius:8px;padding:8px;font-size:12px;margin-bottom:8px"><strong>Admin:</strong> ${c.admin_note}</div>` : ''}
+          <div style="font-size:13px;margin-bottom:8px;color:var(--dark);line-height:1.5">${esc(c.description || '')}</div>
+          ${c.photo_url ? `<div style="margin-bottom:8px"><img src="${esc(c.photo_url)}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border)"></div>` : ''}
+          ${c.admin_note ? `<div style="background:var(--light2);border-radius:8px;padding:8px;font-size:12px;margin-bottom:8px"><strong>Admin:</strong> ${esc(c.admin_note)}</div>` : ''}
           ${c.status === 'open' ? `
             <div style="display:flex;gap:8px">
               <button class="btn btn-green btn-sm" style="flex:1" onclick="resolveComplaint(${c.id}, 'refund', ${c.refund_amount || 0})">💚 Refund ₹${c.refund_amount || '?'}</button>
@@ -11426,8 +11376,8 @@ self.addEventListener('fetch',e=>{
           <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--light2);border-radius:11px;margin-bottom:7px" id="dm-row-${m.id}">
             <span style="font-size:22px">${m.emoji || '🍽️'}</span>
             <div style="flex:1">
-              <div style="font-weight:700;font-size:13px">${m.name}</div>
-              <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${m.category || ''}</div>
+              <div style="font-weight:700;font-size:13px">${esc(m.name)}</div>
+              <div style="font-size:11px;color:var(--muted)">₹${m.price} · ${esc(m.category || '')}</div>
             </div>
             <div class="toggle ${isOn ? 'on' : ''}" onclick="toggleDailyItem('${m.id}', this)" data-item-id="${m.id}"></div>
           </div>`;
@@ -11847,6 +11797,27 @@ self.addEventListener('fetch',e=>{
       <p>For privacy queries, account deletion requests, or grievances, contact: <strong>info@slphospitality.com</strong></p>
     </div>`);
     }
+
+    // Capacitor Native Deep Link Listener for ICICI Callback
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        const App = (window.Capacitor?.Plugins?.App) || (window.capacitorApp?.App);
+        if (window._isCapacitor && App) {
+          App.addListener('appUrlOpen', async (data) => {
+            if (data.url && data.url.includes('?payment=')) {
+              const Browser = (window.Capacitor?.Plugins?.Browser) || (window.capacitorBrowser?.Browser);
+              if (Browser) {
+                try { await Browser.close(); } catch(e) {}
+              }
+              // Replace URL with the new queries and process
+              const qString = data.url.substring(data.url.indexOf('?'));
+              window.history.replaceState({}, '', window.location.pathname + qString);
+              if (typeof handlePaymentCallback === 'function') handlePaymentCallback();
+            }
+          });
+        }
+      }, 2000);
+    });
   </script>
 </body>
 

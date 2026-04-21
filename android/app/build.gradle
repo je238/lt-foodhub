@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
 
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace = "com.slphospitality.nexus"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +13,8 @@ android {
         applicationId "com.slphospitality.nexus"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 5
+        versionName "1.4"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +22,18 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            def storeFileProp = keystoreProps['storeFile'] ?: System.getenv('SLP_KEYSTORE_FILE') ?: '../../slp-nexus.keystore'
+            storeFile file(storeFileProp)
+            storePassword keystoreProps['storePassword'] ?: System.getenv('SLP_KEYSTORE_PASSWORD') ?: ''
+            keyAlias keystoreProps['keyAlias'] ?: System.getenv('SLP_KEY_ALIAS') ?: 'slp-nexus'
+            keyPassword keystoreProps['keyPassword'] ?: System.getenv('SLP_KEY_PASSWORD') ?: ''
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
@@ -52,3 +68,7 @@ try {
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+
+
+
+

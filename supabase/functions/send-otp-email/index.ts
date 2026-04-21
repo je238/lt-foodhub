@@ -1,10 +1,25 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Restricted origins — web app only. APK uses capacitor:// and ignores CORS.
+const ALLOWED_ORIGINS = new Set([
+  "https://lt-foodhub.vercel.app",
+  "http://localhost",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "capacitor://localhost",
+]);
+
+function corsFor(req: Request) {
+  const origin = req.headers.get("origin") || "";
+  const allow = ALLOWED_ORIGINS.has(origin) ? origin : "https://lt-foodhub.vercel.app";
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
 
 // FIX 1: Cryptographically secure OTP
 function generateSecureOTP(): string {
@@ -14,14 +29,15 @@ function generateSecureOTP(): string {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const cors = corsFor(req);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   try {
     const { email } = await req.json();
 
     if (!email || !email.includes("@")) {
       return new Response(JSON.stringify({ success: false, error: "Invalid email" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
+        headers: { ...cors, "Content-Type": "application/json" }, status: 400,
       });
     }
 
@@ -43,7 +59,7 @@ serve(async (req) => {
         success: false,
         error: "Too many OTP requests. Please wait 10 minutes before trying again."
       }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 429,
+        headers: { ...cors, "Content-Type": "application/json" }, status: 429,
       });
     }
 
@@ -51,7 +67,7 @@ serve(async (req) => {
     const { data: emp } = await sb.from("employees").select("id, name, email").eq("email", email).single();
     if (!emp) {
       return new Response(JSON.stringify({ success: false, error: "Email not registered. Please register first." }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -133,18 +149,18 @@ serve(async (req) => {
       const err = await emailRes.text();
       console.error("Resend error:", err);
       return new Response(JSON.stringify({ success: false, error: "Failed to send email. Try again." }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ success: true, maskedEmail }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
     });
 
   } catch (e) {
     console.error("Edge function error:", e);
     return new Response(JSON.stringify({ success: false, error: "An error occurred. Please try again." }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500,
+      headers: { ...cors, "Content-Type": "application/json" }, status: 500,
     });
   }
 });

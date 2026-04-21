@@ -4,3 +4,6 @@ android/app/build/
 .gradle/
 *.dex
 .env
+android/keystore.properties
+*.keystore
+*.jks
