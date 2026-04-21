@@ -2,7 +2,7 @@ export default function handler(req, res) {
     const { target } = req.query;
     if (!target) return res.status(400).send('Missing target');
     res.setHeader('Content-Type', 'text/html');
-    res.send(
+    res.send(`
         <html>
         <head>
             <title>Redirecting to Secure Payment...</title>
@@ -21,10 +21,10 @@ export default function handler(req, res) {
             </div>
             <script>
                 setTimeout(() => {
-                    window.location.href = "";
+                    window.location.href = "${target}";
                 }, 100);
             </script>
         </body>
         </html>
-    );
+    `);
 }
