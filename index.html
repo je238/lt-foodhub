@@ -6968,25 +6968,16 @@
             // ── WALLET TOP-UP ── (credit the wallet)
             toast(`₹${amount} top-up successful! Crediting wallet...`, 'success', '💰');
             try {
-              const { data: result, error: rpcErr } = await sb.rpc('admin_wallet_credit', {
-                p_employee_id: S.user.id, p_amount: amount,
+              const { data: result, error: rpcErr } = await sb.rpc('self_wallet_topup', {
+                p_employee_id: S.user.id, p_amount: amount, p_txn_ref: txn,
                 p_reason: `ICICI Online Top-up (Txn: ${txn}, ICICI Ref: ${iciciTxn})`
               });
               if (!rpcErr && result?.success) {
                 S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + amount);
               } else {
-                const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-                const newBal = (parseFloat(emp?.wallet_balance) || 0) + amount;
-                await sb.from('employees').update({ wallet_balance: newBal }).eq('id', S.user.id);
-                S.user.wallet_balance = newBal;
+                console.error('Wallet topup RPC failed:', rpcErr);
+                toast('Payment received but wallet credit failed. Contact admin.', 'error', '⚠️');
               }
-              // Always log the top-up transaction
-              try {
-                await sb.from('wallet_transactions').insert({
-                  employee_id: S.user.id, amount, type: 'credit',
-                  description: `ICICI Online Top-up (Txn: ${txn}, ICICI Ref: ${iciciTxn})`, reference_id: txn
-                });
-              } catch (e) { console.log('Txn log skipped (may be duplicate):', e); }
               setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
               setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
               // Add to local transaction history so it shows immediately
@@ -7038,19 +7029,17 @@
           toast(`Found successful payment of ₹${paidAmount}! Crediting wallet...`, 'info', '🔍');
 
           // Credit wallet
-          const { data: result, error: rpcErr } = await sb.rpc('admin_wallet_credit', {
+          const { data: result, error: rpcErr } = await sb.rpc('self_wallet_topup', {
             p_employee_id: S.user.id,
-            p_amount: paidAmount,
+            p_amount: paidAmount, p_txn_ref: merchantTxnNo,
             p_reason: `ICICI Online Top-up (Txn: ${merchantTxnNo}, Auto-verified)`
           });
 
           if (!rpcErr && result?.success) {
             S.user.wallet_balance = parseFloat(result.new_balance) || (S.user.wallet_balance + paidAmount);
           } else {
-            const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
-            const newBal = (parseFloat(emp?.wallet_balance) || 0) + paidAmount;
-            await sb.from('employees').update({ wallet_balance: newBal }).eq('id', S.user.id);
-            S.user.wallet_balance = newBal;
+            console.error('Wallet topup RPC failed:', rpcErr);
+            toast('Payment received but wallet credit failed. Contact admin.', 'error', '⚠️');
           }
 
           setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
