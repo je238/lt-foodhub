@@ -17,6 +17,7 @@ const SU = Deno.env.get("SUPABASE_URL");
 const SK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const WEB_URL = "https://lt-foodhub.vercel.app";
 const APP_SCHEME = "slpnexus";
+const ANDROID_PACKAGE = "com.slphospitality.nexus";
 
 function assertEnv() {
   const missing: string[] = [];
@@ -153,13 +154,16 @@ serve(async (req) => {
 
       const status = isSuccess ? "success" : "failed";
       const params = "payment=" + status + "&txnNo=" + encodeURIComponent(txn) + "&amt=" + amt;
+      // Use intent:// with an explicit package + browser_fallback_url so
+      // Chrome Custom Tabs hands off to the app via Android's intent system
+      // (the naive slpnexus:// scheme is silently swallowed by Custom Tabs).
+      const intentUrl = `intent://payment?${params}#Intent;scheme=${APP_SCHEME};package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(WEB_URL + "?" + params)};end`;
+      const webUrl = WEB_URL + "?" + params;
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment ${status}</title>
 <script>
-var appUrl="${APP_SCHEME}://payment?${params}";
-var webUrl="${WEB_URL}?${params}";
-window.location.href=appUrl;
-setTimeout(function(){window.location.href=webUrl;},2000);
-</script></head><body><p>Redirecting...</p></body></html>`;
+window.location.href=${JSON.stringify(intentUrl)};
+setTimeout(function(){window.location.href=${JSON.stringify(webUrl)};},3000);
+</script></head><body><p>Redirecting back to app...</p></body></html>`;
       return new Response(html, { status: 200, headers: { "Content-Type": "text/html" } });
     }
 
@@ -271,12 +275,12 @@ setTimeout(function(){window.location.href=webUrl;},2000);
     // ══════════════════════════════════════════════════
     if (req.method === "GET") {
       const params = "payment=cancelled";
+      const intentUrl = `intent://payment?${params}#Intent;scheme=${APP_SCHEME};package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(WEB_URL + "?" + params)};end`;
+      const webUrl = WEB_URL + "?" + params;
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment cancelled</title>
 <script>
-var appUrl="${APP_SCHEME}://payment?${params}";
-var webUrl="${WEB_URL}?${params}";
-window.location.href=appUrl;
-setTimeout(function(){window.location.href=webUrl;},2000);
+window.location.href=${JSON.stringify(intentUrl)};
+setTimeout(function(){window.location.href=${JSON.stringify(webUrl)};},3000);
 </script></head><body><p>Returning to app...</p></body></html>`;
       return new Response(html, { status: 200, headers: { "Content-Type": "text/html" } });
     }
