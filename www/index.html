@@ -64,6 +64,32 @@
         }, 100);
       }
     })();
+
+    // Opens ICICI payment URL. In APK: tries Custom Tab via Browser plugin,
+    // falls back to WebView navigation. Surfaces a diagnostic toast when the
+    // Browser plugin isn't registered so we can see *why* on-device.
+    window.openPaymentUrl = function (forwardUrl, fullUrl) {
+      try {
+        var Browser = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) || null;
+        var isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+        var inAPK = isNative || window._isCapacitor;
+        if (inAPK && Browser && typeof Browser.open === 'function') {
+          Browser.open({ url: forwardUrl, presentationStyle: 'fullscreen' }).catch(function (e) {
+            if (window.toast) window.toast('Browser.open failed: ' + (e && e.message || e), 'error');
+            window.location.href = fullUrl;
+          });
+          return;
+        }
+        if (inAPK && window.toast) {
+          var keys = Object.keys((window.Capacitor && window.Capacitor.Plugins) || {}).join(',') || '(none)';
+          window.toast('Browser plugin missing — plugins: ' + keys, 'error');
+        }
+        window.location.href = fullUrl;
+      } catch (e) {
+        if (window.toast) window.toast('openPaymentUrl error: ' + e.message, 'error');
+        window.location.href = fullUrl;
+      }
+    };
   </script>
   <script>
     // Defer Sentry — load 3s after boot (non-blocking for APK)
@@ -6507,12 +6533,7 @@
             setTimeout(() => {
               const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
               const forwardUrl = 'https://lt-foodhub.vercel.app/api/icici-forward?target=' + encodeURIComponent(fullUrl);
-              const Browser = (window.Capacitor?.Plugins?.Browser) || (window.capacitorBrowser?.Browser);
-              if (window._isCapacitor && Browser) {
-                Browser.open({ url: forwardUrl });
-              } else {
-                window.location.href = fullUrl;
-              }
+              openPaymentUrl(forwardUrl, fullUrl);
             }, 500);
           } else {
             toast('Payment failed: ' + (data.error || 'Unknown'), 'error', '❌');
