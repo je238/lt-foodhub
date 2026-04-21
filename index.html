@@ -6411,9 +6411,13 @@
     // ═════════════════════════════════════
     // PLACE ORDER
     // ═════════════════════════════════════
+    let _orderPlacing = false;
     async function placeOrder() {
-      if (S.cart.length === 0) { toast('Your cart is empty!', 'error', '🛒'); return; }
-      if (!sb) { toast('Database not connected!', 'error', '❌'); return; }
+      if (_orderPlacing) { toast('Order already in progress...', 'info', '⏳'); return; }
+      _orderPlacing = true;
+      setTimeout(() => { _orderPlacing = false; }, 5000); // unlock after 5s
+      if (S.cart.length === 0) { _orderPlacing = false; toast('Your cart is empty!', 'error', '🛒'); return; }
+      if (!sb) { _orderPlacing = false; toast('Database not connected!', 'error', '❌'); return; }
 
       // Fetch fresh canteen status from DB before placing order
       try {
