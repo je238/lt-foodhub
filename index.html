@@ -6457,7 +6457,7 @@
             amount: estimatedFees.grandTotal, userId: S.user.id, ts: Date.now()
           }));
 
-          const res = await fetch(SURL + '/functions/v1/icici-payment', {
+            const res = await fetch(SURL + '/functions/v1/icici-payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SKEY },
             body: JSON.stringify({
@@ -6466,7 +6466,8 @@
               employeeId: S.user.id,
               employeeName: S.user.name || 'Employee',
               employeeEmail: S.user.email || 'noreply@slpnexus.com',
-              employeePhone: S.user.phone || '9999999999'
+              employeePhone: S.user.phone || '9999999999',
+              isApk: window._isCapacitor
             })
           });
           const data = await res.json();
@@ -7140,7 +7141,8 @@
             employeeId: S.user.id,
             employeeName: S.user.name || 'Employee',
             employeeEmail: S.user.email || 'noreply@slpnexus.com',
-            employeePhone: S.user.phone || '9999999999'
+            employeePhone: S.user.phone || '9999999999',
+            isApk: window._isCapacitor
           })
         });
 
@@ -11823,6 +11825,27 @@ self.addEventListener('fetch',e=>{
       <p>For privacy queries, account deletion requests, or grievances, contact: <strong>info@slphospitality.com</strong></p>
     </div>`);
     }
+
+    // Capacitor Native Deep Link Listener for ICICI Callback
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        const App = (window.Capacitor?.Plugins?.App) || (window.capacitorApp?.App);
+        if (window._isCapacitor && App) {
+          App.addListener('appUrlOpen', async (data) => {
+            if (data.url && data.url.includes('?payment=')) {
+              const Browser = (window.Capacitor?.Plugins?.Browser) || (window.capacitorBrowser?.Browser);
+              if (Browser) {
+                try { await Browser.close(); } catch(e) {}
+              }
+              // Replace URL with the new queries and process
+              const qString = data.url.substring(data.url.indexOf('?'));
+              window.history.replaceState({}, '', window.location.pathname + qString);
+              if (typeof handlePaymentCallback === 'function') handlePaymentCallback();
+            }
+          });
+        }
+      }, 2000);
+    });
   </script>
 </body>
 

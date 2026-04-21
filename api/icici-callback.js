@@ -16,7 +16,10 @@ export default function handler(req, res) {
     const message = data.message || data.errorMessage || data.Message || responseCode;
 
     // Redirect browser back to the app with result as query params
-    const redirectUrl = `https://lt-foodhub.vercel.app/?payment=${status}&txn=${txnNo}&iciciTxn=${iciciTxnNo}&amount=${amount}&code=${responseCode}&msg=${encodeURIComponent(message)}`;
+    const { source } = req.query || {};
+    const isApk = source === 'apk';
+    const baseUrl = isApk ? 'slpnexus://payment' : 'https://lt-foodhub.vercel.app/';
+    const redirectUrl = `${baseUrl}?payment=${status}&txn=${txnNo}&iciciTxn=${iciciTxnNo}&amount=${amount}&code=${responseCode}&msg=${encodeURIComponent(message)}`;
     
     res.redirect(302, redirectUrl);
 }
