@@ -6476,7 +6476,12 @@
             }));
             toast('Redirecting to ICICI payment page...', 'info', '🏦');
             setTimeout(() => {
-              window.location.href = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
+              const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
+              if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
+                window.Capacitor.Plugins.Browser.open({ url: fullUrl });
+              } else {
+                window.location.href = fullUrl;
+              }
             }, 500);
           } else {
             toast('Payment failed: ' + (data.error || 'Unknown'), 'error', '❌');
@@ -7159,7 +7164,11 @@
           // Redirect to ICICI payment page with tranCtx token
           setTimeout(() => {
             const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
-            window.location.href = fullUrl;
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
+              window.Capacitor.Plugins.Browser.open({ url: fullUrl });
+            } else {
+              window.location.href = fullUrl;
+            }
           }, 500);
         } else {
           toast('Payment initiation failed: ' + (data.error || 'Unknown error'), 'error', '❌');
