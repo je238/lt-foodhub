@@ -37,7 +37,34 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/@capacitor/browser@8.0.3/dist/plugin.js"></script>
+  <script>
+    // Register Capacitor native plugins so the APK bridge exposes them at
+    // Capacitor.Plugins.*. Without this, loading index.html remotely via
+    // server.url means Browser/App plugins never get their JS-side proxies.
+    (function () {
+      function regAll() {
+        try {
+          if (!window.Capacitor || !window.Capacitor.registerPlugin) return false;
+          window.Capacitor.Plugins = window.Capacitor.Plugins || {};
+          if (!window.Capacitor.Plugins.Browser) {
+            window.Capacitor.Plugins.Browser = window.Capacitor.registerPlugin('Browser');
+          }
+          if (!window.Capacitor.Plugins.App) {
+            window.Capacitor.Plugins.App = window.Capacitor.registerPlugin('App');
+          }
+          return true;
+        } catch (e) { return false; }
+      }
+      if (!regAll()) {
+        // Capacitor bridge may inject slightly after this script — retry a few times.
+        var tries = 0;
+        var t = setInterval(function () {
+          tries++;
+          if (regAll() || tries > 20) clearInterval(t);
+        }, 100);
+      }
+    })();
+  </script>
   <script>
     // Defer Sentry — load 3s after boot (non-blocking for APK)
     setTimeout(function () {

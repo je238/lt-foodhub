@@ -213,7 +213,8 @@ setTimeout(function(){window.location.href=webUrl;},2000);
       if (d.responseCode === "R1000" && d.redirectURI && d.tranCtx) {
         return new Response(JSON.stringify({
           success: true,
-          redirectUrl: d.redirectURI + "?tranCtx=" + d.tranCtx,
+          redirectUrl: d.redirectURI,
+          tranCtx: d.tranCtx,
           merchantTxnNo: txn
         }), { headers: { ...CORS, "Content-Type": "application/json" } });
       }
