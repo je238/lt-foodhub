@@ -64,6 +64,16 @@ serve(async (req) => {
         // Leave bp empty on parse error — treated as unknown action below.
       }
     }
+    // ICICI's in-page "Back" link is a GET with query params — merge those in
+    // so the callback branch can handle cancel/failure the same way as POST.
+    try {
+      const u = new URL(req.url);
+      if (u.searchParams.size) {
+        for (const [k, v] of u.searchParams) {
+          if (bp[k] === undefined) bp[k] = v;
+        }
+      }
+    } catch (_) {}
 
     // ══════════════════════════════════════════════════
     // ICICI CALLBACK — server-to-server from ICICI
@@ -243,6 +253,23 @@ setTimeout(function(){window.location.href=webUrl;},2000);
         success: true,
         balance: e2 ? parseFloat(e2.wallet_balance) : 0
       }), { headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
+    // ══════════════════════════════════════════════════
+    // CANCEL FALLBACK — ICICI's in-page "Back ←" link lands here as a
+    // bare GET (no merchantTxnNo, no action). Redirect the user back to
+    // the app via deep link instead of showing a JSON error page.
+    // ══════════════════════════════════════════════════
+    if (req.method === "GET") {
+      const params = "payment=cancelled";
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment cancelled</title>
+<script>
+var appUrl="${APP_SCHEME}://payment?${params}";
+var webUrl="${WEB_URL}?${params}";
+window.location.href=appUrl;
+setTimeout(function(){window.location.href=webUrl;},2000);
+</script></head><body><p>Returning to app...</p></body></html>`;
+      return new Response(html, { status: 200, headers: { "Content-Type": "text/html" } });
     }
 
     return new Response(JSON.stringify({ success: false, error: "Unknown" }),

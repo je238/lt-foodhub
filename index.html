@@ -6938,6 +6938,19 @@
         toast(`Payment failed: ${msg || code || 'Cancelled'}`, 'error', '❌');
         localStorage.removeItem('fh-pending-topup');
         localStorage.removeItem('fh-pending-order');
+        // Reset any stuck Pay-Now buttons left spinning when user tapped "Back ←" at ICICI
+        const payBtn = document.getElementById('pay-btn');
+        if (payBtn) {
+          payBtn.classList.remove('btn-loading');
+          payBtn.disabled = false;
+          payBtn.innerHTML = '<span>Place Order & Pay →</span>';
+        }
+        const topupBtn = document.getElementById('topup-pay-btn');
+        if (topupBtn) {
+          topupBtn.classList.remove('btn-loading');
+          topupBtn.disabled = false;
+          topupBtn.innerHTML = 'Pay →';
+        }
         return;
       }
 
