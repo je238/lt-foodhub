@@ -41,10 +41,11 @@ const ORDER_SLOT = "12:00-12:30";
 // ────────────────────────────────────────────────────────
 
 function authHeaders(role = "anon") {
-  const key = role === "service" ? SERVICE_ROLE_KEY : ANON_KEY;
-  if (role === "service" && !SERVICE_ROLE_KEY) {
-    throw new Error("SERVICE_ROLE_KEY is required for seed/cleanup");
-  }
+  // Anon can INSERT into employees (employees_insert has no WITH CHECK),
+  // so seeding works with just ANON_KEY. Cleanup needs service_role since
+  // there's no permissive DELETE policy — fall back gracefully when it's
+  // absent (script tells the user to clean up via SQL editor).
+  const key = role === "service" && SERVICE_ROLE_KEY ? SERVICE_ROLE_KEY : ANON_KEY;
   return {
     apikey: key,
     Authorization: "Bearer " + key,
@@ -78,7 +79,6 @@ function percentile(sorted, p) {
 // ────────────────────────────────────────────────────────
 
 async function seed(count) {
-  if (!SERVICE_ROLE_KEY) throw new Error("SERVICE_ROLE_KEY required");
   console.log(`Seeding ${count} test employees (${PREFIX}001..${PREFIX}${String(count).padStart(3, "0")})...`);
 
   const rows = [];
@@ -95,22 +95,31 @@ async function seed(count) {
     });
   }
 
-  // Upsert in batches of 100 so Supabase doesn't timeout.
+  // Plain INSERT in batches. We do NOT use merge-duplicates because
+  // that triggers an UPDATE on conflict, and employees has a blanket
+  // "Block direct updates" policy (USING false) that rejects all UPDATEs
+  // from anon. Clean up beforehand with `cleanup` if you're re-running.
   const batchSize = 100;
+  let seeded = 0;
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
-    const res = await fetch(`${REST}/employees?on_conflict=id`, {
+    const res = await fetch(`${REST}/employees`, {
       method: "POST",
-      headers: { ...authHeaders("service"), Prefer: "resolution=merge-duplicates" },
+      headers: authHeaders("service"),
       body: JSON.stringify(batch)
     });
     if (!res.ok) {
-      console.error(`Seed batch ${i}-${i + batchSize} failed:`, res.status, await res.text());
-      process.exit(1);
+      const txt = await res.text();
+      console.error(`\nSeed batch ${i}-${i + batchSize} failed:`, res.status, txt);
+      // If it's a duplicate conflict, the row probably already exists from
+      // a prior run — carry on and the test will still hit it.
+      if (!txt.includes("duplicate") && !txt.includes("unique")) process.exit(1);
+    } else {
+      seeded += batch.length;
     }
     process.stdout.write(`  seeded ${Math.min(i + batchSize, rows.length)}/${rows.length}\r`);
   }
-  console.log(`\n✓ ${count} test employees ready (balance ₹${SEED_BALANCE} each)`);
+  console.log(`\n✓ ${seeded}/${count} test employees ready (balance ₹${SEED_BALANCE} each)`);
 }
 
 // ────────────────────────────────────────────────────────
