@@ -18,9 +18,13 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 --    without ever exposing password_hash to the client.
 --    Handles both bcrypt-style ($2*) and legacy plaintext values,
 --    auto-upgrading plaintext entries to bcrypt on first login.
+--    DROP before CREATE: existing function has a different return
+--    type so CREATE OR REPLACE won't work.
 -- ============================================================
 
-CREATE OR REPLACE FUNCTION public.verify_employee_login(
+DROP FUNCTION IF EXISTS public.verify_employee_login(text, text);
+
+CREATE FUNCTION public.verify_employee_login(
   p_email text,
   p_password text
 ) RETURNS jsonb
@@ -97,7 +101,9 @@ GRANT EXECUTE ON FUNCTION public.verify_employee_login(text, text) TO anon, auth
 --    returning the hash.
 -- ============================================================
 
-CREATE OR REPLACE FUNCTION public.employee_account_status(
+DROP FUNCTION IF EXISTS public.employee_account_status(text);
+
+CREATE FUNCTION public.employee_account_status(
   p_email text
 ) RETURNS jsonb
 LANGUAGE plpgsql
