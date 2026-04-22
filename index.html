@@ -6961,25 +6961,29 @@
       const urlAmt = parseFloat(params.get('amt') || params.get('amount') || '0');
       window.history.replaceState({}, '', window.location.pathname);
 
+      // Reset stuck Pay-Now / Top-up buttons on ANY return from ICICI
+      // (success, failure, cancel — we left them spinning when we opened
+      // the Custom Tab; if we don't reset here, the next order's Pay
+      // button appears stuck loading from the previous transaction).
+      const payBtn = document.getElementById('pay-btn');
+      if (payBtn) {
+        payBtn.classList.remove('btn-loading');
+        payBtn.disabled = false;
+        payBtn.innerHTML = '<span>Place Order & Pay →</span>';
+      }
+      const topupBtn = document.getElementById('topup-pay-btn');
+      if (topupBtn) {
+        topupBtn.classList.remove('btn-loading');
+        topupBtn.disabled = false;
+        topupBtn.innerHTML = 'Pay →';
+      }
+
       if (paymentStatus !== 'success') {
         const msg = decodeURIComponent(params.get('msg') || '');
         const code = params.get('code') || '';
         toast(`Payment failed: ${msg || code || 'Cancelled'}`, 'error', '❌');
         localStorage.removeItem('fh-pending-topup');
         localStorage.removeItem('fh-pending-order');
-        // Reset any stuck Pay-Now buttons left spinning when user tapped "Back ←" at ICICI
-        const payBtn = document.getElementById('pay-btn');
-        if (payBtn) {
-          payBtn.classList.remove('btn-loading');
-          payBtn.disabled = false;
-          payBtn.innerHTML = '<span>Place Order & Pay →</span>';
-        }
-        const topupBtn = document.getElementById('topup-pay-btn');
-        if (topupBtn) {
-          topupBtn.classList.remove('btn-loading');
-          topupBtn.disabled = false;
-          topupBtn.innerHTML = 'Pay →';
-        }
         return;
       }
 
