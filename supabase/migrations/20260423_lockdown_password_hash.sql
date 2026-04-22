@@ -73,19 +73,27 @@ BEGIN
   RETURN jsonb_build_object(
     'success', true,
     'employee', jsonb_build_object(
-      'id',             emp.id,
-      'employee_id',    emp.employee_id,
-      'name',           emp.name,
-      'email',          emp.email,
-      'phone',          emp.phone,
-      'department',     emp.department,
-      'wallet_balance', emp.wallet_balance,
-      'canteen_id',     emp.canteen_id,
-      'is_active',      emp.is_active,
-      'role',           emp.role,
-      'initials',       emp.initials,
-      'created_at',     emp.created_at,
-      'updated_at',     emp.updated_at
+      'id',               emp.id,
+      'name',             emp.name,
+      'email',            emp.email,
+      'phone',            emp.phone,
+      'department',       emp.department,
+      'campus',           emp.campus,
+      'designation',      emp.designation,
+      'joining_date',     emp.joining_date,
+      'wallet_balance',   emp.wallet_balance,
+      'subsidy_per_meal', emp.subsidy_per_meal,
+      'monthly_limit',    emp.monthly_limit,
+      'meal_pass_active', emp.meal_pass_active,
+      'meal_pass_used',   emp.meal_pass_used,
+      'meal_pass_limit',  emp.meal_pass_limit,
+      'points_balance',   emp.points_balance,
+      'is_active',        emp.is_active,
+      'role',             emp.role,
+      'initials',         emp.initials,
+      'last_login',       emp.last_login,
+      'created_at',       emp.created_at,
+      'updated_at',       emp.updated_at
     )
   );
 END
@@ -136,25 +144,31 @@ REVOKE ALL ON FUNCTION public.employee_account_status(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.employee_account_status(text) TO anon, authenticated;
 
 -- ============================================================
--- 3. Column-level lockdown on employees.password_hash
---    Anon/authenticated lose read access to the hash column.
---    All other columns remain readable (existing SELECT policies
---    still apply at the row level).
+-- 3. Column-level lockdown on employees sensitive columns.
+--    password_hash  — full credential leak via anon.
+--    temp_otp       — OTPs for email verification; if readable,
+--                     an attacker observes the OTP after triggering
+--                     it for any email and bypasses verification.
+--    otp_created_at — paired metadata; hide to keep the OTP feature
+--                     fully opaque to anon clients.
 -- ============================================================
 
-REVOKE SELECT (password_hash) ON public.employees FROM PUBLIC;
-REVOKE SELECT (password_hash) ON public.employees FROM anon;
-REVOKE SELECT (password_hash) ON public.employees FROM authenticated;
+REVOKE SELECT (password_hash, temp_otp, otp_created_at) ON public.employees FROM PUBLIC;
+REVOKE SELECT (password_hash, temp_otp, otp_created_at) ON public.employees FROM anon;
+REVOKE SELECT (password_hash, temp_otp, otp_created_at) ON public.employees FROM authenticated;
 
--- service_role (edge functions) must keep full access
-GRANT SELECT (password_hash), UPDATE (password_hash) ON public.employees TO service_role;
+-- service_role (edge functions) keeps full access for OTP send / verify.
+GRANT SELECT (password_hash, temp_otp, otp_created_at) ON public.employees TO service_role;
+GRANT UPDATE (password_hash, temp_otp, otp_created_at) ON public.employees TO service_role;
 
--- Anon/authenticated explicitly get every OTHER column so that
--- .select('id,name,email,...') keeps working. We list them so a
--- future ALTER TABLE ADD COLUMN doesn't silently re-expose data.
+-- Anon/authenticated explicitly get every OTHER column so
+-- .select('id,name,email,...') keeps working. Listed explicitly so
+-- a future ALTER TABLE ADD COLUMN doesn't silently re-expose data.
 GRANT SELECT (
-  id, employee_id, name, email, phone, department,
-  wallet_balance, canteen_id, is_active, role, initials,
+  id, name, email, phone, department, campus, designation,
+  joining_date, wallet_balance, subsidy_per_meal, monthly_limit,
+  meal_pass_active, meal_pass_used, meal_pass_limit,
+  points_balance, is_active, role, initials, last_login,
   created_at, updated_at
 ) ON public.employees TO anon, authenticated;
 

@@ -5507,7 +5507,7 @@
           err.textContent = pwRes.error || 'Could not save password.';
           btn.classList.remove('btn-loading'); btn.disabled = false; return;
         }
-        const { data: freshEmp } = await sb.from('employees').select('id,employee_id,name,email,phone,department,wallet_balance,canteen_id,is_active,role,initials,created_at,updated_at').eq('id', _pendingEmpData.id).single();
+        const { data: freshEmp } = await sb.from('employees').select('id,name,email,phone,department,campus,designation,joining_date,wallet_balance,subsidy_per_meal,monthly_limit,meal_pass_active,meal_pass_used,meal_pass_limit,points_balance,is_active,role,initials,last_login,created_at,updated_at').eq('id', _pendingEmpData.id).single();
         const empToLogin = freshEmp || _pendingEmpData;
         toast('Password saved! Logging you in... 🔐', 'success', '✅');
         await _finishEmpLogin(empToLogin);
@@ -5659,7 +5659,7 @@
           // ── Employee login (ID-based, for backward compat) ──
           let emp = null;
           try {
-            if (sb) { const { data } = await sb.from('employees').select('id,employee_id,name,email,phone,department,wallet_balance,canteen_id,is_active,role,initials,created_at,updated_at').eq('id', id).single(); emp = data; }
+            if (sb) { const { data } = await sb.from('employees').select('id,name,email,phone,department,campus,designation,joining_date,wallet_balance,subsidy_per_meal,monthly_limit,meal_pass_active,meal_pass_used,meal_pass_limit,points_balance,is_active,role,initials,last_login,created_at,updated_at').eq('id', id).single(); emp = data; }
           } catch (e) { }
           if (!emp) { err.textContent = 'Employee not found. Please register first.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
           S.user = emp;
@@ -10904,7 +10904,7 @@ self.addEventListener('fetch',e=>{
         // Re-verify user from DB (don't trust localStorage data)
         if (sess.role === 'employee' && sb) {
           try {
-            const { data: emp } = await sb.from('employees').select('id,employee_id,name,email,phone,department,wallet_balance,canteen_id,is_active,role,initials,created_at,updated_at').eq('id', sess.userId).single();
+            const { data: emp } = await sb.from('employees').select('id,name,email,phone,department,campus,designation,joining_date,wallet_balance,subsidy_per_meal,monthly_limit,meal_pass_active,meal_pass_used,meal_pass_limit,points_balance,is_active,role,initials,last_login,created_at,updated_at').eq('id', sess.userId).single();
             if (emp) {
               S.user = emp; S.role = 'employee';
               // Force refresh menu from DB (loadData may have used cache/fallback)
