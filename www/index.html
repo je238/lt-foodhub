@@ -5320,6 +5320,7 @@
             // Admin
             S.role = 'admin';
             S.user = { id: authResult.id || staffId, name: authResult.name, initials: 'CA' };
+            S._adminToken = authResult.token || null;
             try {
               const todayStr = new Date().toISOString().slice(0, 10);
               const [ordRes, canRes, menuRes] = await Promise.all([
@@ -5646,6 +5647,7 @@
             // Admin
             S.role = 'admin';
             S.user = { id: authResult.id, name: authResult.name, initials: 'CA' };
+            S._adminToken = authResult.token || null;
             try {
               const todayStr = new Date().toISOString().slice(0, 10);
               const { data } = await sb.from('orders').select('*, order_items(*)').gte('created_at', todayStr + 'T00:00:00').order('created_at', { ascending: false }).limit(100);
@@ -8996,12 +8998,24 @@
 
     async function toggleSetting(key, el) {
       if (!S._appSettings) S._appSettings = { accept_orders: true, preorder: true, guest_ordering: false, email_summaries: true, low_stock_alerts: true, daily_report: true, traffic_alerts: true };
+      if (!S._adminToken) { toast('Admin session expired — please log in again.', 'error', '🔒'); return; }
       el.classList.toggle('on');
       S._appSettings[key] = el.classList.contains('on');
-      // Save to Supabase
+      // Save via admin_set_setting RPC (direct UPDATE on app_settings is
+      // now blocked for anon — only admins with a live session token pass).
       try {
         if (sb) {
-          await sb.from('app_settings').upsert({ key, value: S._appSettings[key] ? 'true' : 'false' }, { onConflict: 'key' });
+          const { data: res, error } = await sb.rpc('admin_set_setting', {
+            p_token: S._adminToken,
+            p_key: key,
+            p_value: S._appSettings[key] ? 'true' : 'false'
+          });
+          if (error || !res?.success) {
+            toast(res?.error || error?.message || 'Setting save failed', 'error', '⚠️');
+            el.classList.toggle('on');
+            S._appSettings[key] = el.classList.contains('on');
+            return;
+          }
         }
       } catch (e) { }
       // Apply setting immediately
@@ -9024,11 +9038,12 @@
       S.subsidy = val;
       S.user && (S.user.subsidy_per_meal = val);
       S.menu.forEach(m => { if (m.subsidy_amount > 0) m.subsidy_amount = Math.min(m.price, val); });
-      // Persist to Supabase app_settings table
+      // Persist via admin_set_setting RPC (requires active admin session token).
+      if (!S._adminToken) { toast('Admin session expired — please log in again.', 'error', '🔒'); return; }
       try {
         if (sb) {
-          await sb.from('app_settings').upsert([{ key: 'subsidy_per_meal', value: String(val), updated_at: new Date().toISOString() }], { onConflict: 'key' });
-          await sb.from('app_settings').upsert([{ key: 'subsidy_updated_by', value: S.user?.id || 'admin', updated_at: new Date().toISOString() }], { onConflict: 'key' });
+          await sb.rpc('admin_set_setting', { p_token: S._adminToken, p_key: 'subsidy_per_meal',    p_value: String(val) });
+          await sb.rpc('admin_set_setting', { p_token: S._adminToken, p_key: 'subsidy_updated_by',  p_value: S.user?.id || 'admin' });
         }
       } catch (e) { }
       toast(`Subsidy updated to ₹${val}/meal`, 'success', '💰');
