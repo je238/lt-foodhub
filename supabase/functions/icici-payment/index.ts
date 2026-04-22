@@ -111,12 +111,13 @@ serve(async (req) => {
         console.log("ICICI hash mismatch", { txn, receivedHash, expectedHash, respHashText });
       }
 
-      // Credit on gateway success + non-zero amount + identified employee.
-      // Idempotency (description ILIKE check + reference_id unique index) is
-      // the real safety net against duplicates; we don't also gate on hash
-      // because ICICI response-hash format has changed between integrations
-      // and we'd rather credit a legit payment than block on a formula drift.
-      const shouldCredit = isSuccess && emp && amt > 0;
+      // Credit only when this payment was initiated as a wallet TOPUP.
+      // Order payments echo addlParam2="ORDER" and must NOT credit the
+      // wallet — otherwise the user is charged at ICICI for the order
+      // AND gets that amount added to their wallet (double-payment).
+      const purposeTag = (bp.addlParam2 || "").toUpperCase();
+      const isTopup = purposeTag === "TOPUP";
+      const shouldCredit = isSuccess && emp && amt > 0 && isTopup;
 
       if (shouldCredit) {
         try {
@@ -172,7 +173,7 @@ setTimeout(function(){window.location.href=${JSON.stringify(webUrl)};},3000);
     // ══════════════════════════════════════════════════
     const action = bp.action;
     if (action === "initiate") {
-      const { amount, employeeId, employeeName, employeeEmail, employeePhone } = bp;
+      const { amount, employeeId, employeeName, employeeEmail, employeePhone, purpose } = bp;
       if (!amount || !employeeId) {
         return new Response(JSON.stringify({ success: false, error: "Missing params" }),
           { headers: { ...CORS, "Content-Type": "application/json" } });
@@ -183,6 +184,12 @@ setTimeout(function(){window.location.href=${JSON.stringify(webUrl)};},3000);
           { headers: { ...CORS, "Content-Type": "application/json" } });
       }
 
+      // addlParam2 round-trips through ICICI back to the callback, so use
+      // it to tag the payment purpose. ORDER payments must NOT auto-credit
+      // the wallet; only TOPUP payments should. Default to TOPUP for
+      // backward compat with any older client bundle in the wild.
+      const tag = (purpose && String(purpose).toLowerCase() === "order") ? "ORDER" : "TOPUP";
+
       const txn = "SLP" + Date.now() + Math.floor(Math.random() * 1000);
       const td = fd();
       const amt = amtNum.toFixed(2);
@@ -191,7 +198,7 @@ setTimeout(function(){window.location.href=${JSON.stringify(webUrl)};},3000);
       const ph = employeePhone || "9999999999";
       const nm = employeeName || "Employee";
 
-      const ht = employeeId + "TOPUP" + AID + amt + "356" + em + ph + nm + MID + txn + "0" + cb + "SALE" + td;
+      const ht = employeeId + tag + AID + amt + "356" + em + ph + nm + MID + txn + "0" + cb + "SALE" + td;
       const sh = await hm(ht, SECK!);
 
       const pl = {
@@ -208,7 +215,7 @@ setTimeout(function(){window.location.href=${JSON.stringify(webUrl)};},3000);
         customerMobileNo: ph,
         customerName: nm,
         addlParam1: employeeId,
-        addlParam2: "TOPUP",
+        addlParam2: tag,
         secureHash: sh
       };
 

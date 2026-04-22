@@ -5338,7 +5338,6 @@
         } else if (isEmail) {
           // ── Employee login via email + password ──
           loginRole = 'employee';
-          // Domain whitelist check
           const ALLOWED_DOMAINS_LOGIN = ['larsentoubro.com', 'lntecc.com', 'lntinfotech.com', 'ltimindtree.com', 'ltts.com', 'lntsnl.com', 'lthe.in'];
           const WHITELISTED_EMAILS_LOGIN = ['tpalak370@gmail.com', 'diptisingh7869@gmail.com', 'psinghmehta079@gmail.com'];
           const loginDomain = input.split('@')[1]?.toLowerCase();
@@ -5346,35 +5345,37 @@
             err.textContent = 'Only L&T employees can login. Use your @larsentoubro.com email.';
             btn.classList.remove('btn-loading'); btn.disabled = false; return;
           }
-          const { data: emp, error: empErr } = await sb.from('employees').select('*').eq('email', input).single();
-          if (empErr || !emp) { err.textContent = 'Email not found. Please register first.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-          if (!emp.password_hash) { err.textContent = 'No password set. Click "Register here" to set your password.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-
-          // Try bcrypt RPC first, fall back to plain text
           const { data: authRes, error: authErr } = await sb.rpc('verify_employee_login', { p_email: input, p_password: pw });
-          if (!authErr && authRes?.success) {
-            await _finishEmpLogin(authRes.employee || emp);
-          } else if (false) {
-            // Plain text fallback REMOVED for security — only bcrypt RPC login allowed
+          if (authErr) { err.textContent = 'Login error. Try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+          if (authRes?.success && authRes.employee) {
+            await _finishEmpLogin(authRes.employee);
           } else {
-            err.textContent = 'Incorrect password. Try again.';
-            btn.classList.remove('btn-loading'); btn.disabled = false;
-            return;
+            const reason = authRes?.reason;
+            if (reason === 'no_user')        err.textContent = 'Email not found. Please register first.';
+            else if (reason === 'no_password') err.textContent = 'No password set. Click "Register here" to set your password.';
+            else if (reason === 'inactive')   err.textContent = 'Account is disabled. Contact admin.';
+            else                              err.textContent = 'Incorrect password. Try again.';
+            btn.classList.remove('btn-loading'); btn.disabled = false; return;
           }
 
         } else {
           // Unknown input format — try as employee ID (backward compat)
           loginRole = 'employee';
-          const { data: emp } = await sb.from('employees').select('*').eq('id', input).maybeSingle();
-          if (emp) {
-            if (!emp.password_hash) { err.textContent = 'No password set. Register to set one.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-            const { data: authRes } = await sb.rpc('verify_employee_login', { p_email: emp.email, p_password: pw });
-            if ((!authRes?.success) && emp.password_hash !== pw) { err.textContent = 'Incorrect password.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-            await _finishEmpLogin(authRes?.employee || emp);
-          } else {
+          const { data: emp } = await sb.from('employees').select('id,email').eq('id', input).maybeSingle();
+          if (!emp) {
             err.textContent = 'ID not recognised. Use your email (employees) or staff ID (admin1, counter-c1 etc.)';
-            btn.classList.remove('btn-loading'); btn.disabled = false;
-            return;
+            btn.classList.remove('btn-loading'); btn.disabled = false; return;
+          }
+          const { data: authRes, error: authErr } = await sb.rpc('verify_employee_login', { p_email: emp.email, p_password: pw });
+          if (authErr) { err.textContent = 'Login error. Try again.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+          if (authRes?.success && authRes.employee) {
+            await _finishEmpLogin(authRes.employee);
+          } else {
+            const reason = authRes?.reason;
+            if (reason === 'no_password') err.textContent = 'No password set. Register to set one.';
+            else if (reason === 'inactive') err.textContent = 'Account is disabled. Contact admin.';
+            else err.textContent = 'Incorrect password.';
+            btn.classList.remove('btn-loading'); btn.disabled = false; return;
           }
         }
       } catch (e) {
@@ -5506,7 +5507,7 @@
           err.textContent = pwRes.error || 'Could not save password.';
           btn.classList.remove('btn-loading'); btn.disabled = false; return;
         }
-        const { data: freshEmp } = await sb.from('employees').select('*').eq('id', _pendingEmpData.id).single();
+        const { data: freshEmp } = await sb.from('employees').select('id,employee_id,name,email,phone,department,wallet_balance,canteen_id,is_active,role,initials,created_at,updated_at').eq('id', _pendingEmpData.id).single();
         const empToLogin = freshEmp || _pendingEmpData;
         toast('Password saved! Logging you in... 🔐', 'success', '✅');
         await _finishEmpLogin(empToLogin);
@@ -5546,10 +5547,10 @@
       btn.classList.add('btn-loading'); btn.disabled = true;
       try {
         if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-        const { data: existing } = await sb.from('employees').select('id,password_hash').eq('email', email).maybeSingle();
-        if (existing) {
-          if (existing.password_hash) { err.textContent = 'Account exists. Please login.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
-          _pendingEmpData = existing; toast('Account found! Sending OTP... 📧', 'success', '✅');
+        const { data: status } = await sb.rpc('employee_account_status', { p_email: email });
+        if (status?.exists) {
+          if (status.has_password) { err.textContent = 'Account exists. Please login.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+          _pendingEmpData = { id: status.id, email: status.email, name: status.name }; toast('Account found! Sending OTP... 📧', 'success', '✅');
           _otpEmail = email; await sendEmailOTP(); btn.classList.remove('btn-loading'); btn.disabled = false; return;
         }
         const { data: result, error: rpcErr } = await sb.rpc('register_employee', {
@@ -5658,7 +5659,7 @@
           // ── Employee login (ID-based, for backward compat) ──
           let emp = null;
           try {
-            if (sb) { const { data } = await sb.from('employees').select('*').eq('id', id).single(); emp = data; }
+            if (sb) { const { data } = await sb.from('employees').select('id,employee_id,name,email,phone,department,wallet_balance,canteen_id,is_active,role,initials,created_at,updated_at').eq('id', id).single(); emp = data; }
           } catch (e) { }
           if (!emp) { err.textContent = 'Employee not found. Please register first.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
           S.user = emp;
@@ -6547,6 +6548,7 @@
               employeeName: S.user.name || 'Employee',
               employeeEmail: S.user.email || 'noreply@slpnexus.com',
               employeePhone: S.user.phone || '9999999999',
+              purpose: 'order',
               isApk: window._isCapacitor
             })
           });
@@ -7223,6 +7225,7 @@
             employeeName: S.user.name || 'Employee',
             employeeEmail: S.user.email || 'noreply@slpnexus.com',
             employeePhone: S.user.phone || '9999999999',
+            purpose: 'topup',
             isApk: window._isCapacitor
           })
         });
@@ -10901,7 +10904,7 @@ self.addEventListener('fetch',e=>{
         // Re-verify user from DB (don't trust localStorage data)
         if (sess.role === 'employee' && sb) {
           try {
-            const { data: emp } = await sb.from('employees').select('*').eq('id', sess.userId).single();
+            const { data: emp } = await sb.from('employees').select('id,employee_id,name,email,phone,department,wallet_balance,canteen_id,is_active,role,initials,created_at,updated_at').eq('id', sess.userId).single();
             if (emp) {
               S.user = emp; S.role = 'employee';
               // Force refresh menu from DB (loadData may have used cache/fallback)
