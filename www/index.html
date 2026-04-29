@@ -114,7 +114,7 @@
         document.head.appendChild(st);
         var d = document.createElement('div');
         d.id = 'pv-overlay';
-        d.innerHTML = '<div class="pv-card"><div class="pv-spin"></div><h3>Verifying payment…</h3><p>Confirming with your bank.</p><p style="font-size:12px;color:#888">This usually takes 5–15 seconds.</p><div class="pv-actions" id="pv-actions"><button class="pv-primary" onclick="window._pvCheck&&window._pvCheck()">Check My Orders</button><button class="pv-ghost" onclick="window._pvHide&&window._pvHide()">Close</button></div></div>';
+        d.innerHTML = '<div class="pv-card"><div class="pv-spin"></div><h3>Verifying payment…</h3><p>Confirming with your bank.</p><p style="font-size:12px;color:#888">Usually takes 3–8 seconds.</p><div class="pv-actions" id="pv-actions"><button class="pv-primary" onclick="window._pvCheck&&window._pvCheck()">Check My Orders</button><button class="pv-ghost" onclick="window._pvHide&&window._pvHide()">Close</button></div></div>';
         document.body.appendChild(d);
       }
       window._pvShow = function () {
@@ -129,11 +129,11 @@
             var d2 = document.getElementById('pv-overlay');
             var a2 = document.getElementById('pv-actions');
             if (d2 && d2.classList.contains('show') && a2) a2.classList.add('show');
-          }, 30000);
-          // Hard safety: never let overlay outlive 5 minutes
+          }, 8000);
+          // Hard safety: never let overlay outlive 90 seconds
           setTimeout(function () {
             try { window._pvHide && window._pvHide(); } catch (_) {}
-          }, 300000);
+          }, 90000);
         } catch (e) {}
       };
       window._pvHide = function () {
@@ -152,10 +152,10 @@
           if (window.toast) window.toast('If money was debited but no order is shown, please contact admin.', 'info', 'ℹ️');
         } catch (_) {}
       };
-      // Restore overlay if a payment was started < 5 min ago and never resolved
+      // Restore overlay if a payment was started < 90 sec ago and never resolved
       try {
         var ts = parseInt(localStorage.getItem('fh-payment-pending') || '0');
-        if (ts && (Date.now() - ts) < 300000) {
+        if (ts && (Date.now() - ts) < 90000) {
           if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function () { window._pvShow(); });
           } else {
@@ -2189,6 +2189,62 @@
     .canteen-card.active .canteen-check {
       background: var(--brand-l);
       border-color: var(--brand)
+    }
+
+    /* ─── VEG-ONLY PILL inside search bar ─── */
+    .veg-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 11px;
+      border-radius: 50px;
+      border: 1.5px solid #cfd8dc;
+      background: #fff;
+      color: #6b7280;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .22s var(--ease);
+      flex-shrink: 0;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .veg-pill:hover {
+      border-color: #2e7d32;
+      color: #2e7d32;
+      background: #f1f8f1;
+    }
+    .veg-pill .vp-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1.5px solid #2e7d32;
+      background: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+    .veg-pill .vp-dot::after {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #2e7d32;
+    }
+    .veg-pill.active {
+      background: #e8f5e9;
+      border-color: #2e7d32;
+      color: #1b5e20;
+      box-shadow: 0 2px 8px rgba(46, 125, 50, .18);
+    }
+    .veg-pill.active .vp-dot {
+      background: #2e7d32;
+    }
+    .veg-pill.active .vp-dot::after {
+      background: #fff;
     }
 
     /* ─── REORDER LAST LUNCH (one-tap repeat) ─── */
@@ -4746,8 +4802,10 @@
         <div class="search-bar" id="menu-search-bar">
           <span class="search-icon" style="font-size:18px">🔍</span>
           <input type="text" placeholder="Search pizza, dosa, tea... 😋" id="menu-search" oninput="searchMenu()">
-          <span style="font-size:18px;opacity:.5;cursor:pointer"
-            onclick="toggleVegFilter(document.getElementById('veg-toggle'))">🎛️</span>
+          <div class="veg-pill" id="veg-pill" onclick="toggleVegOnly()" role="button" aria-pressed="false" title="Show only vegetarian items">
+            <span class="vp-dot"></span>
+            <span class="vp-label">Pure Veg</span>
+          </div>
         </div>
 
         <!-- Cuisine quick-picks (Zomato-style) -->
@@ -6649,8 +6707,24 @@
     function toggleVegFilter(el) {
       el.classList.toggle('on');
       S.vegOnly = el.classList.contains('on');
+      _syncVegPill();
       renderMenu();
       toast(S.vegOnly ? 'Showing veg items only 🥦' : 'Showing all items', 'info', '🥗');
+    }
+    // Called by the visible search-bar pill. Keeps Profile toggle in sync too.
+    function toggleVegOnly() {
+      S.vegOnly = !S.vegOnly;
+      const profToggle = document.getElementById('veg-toggle');
+      if (profToggle) profToggle.classList.toggle('on', S.vegOnly);
+      _syncVegPill();
+      renderMenu();
+      toast(S.vegOnly ? 'Showing veg items only 🥦' : 'Showing all items', 'info', '🥗');
+    }
+    function _syncVegPill() {
+      const pill = document.getElementById('veg-pill');
+      if (!pill) return;
+      pill.classList.toggle('active', !!S.vegOnly);
+      pill.setAttribute('aria-pressed', String(!!S.vegOnly));
     }
 
     // ═════════════════════════════════════
