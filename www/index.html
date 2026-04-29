@@ -65,24 +65,34 @@
       }
     })();
 
-    // Opens ICICI payment URL. In APK: tries Custom Tab via Browser plugin,
-    // falls back to WebView navigation. Surfaces a diagnostic toast when the
-    // Browser plugin isn't registered so we can see *why* on-device.
+    // Opens ICICI payment URL. Resets the Pay button first so the spinner
+    // never gets stuck if the handoff fails. Then tries Custom Tab via
+    // Browser plugin, then window.open(_system), then a same-tab navigation.
     window.openPaymentUrl = function (forwardUrl, fullUrl) {
       try {
-        var Browser = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) || null;
+        var btn = document.getElementById('pay-btn');
+        if (btn) {
+          btn.classList.remove('btn-loading');
+          btn.disabled = false;
+          btn.innerHTML = '<span>Place Order & Pay →</span>';
+        }
+      } catch (e) {}
+      try { if (typeof window._pvShow === 'function') window._pvShow(); } catch (e) {}
+      try {
         var isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
         var inAPK = isNative || window._isCapacitor;
-        if (inAPK && Browser && typeof Browser.open === 'function') {
-          Browser.open({ url: forwardUrl, presentationStyle: 'fullscreen' }).catch(function (e) {
-            if (window.toast) window.toast('Browser.open failed: ' + (e && e.message || e), 'error');
-            window.location.href = fullUrl;
-          });
-          return;
-        }
-        if (inAPK && window.toast) {
-          var keys = Object.keys((window.Capacitor && window.Capacitor.Plugins) || {}).join(',') || '(none)';
-          window.toast('Browser plugin missing — plugins: ' + keys, 'error');
+        if (inAPK) {
+          var Browser = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser;
+          if (Browser && typeof Browser.open === 'function') {
+            Browser.open({ url: forwardUrl, presentationStyle: 'fullscreen' }).catch(function () {
+              try { window.open(fullUrl, '_system'); } catch (e) { window.location.href = fullUrl; }
+            });
+            return;
+          }
+          try {
+            var w = window.open(fullUrl, '_system');
+            if (w) return;
+          } catch (e) {}
         }
         window.location.href = fullUrl;
       } catch (e) {
@@ -90,6 +100,72 @@
         window.location.href = fullUrl;
       }
     };
+  </script>
+  <script>
+    // Payment-verification overlay. Purely additive: shown when user is
+    // sent to ICICI, hidden the moment our callback handler runs.
+    // Closes ICICI's "did it work?" gap so panicked users don't think
+    // their money vanished while the gateway is still confirming.
+    (function () {
+      function ensure() {
+        if (document.getElementById('pv-overlay')) return;
+        var st = document.createElement('style');
+        st.textContent = '#pv-overlay{position:fixed;inset:0;z-index:99999;background:rgba(255,255,255,.97);display:none;align-items:center;justify-content:center;padding:20px;font-family:inherit}#pv-overlay.show{display:flex}#pv-overlay .pv-card{max-width:340px;width:100%;text-align:center;background:#fff;border-radius:16px;padding:28px 22px;box-shadow:0 12px 32px rgba(0,0,0,.15)}#pv-overlay .pv-spin{width:48px;height:48px;border:4px solid #f3f3f3;border-top-color:#1a73e8;border-radius:50%;animation:pvSpin 1s linear infinite;margin:0 auto 18px}@keyframes pvSpin{to{transform:rotate(360deg)}}#pv-overlay h3{margin:0 0 8px;font-size:18px;color:#1a1a1a}#pv-overlay p{margin:6px 0;color:#555;font-size:14px;line-height:1.4}#pv-overlay .pv-actions{margin-top:18px;display:none;flex-direction:column;gap:8px}#pv-overlay .pv-actions.show{display:flex}#pv-overlay .pv-actions button{padding:12px 18px;border-radius:10px;border:none;font-weight:600;font-size:14px;cursor:pointer}#pv-overlay .pv-primary{background:#1a73e8;color:#fff}#pv-overlay .pv-ghost{background:#f1f3f4;color:#333}';
+        document.head.appendChild(st);
+        var d = document.createElement('div');
+        d.id = 'pv-overlay';
+        d.innerHTML = '<div class="pv-card"><div class="pv-spin"></div><h3>Verifying payment…</h3><p>Confirming with your bank.</p><p style="font-size:12px;color:#888">This usually takes 5–15 seconds.</p><div class="pv-actions" id="pv-actions"><button class="pv-primary" onclick="window._pvCheck&&window._pvCheck()">Check My Orders</button><button class="pv-ghost" onclick="window._pvHide&&window._pvHide()">Close</button></div></div>';
+        document.body.appendChild(d);
+      }
+      window._pvShow = function () {
+        try {
+          ensure();
+          var d = document.getElementById('pv-overlay');
+          var a = document.getElementById('pv-actions');
+          if (a) a.classList.remove('show');
+          if (d) d.classList.add('show');
+          try { localStorage.setItem('fh-payment-pending', String(Date.now())); } catch (_) {}
+          setTimeout(function () {
+            var d2 = document.getElementById('pv-overlay');
+            var a2 = document.getElementById('pv-actions');
+            if (d2 && d2.classList.contains('show') && a2) a2.classList.add('show');
+          }, 30000);
+          // Hard safety: never let overlay outlive 5 minutes
+          setTimeout(function () {
+            try { window._pvHide && window._pvHide(); } catch (_) {}
+          }, 300000);
+        } catch (e) {}
+      };
+      window._pvHide = function () {
+        try {
+          var d = document.getElementById('pv-overlay');
+          if (d) d.classList.remove('show');
+          try { localStorage.removeItem('fh-payment-pending'); } catch (_) {}
+        } catch (e) {}
+      };
+      window._pvCheck = function () {
+        try { window._pvHide(); } catch (_) {}
+        try {
+          if (typeof goScreen === 'function') goScreen('s-home');
+          if (typeof goTab === 'function') goTab('orders');
+          if (typeof renderMyOrders === 'function') renderMyOrders();
+          if (window.toast) window.toast('If money was debited but no order is shown, please contact admin.', 'info', 'ℹ️');
+        } catch (_) {}
+      };
+      // Restore overlay if a payment was started < 5 min ago and never resolved
+      try {
+        var ts = parseInt(localStorage.getItem('fh-payment-pending') || '0');
+        if (ts && (Date.now() - ts) < 300000) {
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function () { window._pvShow(); });
+          } else {
+            window._pvShow();
+          }
+        } else if (ts) {
+          try { localStorage.removeItem('fh-payment-pending'); } catch (_) {}
+        }
+      } catch (_) {}
+    })();
   </script>
   <script>
     // Defer Sentry — load 3s after boot (non-blocking for APK)
@@ -6314,8 +6390,16 @@
       let rH = readyDate.getHours();
       let rM = readyDate.getMinutes();
 
-      // Count existing orders per slot (capacity check)
-      const MAX_PER_SLOT = parseInt(localStorage.getItem('fh-slot-limit') || '50') || 50;
+      // Count existing orders per slot (capacity check).
+      // Use slot_limit from the DB canteen row so the kitchen's setting
+      // reaches every employee device. Fall back to localStorage (legacy
+      // kitchen devices) then 50 if nothing is configured.
+      var cantSlotLimit = null;
+      try {
+        var cs = (S.selCanteen && S.canteens || []).find && S.canteens.find(function(c){ return c.id === (S.selCanteen && S.selCanteen.id); });
+        if (cs && cs.slot_limit != null) cantSlotLimit = parseInt(cs.slot_limit);
+      } catch (e) {}
+      const MAX_PER_SLOT = cantSlotLimit || parseInt(localStorage.getItem('fh-slot-limit') || '50') || 50;
       const todayStr = new Date().toISOString().slice(0, 10);
       const todayOrders = (S.allOrders || S.orders || []).filter(o => o.created_at && String(o.created_at).slice(0, 10) === todayStr && o.status !== 'cancelled');
       const slotCounts = {};
@@ -6631,7 +6715,11 @@
             });
 
             if (rpcErr || !result?.success) {
-              failedCounters.push({ canteen: canteen.name, error: result?.error || rpcErr?.message || 'Unknown error' });
+              var rawErr = result?.error || rpcErr?.message || 'Unknown error';
+              if (String(rawErr).indexOf('SLOT_FULL') !== -1) {
+                rawErr = 'Pickup slot is full. Please pick another time.';
+              }
+              failedCounters.push({ canteen: canteen.name, error: rawErr });
               continue; // Don't stop — try remaining counters
             }
 
@@ -6961,6 +7049,7 @@
       const params = new URLSearchParams(window.location.search);
       const paymentStatus = params.get('payment');
       if (!paymentStatus) return;
+      try { if (typeof window._pvHide === 'function') window._pvHide(); } catch (_) {}
 
       const txn = params.get('txnNo') || params.get('txn') || '';
       const urlAmt = parseFloat(params.get('amt') || params.get('amount') || '0');
@@ -7039,7 +7128,10 @@
 
             if (!rpcErr && result?.success) {
               orderPlaced = true;
-              S.user.wallet_balance = parseFloat(result.new_balance) || S.user.wallet_balance;
+              // ICICI paid for this order — do NOT trust result.new_balance
+              // here. The RPC's returned balance can lag the ICICI credit or
+              // wrongly subtract the order total; we re-fetch the canonical
+              // wallet value from the DB after the loop.
               toast(`Order placed! Token #${result.token_number} at ${canteen.icon} ${canteen.name}`, 'success', '✅');
 
               const newOrder = {
@@ -7057,12 +7149,20 @@
               S.orders.unshift(newOrder);
               S.allOrders.unshift({ ...newOrder });
             } else {
-              toast(`Order failed: ${rpcErr?.message || result?.error || 'Unknown'}`, 'error', '❌');
+              var oErr = rpcErr?.message || result?.error || 'Unknown';
+              if (String(oErr).indexOf('SLOT_FULL') !== -1) {
+                oErr = 'Pickup slot is full. Please pick another time.';
+              }
+              toast(`Order failed: ${oErr}`, 'error', '❌');
             }
           }
 
           S.cart = [];
           localStorage.removeItem('fh-pending-order');
+          try {
+            const { data: emp } = await sb.from('employees').select('wallet_balance').eq('id', S.user.id).single();
+            if (emp) S.user.wallet_balance = parseFloat(emp.wallet_balance) || 0;
+          } catch (_) {}
           setEl('nav-bal', '₹' + Math.round(S.user.wallet_balance));
           setEl('w-bal', '₹' + Math.round(S.user.wallet_balance));
           if (orderPlaced) {
@@ -7293,6 +7393,7 @@
       const amt = urlParams.get('amt');
 
       if (!paymentStatus) return;
+      try { if (typeof window._pvHide === 'function') window._pvHide(); } catch (_) {}
 
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
