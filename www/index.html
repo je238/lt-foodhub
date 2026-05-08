@@ -398,7 +398,11 @@
     /* RESET & BASE */
     body {
       font-family: var(--f);
-      background: #F2EDE6;
+      /* Was #F2EDE6 — that exposed a beige strip below the login form when
+         the soft keyboard opened on Capacitor v8 + targetSdk 36. Other
+         screens (.screen.active) still paint #F2EDE6 themselves and cover
+         this body bg, so home/cart visuals are unchanged. */
+      background: #0a0a1a;
       color: var(--dark);
       min-height: 100vh;
       overflow-x: hidden;
