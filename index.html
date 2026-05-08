@@ -269,6 +269,11 @@
     body {
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
+      /* Dark background matches the login hero (#0a0a1a) so the area
+         exposed when the soft keyboard pushes layout up doesn't show
+         white. Other screens explicitly paint their own bg via
+         .screen.active so this only shows where intended. */
+      background: #0a0a1a;
     }
 
     .bnav {
