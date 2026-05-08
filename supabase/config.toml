@@ -9,3 +9,14 @@ entrypoint = "./functions/send-otp-email/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/send-otp-email/*.html" ]
+
+[functions.icici-payment]
+# verify_jwt MUST stay false — ICICI's payment server posts the callback
+# (server-to-server) without a Supabase JWT. Enabling JWT verification
+# returns UNAUTHORIZED_NO_AUTH_HEADER and the user gets stuck on a JSON
+# error page after paying. Future deploys via `supabase functions deploy
+# icici-payment` will pick this up automatically — no need for the
+# --no-verify-jwt flag once this config is in place.
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/icici-payment/index.ts"
