@@ -155,16 +155,48 @@ serve(async (req) => {
 
       const status = isSuccess ? "success" : "failed";
       const params = "payment=" + status + "&txnNo=" + encodeURIComponent(txn) + "&amt=" + amt;
-      // Use intent:// with an explicit package + browser_fallback_url so
-      // Chrome Custom Tabs hands off to the app via Android's intent system
-      // (the naive slpnexus:// scheme is silently swallowed by Custom Tabs).
+      // Restored from v1.4 (a5e270a) — slpnexus:// scripted redirect worked
+      // reliably on the user's tested Android builds. intent:// is kept as a
+      // 1.5s fallback for Custom Tabs that block scripted custom-scheme URLs,
+      // and a visible "Return to app" button is the ultimate manual fallback.
+      // We do NOT auto-redirect to the web URL — being silently dumped into a
+      // browser session was the exact symptom the user reported.
+      const appUrl = `${APP_SCHEME}://payment?${params}`;
       const intentUrl = `intent://payment?${params}#Intent;scheme=${APP_SCHEME};package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(WEB_URL + "?" + params)};end`;
       const webUrl = WEB_URL + "?" + params;
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment ${status}</title>
-<script>
-window.location.href=${JSON.stringify(intentUrl)};
-setTimeout(function(){window.location.href=${JSON.stringify(webUrl)};},3000);
-</script></head><body><p>Redirecting back to app...</p></body></html>`;
+      const icon = isSuccess ? "✅" : "❌";
+      const headline = isSuccess ? "Payment Successful" : "Payment Failed";
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${headline}</title>
+  <style>
+    body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #0F172A; color: #fff; margin: 0; padding: 32px; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    .icon { font-size: 56px; margin-bottom: 6px; }
+    h1 { margin: 4px 0 8px; font-size: 22px; font-weight: 700; }
+    p { color: #94a3b8; line-height: 1.5; max-width: 320px; margin: 6px 0; }
+    .btn { background: #E8380D; color: #fff; padding: 14px 28px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; margin-top: 20px; text-decoration: none; display: inline-block; }
+    .web-link { color: #94a3b8; font-size: 13px; margin-top: 18px; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="icon">${icon}</div>
+  <h1>${headline}</h1>
+  <p>Returning to SLP Nexus app...</p>
+  <a href="${appUrl}" class="btn">Open SLP Nexus App</a>
+  <a href="${webUrl}" class="web-link">Continue in browser</a>
+  <script>
+    var appUrl=${JSON.stringify(appUrl)};
+    var intentUrl=${JSON.stringify(intentUrl)};
+    // Try slpnexus:// first (worked reliably in v1.4 / commit a5e270a).
+    setTimeout(function(){window.location.href=appUrl;},100);
+    // Backup: try intent:// after 1.5s if scripted slpnexus:// got blocked.
+    setTimeout(function(){if(document.visibilityState!=='hidden'){window.location.href=intentUrl;}},1500);
+  </script>
+</body>
+</html>`;
       return new Response(html, { status: 200, headers: { "Content-Type": "text/html" } });
     }
 
