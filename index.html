@@ -4930,21 +4930,25 @@
         </div>
       </div>
       <button class="btn btn-danger btn-full" style="margin-top:4px" onclick="logout()">Sign Out</button>
+      <button class="btn-full" style="margin-top:10px;background:transparent;border:1px solid #fca5a5;color:#dc2626;padding:11px;border-radius:10px;font-weight:600;font-size:13px;cursor:pointer" onclick="confirmDeleteAccount()">Delete my account</button>
       <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Powered by</div>
         <div style="font-size:13px;font-weight:700;color:var(--mid);margin-bottom:10px;font-family:var(--fh)">SLP
           Hospitality</div>
         <div style="display:flex;justify-content:center;gap:12px;flex-wrap:wrap">
-          <a href="#" onclick="showPrivacyPolicy();return false;"
+          <a href="/privacy.html" target="_blank" rel="noopener"
             style="font-size:11px;color:var(--muted);text-decoration:underline">Privacy Policy</a>
           <span style="font-size:11px;color:var(--border2)">·</span>
           <a href="#" onclick="showRefundPolicy();return false;"
             style="font-size:11px;color:var(--muted);text-decoration:underline">Refund Policy</a>
           <span style="font-size:11px;color:var(--border2)">·</span>
+          <a href="/support.html" target="_blank" rel="noopener"
+            style="font-size:11px;color:var(--muted);text-decoration:underline">Support</a>
+          <span style="font-size:11px;color:var(--border2)">·</span>
           <a href="https://slphospitality.com" target="_blank"
             style="font-size:11px;color:var(--muted);text-decoration:underline">slphospitality.com</a>
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:8px">© 2025 SLP Hospitality · v2.0</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:8px">© 2026 SLP Hospitality · v2.0</div>
       </div>
     </div>
 
@@ -6119,6 +6123,66 @@
       goScreen('s-login');
     }
 
+    // ─────────────────────────────────────────────────────────
+    // ACCOUNT DELETION (Apple Guideline 5.1.1(v))
+    // ─────────────────────────────────────────────────────────
+    function confirmDeleteAccount() {
+      if (!S.user?.id || !S.user?.email) {
+        toast('Please log in again to delete your account.', 'error', '⚠️');
+        return;
+      }
+      showModal(`
+        <div class="modal-head">
+          <span class="modal-title" style="color:#dc2626">⚠️ Delete account?</span>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body" style="font-size:13px;color:var(--mid);line-height:1.7">
+          <p style="margin-bottom:12px"><strong style="color:#dc2626">This cannot be undone.</strong> Your profile, wallet balance, and order history will be permanently deleted.</p>
+          <p style="margin-bottom:12px">For tax compliance we retain anonymised order totals for 1 year, but no data linked to your identity remains in the app.</p>
+          <p style="margin-bottom:12px">To confirm, type <strong>DELETE</strong> below:</p>
+          <input id="del-acc-confirm" type="text" autocomplete="off" placeholder="Type DELETE to confirm" style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:8px"/>
+          <div id="del-acc-err" style="color:#dc2626;font-size:12px;min-height:16px;margin-bottom:8px"></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-full" style="background:#f1f5f9;color:#0F172A" onclick="closeModal()">Cancel</button>
+            <button id="del-acc-btn" class="btn btn-danger btn-full" onclick="_doDeleteAccount()">Delete forever</button>
+          </div>
+        </div>
+      `);
+    }
+
+    async function _doDeleteAccount() {
+      const input = document.getElementById('del-acc-confirm');
+      const err   = document.getElementById('del-acc-err');
+      const btn   = document.getElementById('del-acc-btn');
+      if (!input || !err || !btn) return;
+      err.textContent = '';
+      const typed = (input.value || '').trim().toUpperCase();
+      if (typed !== 'DELETE') { err.textContent = 'Please type DELETE to confirm.'; return; }
+      if (!S.user?.id || !S.user?.email) { err.textContent = 'Session expired. Log in again.'; return; }
+      btn.classList.add('btn-loading'); btn.disabled = true;
+      try {
+        if (!sb) { err.textContent = 'Database not connected.'; btn.classList.remove('btn-loading'); btn.disabled = false; return; }
+        const { data: result, error: rpcErr } = await sb.rpc('delete_my_account', {
+          p_employee_id: S.user.id,
+          p_email: S.user.email,
+        });
+        if (rpcErr || !result?.success) {
+          err.textContent = result?.error || rpcErr?.message || 'Deletion failed. Email info@slphospitality.com if this persists.';
+          btn.classList.remove('btn-loading'); btn.disabled = false;
+          return;
+        }
+        // Wipe local state and bounce to login with a confirmation.
+        try { localStorage.clear(); } catch (e) {}
+        try { sessionStorage.clear(); } catch (e) {}
+        closeModal();
+        toast('Account deleted. Goodbye 👋', 'success', '✅');
+        setTimeout(() => { logout(); }, 600);
+      } catch (e) {
+        err.textContent = 'Error: ' + (e.message || 'Try again');
+        btn.classList.remove('btn-loading'); btn.disabled = false;
+      }
+    }
+
     // ═════════════════════════════════════
     // HOME / MENU
     // ═════════════════════════════════════
@@ -7180,10 +7244,16 @@
     let _orderPlacing = false;
     async function placeOrder() {
       if (_orderPlacing) { toast('Order already in progress...', 'info', '⏳'); return; }
+      // Defensive: also block if pay button is already in loading/disabled state
+      const _payBtnEl = document.getElementById('pay-btn');
+      if (_payBtnEl && _payBtnEl.disabled) { toast('Order already in progress...', 'info', '⏳'); return; }
       _orderPlacing = true;
-      setTimeout(() => { _orderPlacing = false; }, 5000); // unlock after 5s
-      if (S.cart.length === 0) { _orderPlacing = false; toast('Your cart is empty!', 'error', '🛒'); return; }
-      if (!sb) { _orderPlacing = false; toast('Database not connected!', 'error', '❌'); return; }
+      // Safety net: auto-release after 60s ONLY if logic below somehow doesn't reach the finally block.
+      // The finally block is the primary release mechanism — this is a backstop for unexpected crashes.
+      const _orderPlacingSafety = setTimeout(() => { _orderPlacing = false; }, 60000);
+      try {
+      if (S.cart.length === 0) { toast('Your cart is empty!', 'error', '🛒'); return; }
+      if (!sb) { toast('Database not connected!', 'error', '❌'); return; }
 
       // Fetch fresh canteen status from DB before placing order
       try {
@@ -7482,6 +7552,10 @@
           } catch (e) { }
           toast('Order failed — check your internet and try again.', 'error', '❌');
         }
+      }
+      } finally {
+        clearTimeout(_orderPlacingSafety);
+        _orderPlacing = false;
       }
     }
 
