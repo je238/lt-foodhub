@@ -287,6 +287,18 @@
       height: auto !important;
       min-height: 100% !important;
       -webkit-overflow-scrolling: touch !important;
+      /* Match the login hero so any area exposed when the soft keyboard
+         opens — webview's own bg, html paint, body paint — never flashes
+         white beneath the form. */
+      background-color: #0a0a1a !important;
+    }
+
+    /* Login screen: pin to dynamic viewport height so it fills the visible
+       area even when the keyboard is open (100dvh adjusts; 100vh doesn't). */
+    #s-login.active {
+      min-height: 100vh !important;
+      min-height: 100dvh !important;
+      background: #0a0a1a !important;
     }
 
     .screen.active {
