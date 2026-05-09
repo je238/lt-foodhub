@@ -892,23 +892,17 @@
       flex-shrink: 0
     }
 
-    /* When the viewport is short (soft keyboard open on small phones),
-       collapse the hero image so the form (Sign In + Register link)
-       stays visible above the keyboard. */
-    @media (max-height: 640px) {
-      .login-hero-img { height: 100px; }
-      .login-hero-wrap::after { height: 50px !important; }
-      .login-card .login-logo { margin-bottom: 14px; }
-      .login-card .login-greeting { display: none; }
-    }
-    @media (max-height: 480px) {
-      .login-hero-wrap { display: none; }
-      .login-card { padding-top: 18px !important; }
-      .login-card .login-logo { margin-bottom: 10px; }
-      .login-title { font-size: 22px !important; margin-bottom: 4px !important; }
-      .login-sub { display: none; }
-      .login-card .login-greeting { display: none; }
-    }
+    /* Compact login layout when the JS keyboard detector adds .kb-open to
+       body. Android 15 edge-to-edge mode keeps the viewport at full height
+       even with the keyboard open, so @media (max-height) never fires —
+       we have to detect the keyboard via visualViewport API and apply this
+       class manually. */
+    body.kb-open .login-hero-wrap { display: none !important; }
+    body.kb-open .login-card { padding-top: 16px !important; }
+    body.kb-open .login-card .login-logo { display: none !important; }
+    body.kb-open .login-card .login-greeting { display: none !important; }
+    body.kb-open .login-title { font-size: 20px !important; margin-bottom: 4px !important; }
+    body.kb-open .login-sub { display: none !important; }
 
     .login-hero-wrap::after {
       content: '';
@@ -12802,6 +12796,33 @@ self.addEventListener('fetch',e=>{
         }
       }, 2000);
     });
+
+    // ─── KEYBOARD DETECTOR ────────────────────────────────────────────
+    // Android 15 edge-to-edge mode keeps window.innerHeight at full screen
+    // height even when the keyboard is open, so CSS @media(max-height) never
+    // fires. visualViewport.height DOES shrink when the keyboard pops, so
+    // we use it to toggle a body class. The login screen's CSS responds to
+    // .kb-open by collapsing the hero + greeting + subtitle so the Sign In
+    // button stays visible above the keyboard.
+    (function () {
+      if (!window.visualViewport) return;
+      const vv = window.visualViewport;
+      const baseHeight = window.innerHeight;
+      let kbOpen = false;
+      const update = () => {
+        const ratio = vv.height / baseHeight;
+        const isOpen = ratio < 0.78; // ~22% loss = keyboard
+        if (isOpen !== kbOpen) {
+          kbOpen = isOpen;
+          document.body.classList.toggle('kb-open', kbOpen);
+        }
+      };
+      vv.addEventListener('resize', update);
+      vv.addEventListener('scroll', update);
+      // Also re-check on focus events so initial keyboard open registers
+      window.addEventListener('focusin', () => setTimeout(update, 200));
+      window.addEventListener('focusout', () => setTimeout(update, 200));
+    })();
   </script>
 </body>
 
