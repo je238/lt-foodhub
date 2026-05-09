@@ -8061,6 +8061,141 @@
     }
 
     // ══════════════════════════════════════════════════════
+    // ICICI ORDER RECOVERY — runs on app load
+    // Handles the case where the user paid via ICICI but closed the app
+    // / lost network before the deep-link return fired, so the
+    // place_order call never happened. We DON'T auto-place because the
+    // user might have cancelled at ICICI without paying — instead we ask
+    // them to confirm. They know if they paid; if they did, we run the
+    // same place_order flow as handlePaymentCallback.
+    async function recoverPendingOrder() {
+      // Don't run if URL already has payment params — handlePaymentCallback handles that case.
+      if (window.location.search.includes('payment=')) return;
+
+      const pendingStr = localStorage.getItem('fh-pending-order');
+      if (!pendingStr) return;
+
+      let orderData;
+      try { orderData = JSON.parse(pendingStr); }
+      catch (_) { localStorage.removeItem('fh-pending-order'); return; }
+
+      // Only offer recovery within 30 min of the original payment attempt.
+      const ageMs = Date.now() - (orderData.ts || 0);
+      if (ageMs > 30 * 60 * 1000) {
+        localStorage.removeItem('fh-pending-order');
+        return;
+      }
+
+      // Need DB and a logged-in user.
+      if (!sb || !S.user) return;
+      if (orderData.userId && orderData.userId !== S.user.id) {
+        localStorage.removeItem('fh-pending-order');
+        return;
+      }
+
+      // Wait for menu/canteens to be loaded so the order can group by canteen.
+      let waitCount = 0;
+      while ((!S.menu || S.menu.length === 0) && waitCount < 20) {
+        await new Promise(r => setTimeout(r, 500));
+        waitCount++;
+      }
+
+      // Ask the user if they completed the payment.
+      const itemsList = (orderData.cart || []).map(i =>
+        `<div style="display:flex;justify-content:space-between;font-size:13px;color:#475569;margin:4px 0">
+          <span>${esc(i.emoji || '')} ${esc(i.name)} ×${i.qty}</span>
+          <span>₹${(i.price * i.qty).toFixed(2)}</span>
+        </div>`).join('');
+      const total = (orderData.amount || 0).toFixed(2);
+
+      showModal(`
+        <div class="modal-head">
+          <span class="modal-icon">🧾</span>
+          <h3>Pending Order Found</h3>
+        </div>
+        <p style="color:#475569;line-height:1.5;margin:8px 0 16px">
+          You started an ICICI payment for an order worth <strong>₹${total}</strong> but didn't return to the app.
+          <br><br>
+          Did you complete the payment on the ICICI page?
+        </p>
+        <div style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:16px">
+          ${itemsList}
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-ghost btn-full" onclick="discardPendingOrder()">No, discard</button>
+          <button class="btn btn-primary btn-full" onclick="confirmRecoverOrder()">Yes, place my order</button>
+        </div>
+      `, true);
+    }
+
+    function discardPendingOrder() {
+      localStorage.removeItem('fh-pending-order');
+      closeModal();
+      toast('Pending order discarded.', 'info', 'ℹ️');
+    }
+
+    async function confirmRecoverOrder() {
+      const pendingStr = localStorage.getItem('fh-pending-order');
+      if (!pendingStr) { closeModal(); return; }
+      let orderData;
+      try { orderData = JSON.parse(pendingStr); }
+      catch (_) { closeModal(); localStorage.removeItem('fh-pending-order'); return; }
+
+      closeModal();
+      toast('Placing your order...', 'info', '⏳');
+
+      const byCanteen = {};
+      (orderData.cart || []).forEach(i => {
+        const mi = S.menu.find(m => m.id === ((i.is_addon && i.parent_id) ? i.parent_id : i.id));
+        const cid = mi?.canteen_id || orderData.selCanteen?.id || 'c1';
+        if (!byCanteen[cid]) byCanteen[cid] = [];
+        byCanteen[cid].push(i);
+      });
+
+      let orderPlaced = false;
+      for (const cid of Object.keys(byCanteen)) {
+        const canteen = S.canteens.find(c => c.id === cid) || { id: cid, name: 'Counter', icon: '🍽️' };
+        const items = byCanteen[cid];
+        try {
+          const { data: result, error: rpcErr } = await sb.rpc('place_order', {
+            p_employee_id: S.user.id,
+            p_canteen_id: cid,
+            p_canteen_name: canteen.name,
+            p_canteen_icon: canteen.icon || '🍽️',
+            p_pickup_slot: orderData.selSlot,
+            p_items: items.map(i => ({ id: i.id, name: i.name, emoji: i.emoji || '', qty: i.qty, price: i.price })),
+            p_payment_method: 'icici_pay'
+          });
+          if (!rpcErr && result?.success) {
+            orderPlaced = true;
+            toast(`Order placed: Token #${result.token_number}`, 'success', '✅');
+            S.orders.unshift({
+              id: result.order_id, token_number: result.token_number,
+              employee_id: S.user.id, canteen_id: cid, canteen_name: canteen.name,
+              canteen_icon: canteen.icon, pickup_slot: orderData.selSlot,
+              status: 'new', created_at: new Date().toISOString(),
+              item_total: parseFloat(result.item_total) || 0,
+              gst_amount: parseFloat(result.gst_amount) || 0,
+              amount_paid: parseFloat(result.amount_paid) || 0,
+              subsidy_applied: 0, payment_method: 'icici_pay',
+              items: items.map(i => ({ ...i }))
+            });
+          } else {
+            const oErr = rpcErr?.message || result?.error || 'Unknown';
+            toast(`Order failed: ${oErr.includes('SLOT_FULL') ? 'Pickup slot is full' : oErr}`, 'error', '❌');
+          }
+        } catch (e) {
+          toast('Could not place order. Try again from My Orders or contact admin.', 'error', '⚠️');
+        }
+      }
+
+      localStorage.removeItem('fh-pending-order');
+      if (orderPlaced) {
+        if (typeof renderMyOrders === 'function') setTimeout(renderMyOrders, 800);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════
     // ICICI PAYMENT CALLBACK — runs on app load after redirect
     // ══════════════════════════════════════════════════════
     async function checkPendingPayment() {
@@ -11766,6 +11901,7 @@ self.addEventListener('fetch',e=>{
               setTimeout(addARIA, 500);
               // Check if returning from ICICI payment redirect
               setTimeout(checkPendingPayment, 1000);
+              setTimeout(recoverPendingOrder, 1500);
               return;
             }
           } catch (e) { }
@@ -11776,6 +11912,7 @@ self.addEventListener('fetch',e=>{
       await _origInit();
       setTimeout(addARIA, 500);
       setTimeout(checkPendingPayment, 1500);
+      setTimeout(recoverPendingOrder, 2000);
     };
 
     // Patch: logout — clear session
