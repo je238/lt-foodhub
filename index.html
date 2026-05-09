@@ -879,16 +879,21 @@
 
     .login-hero-img {
       width: 100%;
-      /* Was 220px — shrunk to 90px so the full form (Welcome, inputs,
-         Forgot Password, Sign In button, Register link) fits above the
-         soft keyboard on smaller phones (Redmi Note 7 etc.) without any
-         JS keyboard detection or media-query gymnastics. */
       height: 90px;
       object-fit: cover;
       display: block;
       position: relative;
       flex-shrink: 0
     }
+
+    /* Hide hero + brand entirely on login. The food image and brand block
+       were eating ~270px of vertical space which pushed the Sign In button
+       below the keyboard on smaller phones (Redmi Note 7, Android 9-10).
+       Pure form layout — works on every Android version. */
+    #s-login .login-hero-wrap { display: none !important; }
+    #s-login .login-card .login-logo { display: none !important; }
+    #s-login .login-card .login-greeting { display: none !important; }
+    #s-login .login-card { padding-top: 32px !important; }
 
     .login-hero-wrap {
       position: relative;
