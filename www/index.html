@@ -892,6 +892,24 @@
       flex-shrink: 0
     }
 
+    /* When the viewport is short (soft keyboard open on small phones),
+       collapse the hero image so the form (Sign In + Register link)
+       stays visible above the keyboard. */
+    @media (max-height: 640px) {
+      .login-hero-img { height: 100px; }
+      .login-hero-wrap::after { height: 50px !important; }
+      .login-card .login-logo { margin-bottom: 14px; }
+      .login-card .login-greeting { display: none; }
+    }
+    @media (max-height: 480px) {
+      .login-hero-wrap { display: none; }
+      .login-card { padding-top: 18px !important; }
+      .login-card .login-logo { margin-bottom: 10px; }
+      .login-title { font-size: 22px !important; margin-bottom: 4px !important; }
+      .login-sub { display: none; }
+      .login-card .login-greeting { display: none; }
+    }
+
     .login-hero-wrap::after {
       content: '';
       position: absolute;
