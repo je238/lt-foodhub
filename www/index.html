@@ -879,7 +879,11 @@
 
     .login-hero-img {
       width: 100%;
-      height: 220px;
+      /* Was 220px — shrunk to 90px so the full form (Welcome, inputs,
+         Forgot Password, Sign In button, Register link) fits above the
+         soft keyboard on smaller phones (Redmi Note 7 etc.) without any
+         JS keyboard detection or media-query gymnastics. */
+      height: 90px;
       object-fit: cover;
       display: block;
       position: relative;
@@ -910,7 +914,8 @@
       bottom: 0;
       left: 0;
       right: 0;
-      height: 120px;
+      /* Gradient overlay shrunk to match the new 90px hero. */
+      height: 50px;
       background: linear-gradient(to bottom, transparent, #0a0a1a);
       pointer-events: none
     }
