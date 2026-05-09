@@ -153,6 +153,45 @@ serve(async (req) => {
         }
       }
 
+      // ── Log successful ORDER payments so the client can verify before
+      //    recovering an order on app reopen. Without this, a user could
+      //    cancel at the ICICI page (no money taken), reopen the app, and
+      //    confirm the recovery modal to get a free order. The client
+      //    queries wallet_transactions by reference_id (merchantTxnNo)
+      //    before calling place_order — if no row exists here, recovery
+      //    is rejected. We use type="icici_order_paid" with amount=0 and
+      //    balance_after=current so the wallet balance is unchanged; this
+      //    row is purely an audit/proof-of-payment marker. ──
+      const isOrder = purposeTag === "ORDER";
+      const shouldLogOrder = isSuccess && emp && amt > 0 && isOrder;
+      if (shouldLogOrder) {
+        try {
+          const sb = createClient(SU!, SK!);
+          const { data: existingOrderTxn } = await sb.from("wallet_transactions")
+            .select("id")
+            .eq("reference_id", txn)
+            .limit(1);
+          if (!existingOrderTxn || existingOrderTxn.length === 0) {
+            const { data: e3 } = await sb.from("employees")
+              .select("wallet_balance")
+              .eq("id", emp)
+              .single();
+            const currentBal = parseFloat(e3?.wallet_balance) || 0;
+            await sb.from("wallet_transactions").insert({
+              employee_id: emp,
+              type: "icici_order_paid",
+              amount: amt,
+              description: "ICICI Order Payment Confirmed TxnNo:" + txn,
+              balance_after: currentBal,
+              reference_id: txn
+            });
+          }
+        } catch (_) {
+          // Swallow — recovery will fail safely (refusing the order)
+          // rather than allowing an unverified placement.
+        }
+      }
+
       const status = isSuccess ? "success" : "failed";
       const params = "payment=" + status + "&txnNo=" + encodeURIComponent(txn) + "&amt=" + amt;
       // Restored from v1.4 (a5e270a) — slpnexus:// scripted redirect worked

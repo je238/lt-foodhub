@@ -7316,6 +7316,15 @@
               amount: estimatedFees.grandTotal, employeeId: S.user.id,
               merchantTxnNo: data.merchantTxnNo, ts: Date.now(), isOrder: true
             }));
+            // Re-write fh-pending-order WITH the merchantTxnNo now that we
+            // have it back from the edge function. recoverPendingOrder()
+            // uses this to verify payment via wallet_transactions before
+            // placing the order on app reopen.
+            localStorage.setItem('fh-pending-order', JSON.stringify({
+              cart: S.cart, selSlot: S.selSlot, selCanteen: S.selCanteen,
+              amount: estimatedFees.grandTotal, userId: S.user.id,
+              merchantTxnNo: data.merchantTxnNo, ts: Date.now()
+            }));
             toast('Redirecting to ICICI payment page...', 'info', '🏦');
             setTimeout(() => {
               const fullUrl = data.redirectUrl + '?tranCtx=' + encodeURIComponent(data.tranCtx);
@@ -8138,7 +8147,36 @@
       catch (_) { closeModal(); localStorage.removeItem('fh-pending-order'); return; }
 
       closeModal();
-      toast('Placing your order...', 'info', '⏳');
+      toast('Verifying payment with ICICI...', 'info', '⏳');
+
+      // ── SERVER-SIDE PAYMENT VERIFICATION ──────────────────────────────
+      // The edge function inserts a row into wallet_transactions with
+      // type="icici_order_paid" + reference_id=merchantTxnNo whenever
+      // ICICI confirms an order payment. If no row exists for this
+      // merchantTxnNo, ICICI never confirmed the payment — refuse to
+      // place the order so a user can't claim a free order by lying in
+      // the recovery modal.
+      if (!orderData.merchantTxnNo) {
+        toast('Cannot verify payment — please contact admin to recover this order.', 'error', '⚠️');
+        return;
+      }
+      try {
+        const { data: payRow } = await sb.from('wallet_transactions')
+          .select('id, type, amount')
+          .eq('reference_id', orderData.merchantTxnNo)
+          .eq('type', 'icici_order_paid')
+          .limit(1);
+        if (!payRow || payRow.length === 0) {
+          toast('Payment not received by ICICI. Order cannot be placed.', 'error', '❌');
+          localStorage.removeItem('fh-pending-order');
+          return;
+        }
+      } catch (verifyErr) {
+        toast('Could not verify payment. Try again or contact admin.', 'error', '⚠️');
+        return;
+      }
+
+      toast('Payment verified — placing your order...', 'success', '✅');
 
       const byCanteen = {};
       (orderData.cart || []).forEach(i => {
