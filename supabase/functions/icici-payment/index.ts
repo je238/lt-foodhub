@@ -201,7 +201,13 @@ serve(async (req) => {
       // We do NOT auto-redirect to the web URL — being silently dumped into a
       // browser session was the exact symptom the user reported.
       const appUrl = `${APP_SCHEME}://payment?${params}`;
-      const intentUrl = `intent://payment?${params}#Intent;scheme=${APP_SCHEME};package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(WEB_URL + "?" + params)};end`;
+      // NOTE: intentionally NO S.browser_fallback_url here. With the fallback,
+      // ~10% of Android phones silently dropped users on the website login
+      // when the intent could not be resolved. Without it, intent failures
+      // leave the user on this success page where they can tap the visible
+      // "Open SLP Nexus App" button (which triggers the deep link with a
+      // proper user gesture — usually succeeds where the auto-fire doesn't).
+      const intentUrl = `intent://payment?${params}#Intent;scheme=${APP_SCHEME};package=${ANDROID_PACKAGE};end`;
       const webUrl = WEB_URL + "?" + params;
       const icon = isSuccess ? "✅" : "❌";
       const headline = isSuccess ? "Payment Successful" : "Payment Failed";
